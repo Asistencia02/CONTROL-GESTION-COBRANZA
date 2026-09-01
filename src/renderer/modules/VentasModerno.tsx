@@ -118,16 +118,16 @@ export const VentasModerno: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-8">
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-2 sm:p-4 md:p-8">
       {/* HEADER */}
-      <div className="mb-12">
+      <div className="mb-4 sm:mb-6 md:mb-8">
         <div className="flex items-center justify-between mb-8">
           <div className="flex items-center gap-4">
             <div className="p-3 bg-gradient-to-br from-green-500 to-emerald-500 rounded-xl shadow-lg shadow-green-500/50">
               <ShoppingCart size={32} className="text-white" />
             </div>
             <div>
-              <h1 className="text-4xl font-black bg-gradient-to-r from-green-400 to-emerald-400 bg-clip-text text-transparent">
+              <h1 className="text-2xl sm:text-3xl md:text-4xl font-black bg-gradient-to-r from-green-400 to-emerald-400 bg-clip-text text-transparent">
                 Gestión de Ventas
               </h1>
               <p className="text-slate-400 mt-1">Registra y controla venta de insumos</p>
@@ -155,20 +155,20 @@ export const VentasModerno: React.FC = () => {
       </div>
 
       {/* KPIs EN GRID */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-12">
-        <div className="p-4 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-xl hover:border-green-500/50 transition-all">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3 md:gap-4 mb-4 sm:mb-6 md:mb-8">
+        <div className="p-2 sm:p-3 md:p-4 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-xl hover:border-green-500/50 transition-all">
           <p className="text-xs text-slate-400 font-bold mb-1">Vendido Hoy</p>
           <p className="text-2xl font-black text-green-400">{formatoMoneda(totalVentasHoy)}</p>
         </div>
-        <div className="p-4 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-xl hover:border-emerald-500/50 transition-all">
+        <div className="p-2 sm:p-3 md:p-4 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-xl hover:border-emerald-500/50 transition-all">
           <p className="text-xs text-slate-400 font-bold mb-1">Total Vendido</p>
           <p className="text-2xl font-black text-emerald-400">{formatoMoneda(totalVentasTotal)}</p>
         </div>
-        <div className="p-4 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-xl hover:border-teal-500/50 transition-all">
+        <div className="p-2 sm:p-3 md:p-4 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-xl hover:border-teal-500/50 transition-all">
           <p className="text-xs text-slate-400 font-bold mb-1">Unidades Vendidas</p>
           <p className="text-2xl font-black text-teal-400">{cantidadProductosVendidos}</p>
         </div>
-        <div className="p-4 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-xl hover:border-cyan-500/50 transition-all">
+        <div className="p-2 sm:p-3 md:p-4 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-xl hover:border-cyan-500/50 transition-all">
           <p className="text-xs text-slate-400 font-bold mb-1">Stock Total</p>
           <p className="text-2xl font-black text-cyan-400">{stockTotal}</p>
         </div>

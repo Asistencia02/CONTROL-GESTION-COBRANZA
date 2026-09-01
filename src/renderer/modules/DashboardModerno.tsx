@@ -133,7 +133,7 @@ export const DashboardModerno: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-8 space-y-8">
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-2 sm:p-4 md:p-8 space-y-4 sm:space-y-6 md:space-y-8">
       {/* HEADER */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
@@ -141,7 +141,7 @@ export const DashboardModerno: React.FC = () => {
             <Activity size={32} className="text-white" />
           </div>
           <div>
-            <h1 className="text-4xl font-black bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent">
+            <h1 className="text-2xl sm:text-3xl md:text-4xl font-black bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent">
               Dashboard
             </h1>
             <p className="text-slate-400 mt-1">{institucionActiva.nombre}</p>
@@ -174,9 +174,9 @@ export const DashboardModerno: React.FC = () => {
       ) : (
         <>
           {/* KPIs PRINCIPALES */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 md:gap-4">
             {/* Cobrado Hoy */}
-            <div className="p-6 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-xl hover:border-green-500/50 transition-all group">
+            <div className="p-3 sm:p-4 md:p-6 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-xl hover:border-green-500/50 transition-all group">
               <div className="flex items-start justify-between mb-4">
                 <div className="p-3 bg-green-500/20 rounded-lg group-hover:bg-green-500/30 transition">
                   <DollarSign size={24} className="text-green-400" />
@@ -192,7 +192,7 @@ export const DashboardModerno: React.FC = () => {
             </div>
 
             {/* Total Recaudado */}
-            <div className="p-6 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-xl hover:border-blue-500/50 transition-all group">
+            <div className="p-3 sm:p-4 md:p-6 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-xl hover:border-blue-500/50 transition-all group">
               <div className="flex items-start justify-between mb-4">
                 <div className="p-3 bg-blue-500/20 rounded-lg group-hover:bg-blue-500/30 transition">
                   <TrendingUp size={24} className="text-blue-400" />
@@ -204,7 +204,7 @@ export const DashboardModerno: React.FC = () => {
             </div>
 
             {/* Gastos */}
-            <div className="p-6 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-xl hover:border-orange-500/50 transition-all group">
+            <div className="p-3 sm:p-4 md:p-6 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-xl hover:border-orange-500/50 transition-all group">
               <div className="flex items-start justify-between mb-4">
                 <div className="p-3 bg-orange-500/20 rounded-lg group-hover:bg-orange-500/30 transition">
                   <TrendingUp size={24} className="text-orange-400 rotate-180" />
@@ -216,7 +216,7 @@ export const DashboardModerno: React.FC = () => {
             </div>
 
             {/* Neto */}
-            <div className={`p-6 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-xl hover:border-${neto >= 0 ? 'purple' : 'red'}-500/50 transition-all group`}>
+            <div className={`p-3 sm:p-4 md:p-6 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-xl hover:border-${neto >= 0 ? 'purple' : 'red'}-500/50 transition-all group`}>
               <div className="flex items-start justify-between mb-4">
                 <div className={`p-3 rounded-lg group-hover:brightness-110 transition ${neto >= 0 ? 'bg-purple-500/20' : 'bg-red-500/20'}`}>
                   <Zap size={24} className={neto >= 0 ? 'text-purple-400' : 'text-red-400'} />
@@ -233,9 +233,9 @@ export const DashboardModerno: React.FC = () => {
           </div>
 
           {/* GRÁFICOS */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3 md:gap-4 lg:gap-6">
             {/* Pagos Últimas 7 días */}
-            <div className="lg:col-span-2 p-6 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-xl">
+            <div className="lg:col-span-2 p-3 sm:p-4 md:p-6 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-xl">
               <h2 className="text-lg font-bold text-white mb-4">Pagos - Últimos 7 Días</h2>
               <div style={{ height: '250px' }}>
                 <Line data={chartPagosUltimaSemana} options={{
@@ -257,7 +257,7 @@ export const DashboardModerno: React.FC = () => {
             </div>
 
             {/* Estados de Estudiantes */}
-            <div className="p-6 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-xl">
+            <div className="p-3 sm:p-4 md:p-6 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-xl">
               <h2 className="text-lg font-bold text-white mb-4">Estudiantes</h2>
               <div style={{ height: '250px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
                 <div style={{ width: '100%', maxWidth: '200px' }}>

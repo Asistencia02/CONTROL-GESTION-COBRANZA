@@ -94,16 +94,16 @@ export const DeudasModerno: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-8">
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-2 sm:p-4 md:p-8">
       {/* HEADER */}
-      <div className="mb-12">
+      <div className="mb-4 sm:mb-8 md:mb-12">
         <div className="flex items-center justify-between mb-8">
           <div className="flex items-center gap-4">
             <div className="p-3 bg-gradient-to-br from-red-500 to-orange-500 rounded-xl shadow-lg shadow-red-500/50">
               <AlertCircle size={32} className="text-white" />
             </div>
             <div>
-              <h1 className="text-4xl font-black bg-gradient-to-r from-red-400 to-orange-400 bg-clip-text text-transparent">
+              <h1 className="text-2xl sm:text-3xl md:text-4xl font-black bg-gradient-to-r from-red-400 to-orange-400 bg-clip-text text-transparent">
                 Gestión de Deudas
               </h1>
               <p className="text-slate-400 mt-1">Monitorea y controla las deudas de estudiantes</p>
@@ -120,7 +120,7 @@ export const DeudasModerno: React.FC = () => {
       </div>
 
       {/* KPIs EN GRID */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-12">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4 sm:mb-8 md:mb-12">
         <div className="p-4 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-xl hover:border-red-500/50 transition-all">
           <p className="text-xs text-slate-400 font-bold mb-1">Total Adeudado</p>
           <p className="text-2xl font-black text-red-400">{formatoMoneda(resumen.totalDeudaGeneral)}</p>
@@ -140,7 +140,7 @@ export const DeudasModerno: React.FC = () => {
       </div>
 
       {/* TABS */}
-      <div className="mb-12">
+      <div className="mb-4 sm:mb-8 md:mb-12">
         <div className="flex gap-2 p-1 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-xl w-fit">
           <button
             onClick={() => setTabActiva('general')}
@@ -391,3 +391,4 @@ export const DeudasModerno: React.FC = () => {
     </div>
   )
 }
+
