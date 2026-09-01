@@ -113,9 +113,9 @@ export const App: React.FC = () => {
   }
 
   return (
-    <div className="flex h-screen bg-gray-100 flex-col md:flex-row overflow-hidden">
+    <div className="flex h-screen w-screen bg-gray-100 flex-col md:flex-row">
       {/* Hamburger menu en mobile */}
-      <div className="md:hidden flex items-center gap-2 bg-slate-900 border-b border-slate-700/50 px-4 py-3">
+      <div className="md:hidden flex items-center gap-2 bg-slate-900 border-b border-slate-700/50 px-4 py-3 z-40">
         <button
           onClick={() => setSidebarOpen(!sidebarOpen)}
           className="p-2 bg-slate-800/50 hover:bg-slate-700/50 border border-slate-700/50 rounded-lg text-slate-400 hover:text-white transition"
@@ -143,7 +143,9 @@ export const App: React.FC = () => {
         isOpen={sidebarOpen}
         onToggle={() => setSidebarOpen(!sidebarOpen)}
       />
-      <main className="flex-1 overflow-auto w-full md:w-auto max-h-[calc(100vh-52px)] md:max-h-screen">
+
+      {/* Main content - scrolleable */}
+      <main className="flex-1 w-full bg-slate-900 overflow-y-auto">
         {isLoading ? (
           <div className="flex items-center justify-center h-full">
             <div className="text-center">
@@ -160,4 +162,3 @@ export const App: React.FC = () => {
     </div>
   )
 }
-
