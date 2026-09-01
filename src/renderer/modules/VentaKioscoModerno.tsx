@@ -232,7 +232,7 @@ export const VentaKioscoModerno: React.FC = () => {
 
       {/* TABS */}
       <div className="mb-4 sm:mb-8 md:mb-12">
-        <div className="flex gap-2 p-1 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-xl w-fit overflow-x-auto">
+        <div className="flex gap-2 p-1 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-xl overflow-x-auto">
           <button
             onClick={() => setTabActiva('registro')}
             className={`px-6 py-3 rounded-lg font-bold transition-all duration-300 flex items-center gap-2 whitespace-nowrap ${
@@ -719,6 +719,7 @@ export const VentaKioscoModerno: React.FC = () => {
 }
 
 export default VentaKioscoModerno
+
 
 
 

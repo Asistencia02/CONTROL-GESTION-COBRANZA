@@ -253,7 +253,7 @@ export const ReportesFinancierosModerno: React.FC = () => {
                 <h3 className="text-2xl font-bold text-white mb-1 pb-4 border-b border-slate-700/50 flex items-center gap-3"><Target size={28} className="text-cyan-400" />{mes.carrera}</h3>
                 
                 {/* Info de Estudiantes */}
-                <div className="grid grid-cols-2 gap-4 mb-6 p-4 bg-gradient-to-r from-slate-900/80 to-slate-800/50 rounded-lg border border-slate-700/50">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6 p-4 bg-gradient-to-r from-slate-900/80 to-slate-800/50 rounded-lg border border-slate-700/50">
                   <div>
                     <p className="text-xs text-slate-400 font-bold mb-1">👥 Total de Estudiantes</p>
                     <p className="text-3xl font-black text-cyan-300">{carreraInfo?.total_estudiantes || 0}</p>
@@ -267,7 +267,7 @@ export const ReportesFinancierosModerno: React.FC = () => {
 
                 {/* Desglose de Conceptos con Fechas */}
                 <p className="text-sm font-bold text-white mb-3 text-slate-200">Desglose de Facturación ({periodoActual} | {carreraInfo?.total_estudiantes || 0} estudiantes)</p>
-                <div className="grid grid-cols-3 gap-4 mb-6 p-4 bg-gradient-to-r from-slate-900/50 to-slate-800/30 rounded-xl border border-slate-700/30">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 p-4 bg-gradient-to-r from-slate-900/50 to-slate-800/30 rounded-xl border border-slate-700/30">
                   <div className="border-l-4 border-blue-500 pl-4">
                     <p className="text-xs text-slate-400 font-bold mb-1">💎 INSCRIPCIÓN</p>
                     <p className="text-2xl font-black text-blue-300 mb-2">{formatoMoneda(mes.inscripcion_deberia)}</p>
@@ -302,7 +302,7 @@ export const ReportesFinancierosModerno: React.FC = () => {
 
                 {/* Comparativa de Recaudación */}
                 <p className="text-sm font-bold text-white mb-3 text-slate-200">Facturado vs Recaudado ({periodoActual})</p>
-                <div className="grid grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="p-5 bg-gradient-to-br from-blue-600/30 to-blue-900/20 border-2 border-blue-500/40 rounded-xl">
                     <p className="text-xs text-blue-300 font-bold mb-2 flex items-center gap-1"><DollarSign size={14} />TOTAL FACTURADO</p>
                     <p className="text-3xl font-black text-blue-200 mb-3">{formatoMoneda(mes.deberia_cobrar_total)}</p>
@@ -423,7 +423,7 @@ export const ReportesFinancierosModerno: React.FC = () => {
         </div>
       </div>
 
-      <div className="mb-8 flex gap-3 overflow-x-auto pb-2">
+        <div className="mb-8 flex gap-3 overflow-x-auto pb-2 -mx-6 px-6">
         {[
           { id: 'resumen', label: 'Resumen', icon: Gauge, color: 'from-purple-600 to-purple-700' },
           { id: 'carrera', label: 'Por Carrera', icon: Users, color: 'from-blue-600 to-blue-700' },
@@ -434,7 +434,7 @@ export const ReportesFinancierosModerno: React.FC = () => {
           <button
             key={id}
             onClick={() => setTabActiva(id as TabReporte)}
-            className={`px-6 py-3 rounded-xl text-sm font-bold flex items-center gap-2 whitespace-nowrap transition-all ${
+            className={`px-4 sm:px-6 py-3 rounded-xl text-sm font-bold flex items-center gap-2 whitespace-nowrap transition-all ${
               tabActiva === id
                 ? `bg-gradient-to-r ${color} text-white shadow-lg`
                 : 'bg-slate-700/50 text-slate-300 hover:bg-slate-600/50'
