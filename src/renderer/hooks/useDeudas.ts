@@ -1,0 +1,633 @@
+import { create } from 'zustand'
+import { supabase } from '@renderer/lib/supabase'
+
+export interface Deuda {
+  estudiante_id: number
+  dni: string
+  nombre_completo: string
+  carrera: string
+  institucion: string
+  institucion_id: number
+  estado: string
+  email?: string
+  telefono?: string
+  conceptos_totales: number
+  conceptos_pagados: number
+  conceptos_adeudados: number
+  total_adeudado: number
+  total_pagado: number
+  saldo_adeudado: number
+  es_deudor?: boolean
+}
+
+export interface DeudaDetallada {
+  estudiante_id: number
+  dni: string
+  estudiante: string
+  estado: string
+  carrera: string
+  concepto: string
+  tipo_concepto: string
+  monto_original: number
+  monto_adeudado: number
+  monto_pagado: number
+  fecha_pago?: string
+  pendiente: boolean
+}
+
+export interface DeudaCritica {
+  id: number
+  dni: string
+  nombre_completo: string
+  carrera: string
+  institucion: string
+  estado: string
+  total_adeudado: number
+  total_pagado: number
+  porcentaje_deuda: number
+}
+
+interface UseDeudasStore {
+  deudas: Deuda[]
+  deudasDetalladas: DeudaDetallada[]
+  deudasCriticas: DeudaCritica[]
+  loading: boolean
+  error: string | null
+  totalDeudasInstitucion: number
+  estudiantesMora: number
+  mesActual: number
+
+  cargarDeudas: (institucion_id: number) => Promise<void>
+  cargarDeudasDetalladas: (estudiante_id: number, institucion_id: number) => Promise<void>
+  cargarDeudasCriticas: (institucion_id: number) => Promise<void>
+  obtenerDeudaEstudiante: (estudiante_id: number) => Deuda | undefined
+  obtenerResumenDeudas: (institucion_id: number) => Promise<{
+    totalDeudaGeneral: number
+    estudiantesEnMora: number
+    porcentajeMora: number
+  }>
+}
+
+// Función helper para determinar si un concepto debe aplicar beca
+const esConceptoBeca = (tipo: string): boolean => {
+  // Inscripción y Seguro NO aplican beca
+  if (!tipo) return true
+  const tipoLower = tipo.toLowerCase()
+  return !tipoLower.includes('inscripcion') && !tipoLower.includes('seguro')
+}
+
+export const useDeudas = create<UseDeudasStore>((set, get) => ({
+  deudas: [],
+  deudasDetalladas: [],
+  deudasCriticas: [],
+  loading: false,
+  error: null,
+  totalDeudasInstitucion: 0,
+  estudiantesMora: 0,
+  mesActual: new Date().getMonth() + 1,
+
+  cargarDeudas: async (institucion_id: number) => {
+    set({ loading: true, error: null })
+    try {
+      const today = new Date()
+      const mesActual = today.getMonth() + 1
+      const anioActual = today.getFullYear()
+      const diaActual = today.getDate()
+
+      const { data: estudiantesData, error: errorEstudiantes } = await supabase
+        .from('estudiantes')
+        .select('id, dni, nombre, apellido, estado, email, telefono, carrera_id')
+        .eq('institucion_id', institucion_id)
+        .neq('estado', 'NO_VIENE_MAS')
+
+      if (errorEstudiantes) throw errorEstudiantes
+
+      const { data: carrerasData } = await supabase
+        .from('carreras')
+        .select('id, nombre')
+        .eq('institucion_id', institucion_id)
+
+      const carrerasMap = new Map(carrerasData?.map((c: any) => [c.id, c.nombre]) || [])
+
+      const { data: conceptos } = await supabase
+        .from('conceptos_pago')
+        .select('id, mes, año, monto, tipo, carrera_id')
+        .eq('institucion_id', institucion_id)
+        .eq('activo', true)
+
+      let todosPagos: any[] = []
+      let pagina = 0
+      let tieneRangoMas = true
+
+      while (tieneRangoMas) {
+        const desde = pagina * 1000
+        const hasta = desde + 999
+        
+        // Cargar SOLO pagos que NO estén ANULADOS
+        const { data: pagosBloques, error: errorPagos } = await supabase
+          .from('pagos')
+          .select('estudiante_id, concepto_id, monto_pagado, estado')
+          .eq('institucion_id', institucion_id)
+          .neq('estado', 'ANULADO')  // Ignorar pagos anulados
+          .range(desde, hasta)
+
+        if (errorPagos) throw errorPagos
+        
+        if (!pagosBloques || pagosBloques.length === 0) {
+          tieneRangoMas = false
+        } else {
+          todosPagos = [...todosPagos, ...pagosBloques]
+          pagina++
+        }
+      }
+
+      const { data: pagosMultiplesData } = await supabase
+        .from('pagos_multiples')
+        .select(`
+          id,
+          estudiante_id,
+          estado,
+          pagos_multiples_detalle(
+            concepto_id,
+            monto_pagado
+          )
+        `)
+        .eq('institucion_id', institucion_id)
+        .neq('estado', 'ANULADO')  // Ignorar pagos múltiples anulados
+
+      if (pagosMultiplesData) {
+        pagosMultiplesData.forEach((pm: any) => {
+          if (pm.pagos_multiples_detalle && Array.isArray(pm.pagos_multiples_detalle)) {
+            pm.pagos_multiples_detalle.forEach((detalle: any) => {
+              todosPagos.push({
+                estudiante_id: pm.estudiante_id,
+                concepto_id: detalle.concepto_id,
+                monto_pagado: detalle.monto_pagado,
+                estado: 'COMPLETADO'
+              })
+            })
+          }
+        })
+      }
+
+      const pagosMap = new Map<string, number>()
+      todosPagos.forEach(p => {
+        const key = `${p.estudiante_id}-${p.concepto_id}`
+        pagosMap.set(key, p.monto_pagado)
+      })
+
+      const conceptosFiltrados = (conceptos || []).filter(c => {
+        if (c.mes && c.año) {
+          if (c.año < anioActual) return true
+          if (c.año === anioActual) {
+            if (c.mes < mesActual) return true
+            if (c.mes === mesActual && diaActual > 10) return true
+          }
+          return false
+        } else {
+          return true
+        }
+      })
+
+      const deudasConEstado = (estudiantesData || [])
+        .map(est => {
+          let pagadoTotal = 0
+          let adeudadoTotal = 0
+          let contadoPagados = 0
+          let contadoAdeudados = 0
+
+          const esBecado100 = est.estado === 'BECADO_100'
+          const esBecado50 = est.estado === 'BECADO_50'
+
+          // FILTRAR CONCEPTOS SOLO POR CARRERA DEL ESTUDIANTE
+          const conceptosDelEstudiante = conceptosFiltrados.filter(c => c.carrera_id === est.carrera_id)
+
+          conceptosDelEstudiante.forEach(concepto => {
+            const montoPago = pagosMap.get(`${est.id}-${concepto.id}`) || 0
+            const montoOriginal = concepto.monto
+            const aplicaBeca = esConceptoBeca(concepto.tipo)
+
+            // BECADO_100: conceptos con beca aparecen como pagados automáticamente
+            if (esBecado100 && aplicaBeca) {
+              pagadoTotal += montoOriginal
+              contadoPagados += 1
+              return
+            }
+
+            // BECADO_50: solo paga 50% de conceptos con beca
+            let montoAResponsabilidad = montoOriginal
+            if (esBecado50 && aplicaBeca) {
+              montoAResponsabilidad = montoOriginal * 0.5
+            }
+
+            const deudaDelConcepto = montoAResponsabilidad - montoPago
+
+            if (montoPago > 0) {
+              pagadoTotal += montoPago
+              contadoPagados += 1
+            }
+
+            if (deudaDelConcepto > 0) {
+              adeudadoTotal += deudaDelConcepto
+              contadoAdeudados += 1
+            }
+          })
+
+          const esDeudor = adeudadoTotal > 0 && !esBecado100
+
+          const deuda: Deuda = {
+            estudiante_id: est.id,
+            dni: est.dni,
+            nombre_completo: `${est.nombre} ${est.apellido}`,
+            carrera: carrerasMap.get(est.carrera_id) || 'Sin carrera',
+            institucion: 'Institución',
+            institucion_id,
+            estado: est.estado,
+            email: est.email,
+            telefono: est.telefono,
+            conceptos_totales: conceptosDelEstudiante.length,
+            conceptos_pagados: contadoPagados,
+            conceptos_adeudados: contadoAdeudados,
+            total_adeudado: adeudadoTotal,
+            total_pagado: pagadoTotal,
+            saldo_adeudado: adeudadoTotal,
+            es_deudor: esDeudor,
+          }
+
+          return deuda
+        })
+
+      const totalDeudas = deudasConEstado.reduce((sum, d) => sum + d.saldo_adeudado, 0)
+      const enMora = deudasConEstado.filter((d) => d.es_deudor && d.saldo_adeudado > 0).length
+
+      console.log(`✓ Deudas: ${deudasConEstado.length} estudiantes, ${enMora} con deuda, total: $${totalDeudas}`)
+
+      set({
+        deudas: deudasConEstado,
+        totalDeudasInstitucion: totalDeudas,
+        estudiantesMora: enMora,
+        mesActual,
+      })
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Error al cargar deudas'
+      set({ error: message })
+      console.error('Error:', err)
+    } finally {
+      set({ loading: false })
+    }
+  },
+
+  cargarDeudasDetalladas: async (estudiante_id: number, institucion_id: number) => {
+    set({ loading: true, error: null })
+    try {
+      const today = new Date()
+      const mesActual = today.getMonth() + 1
+      const anioActual = today.getFullYear()
+      const diaActual = today.getDate()
+
+      const { data: estudianteData } = await supabase
+        .from('estudiantes')
+        .select('dni, nombre, apellido, estado, carrera_id')
+        .eq('id', estudiante_id)
+        .single()
+
+      if (!estudianteData) {
+        throw new Error(`Estudiante no encontrado`)
+      }
+
+      const { data: carreraData } = await supabase
+        .from('carreras')
+        .select('nombre')
+        .eq('id', estudianteData.carrera_id)
+        .single()
+
+      const { data: conceptosData } = await supabase
+        .from('conceptos_pago')
+        .select('id, nombre, tipo, monto, mes, año, carrera_id')
+        .eq('institucion_id', institucion_id)
+        .eq('activo', true)
+
+      // FILTRAR CONCEPTOS POR CARRERA DEL ESTUDIANTE
+      const conceptosSinFiltrar = (conceptosData || []).filter(c => c.carrera_id === estudianteData.carrera_id)
+
+      const conceptosFiltrados = conceptosSinFiltrar.filter(c => {
+        if (c.mes && c.año) {
+          if (c.año < anioActual) return true
+          if (c.año === anioActual) {
+            if (c.mes < mesActual) return true
+            if (c.mes === mesActual && diaActual > 10) return true
+          }
+          return false
+        } else {
+          return true
+        }
+      })
+
+      const { data: pagosData } = await supabase
+        .from('pagos')
+        .select('concepto_id, monto_pagado, created_at, estado')
+        .eq('estudiante_id', estudiante_id)
+        .neq('estado', 'ANULADO')  // Ignorar pagos anulados
+
+      const { data: pagosMultiplesData } = await supabase
+        .from('pagos_multiples')
+        .select(`
+          fecha_cobro,
+          estado,
+          pagos_multiples_detalle(
+            concepto_id,
+            monto_pagado
+          )
+        `)
+        .eq('estudiante_id', estudiante_id)
+        .neq('estado', 'ANULADO')  // Ignorar pagos múltiples anulados
+
+      const pagosMap = new Map<number, { monto: number; fecha?: string }>()
+      
+      pagosData?.forEach(p => {
+        pagosMap.set(p.concepto_id, { monto: p.monto_pagado, fecha: p.created_at })
+      })
+
+      pagosMultiplesData?.forEach((pm: any) => {
+        if (pm.pagos_multiples_detalle && Array.isArray(pm.pagos_multiples_detalle)) {
+          pm.pagos_multiples_detalle.forEach((detalle: any) => {
+            const existing = pagosMap.get(detalle.concepto_id)
+            if (existing) {
+              pagosMap.set(detalle.concepto_id, {
+                monto: existing.monto + detalle.monto_pagado,
+                fecha: pm.fecha_cobro
+              })
+            } else {
+              pagosMap.set(detalle.concepto_id, {
+                monto: detalle.monto_pagado,
+                fecha: pm.fecha_cobro
+              })
+            }
+          })
+        }
+      })
+
+      const esBecado100 = estudianteData.estado === 'BECADO_100'
+      const esBecado50 = estudianteData.estado === 'BECADO_50'
+
+      const detalles: DeudaDetallada[] = conceptosFiltrados
+        .map(concepto => {
+          const pago = pagosMap.get(concepto.id)
+          const montoPago = pago?.monto || 0
+          const montoOriginal = concepto.monto
+          const aplicaBeca = esConceptoBeca(concepto.tipo)
+
+          // BECADO_100: concepto con beca aparece como pagado
+          if (esBecado100 && aplicaBeca) {
+            return {
+              estudiante_id,
+              dni: estudianteData.dni || '',
+              estudiante: `${estudianteData.nombre} ${estudianteData.apellido}`,
+              estado: estudianteData.estado || '',
+              carrera: carreraData?.nombre || '',
+              concepto: concepto.nombre,
+              tipo_concepto: concepto.tipo,
+              monto_original: montoOriginal,
+              monto_adeudado: 0,
+              monto_pagado: montoOriginal,
+              fecha_pago: new Date().toISOString(),
+              pendiente: false,
+            }
+          }
+
+          // BECADO_50: solo paga 50% si aplica beca
+          let montoAResponsabilidad = montoOriginal
+          if (esBecado50 && aplicaBeca) {
+            montoAResponsabilidad = montoOriginal * 0.5
+          }
+
+          const montoAdeudado = Math.max(0, montoAResponsabilidad - montoPago)
+          const pendiente = montoAdeudado > 0
+
+          return {
+            estudiante_id,
+            dni: estudianteData.dni || '',
+            estudiante: `${estudianteData.nombre} ${estudianteData.apellido}`,
+            estado: estudianteData.estado || '',
+            carrera: carreraData?.nombre || '',
+            concepto: concepto.nombre,
+            tipo_concepto: concepto.tipo,
+            monto_original: montoOriginal,
+            monto_adeudado: montoAdeudado,
+            monto_pagado: montoPago,
+            fecha_pago: pago?.fecha,
+            pendiente,
+          }
+        })
+        .sort((a, b) => {
+          if (a.pendiente !== b.pendiente) {
+            return a.pendiente ? -1 : 1
+          }
+          return a.concepto.localeCompare(b.concepto)
+        })
+
+      set({ deudasDetalladas: detalles })
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Error al cargar deudas'
+      set({ error: message })
+      console.error('Error:', err)
+    } finally {
+      set({ loading: false })
+    }
+  },
+
+  cargarDeudasCriticas: async (institucion_id: number) => {
+    set({ loading: true, error: null })
+    try {
+      const today = new Date()
+      const mesActual = today.getMonth() + 1
+      const anioActual = today.getFullYear()
+      const diaActual = today.getDate()
+
+      // ✅ ARREGLADO: Usar misma lógica que cargarDeudas()
+      const { data: estudiantesData, error: errorEstudiantes } = await supabase
+        .from('estudiantes')
+        .select('id, dni, nombre, apellido, estado, email, telefono, carrera_id')
+        .eq('institucion_id', institucion_id)
+        .neq('estado', 'NO_VIENE_MAS')
+        .neq('estado', 'BECADO_100')  // Excluir BECADO_100
+
+      if (errorEstudiantes) throw errorEstudiantes
+
+      const { data: carrerasData } = await supabase
+        .from('carreras')
+        .select('id, nombre')
+        .eq('institucion_id', institucion_id)
+
+      const carrerasMap = new Map(carrerasData?.map((c: any) => [c.id, c.nombre]) || [])
+
+      const { data: conceptos } = await supabase
+        .from('conceptos_pago')
+        .select('id, mes, año, monto, tipo, carrera_id')
+        .eq('institucion_id', institucion_id)
+        .eq('activo', true)
+
+      // ✅ Cargar pagos con paginación e institucion_id
+      let todosPagos: any[] = []
+      let pagina = 0
+      let tieneRangoMas = true
+
+      while (tieneRangoMas) {
+        const desde = pagina * 1000
+        const hasta = desde + 999
+        
+        const { data: pagosBloques, error: errorPagos } = await supabase
+          .from('pagos')
+          .select('estudiante_id, concepto_id, monto_pagado, estado')
+          .eq('institucion_id', institucion_id)
+          .neq('estado', 'ANULADO')
+          .range(desde, hasta)
+
+        if (errorPagos) throw errorPagos
+        
+        if (!pagosBloques || pagosBloques.length === 0) {
+          tieneRangoMas = false
+        } else {
+          todosPagos = [...todosPagos, ...pagosBloques]
+          pagina++
+        }
+      }
+
+      const { data: pagosMultiplesData } = await supabase
+        .from('pagos_multiples')
+        .select(`
+          id,
+          estudiante_id,
+          estado,
+          pagos_multiples_detalle(
+            concepto_id,
+            monto_pagado
+          )
+        `)
+        .eq('institucion_id', institucion_id)
+        .neq('estado', 'ANULADO')
+
+      if (pagosMultiplesData) {
+        pagosMultiplesData.forEach((pm: any) => {
+          if (pm.pagos_multiples_detalle && Array.isArray(pm.pagos_multiples_detalle)) {
+            pm.pagos_multiples_detalle.forEach((detalle: any) => {
+              todosPagos.push({
+                estudiante_id: pm.estudiante_id,
+                concepto_id: detalle.concepto_id,
+                monto_pagado: detalle.monto_pagado,
+                estado: 'COMPLETADO'
+              })
+            })
+          }
+        })
+      }
+
+      const pagosMap = new Map<string, number>()
+      todosPagos.forEach(p => {
+        const key = `${p.estudiante_id}-${p.concepto_id}`
+        pagosMap.set(key, p.monto_pagado)
+      })
+
+      const conceptosFiltrados = (conceptos || []).filter(c => {
+        if (c.mes && c.año) {
+          if (c.año < anioActual) return true
+          if (c.año === anioActual) {
+            if (c.mes < mesActual) return true
+            if (c.mes === mesActual && diaActual > 10) return true
+          }
+          return false
+        } else {
+          return true
+        }
+      })
+
+      // ✅ Calcular deudas críticas (igual a cargarDeudas pero filtrando por > 50%)
+      const deudasCriticasCalculadas: DeudaCritica[] = (estudiantesData || [])
+        .map(est => {
+          let pagadoTotal = 0
+          let adeudadoTotal = 0
+          let montoResponsable = 0
+
+          const esBecado50 = est.estado === 'BECADO_50'
+
+          const conceptosDelEstudiante = conceptosFiltrados.filter(c => c.carrera_id === est.carrera_id)
+
+          conceptosDelEstudiante.forEach(concepto => {
+            const montoPago = pagosMap.get(`${est.id}-${concepto.id}`) || 0
+            const montoOriginal = concepto.monto
+            const aplicaBeca = esConceptoBeca(concepto.tipo)
+
+            // BECADO_50: solo responsable de 50% si aplica beca
+            let montoAResponsabilidad = montoOriginal
+            if (esBecado50 && aplicaBeca) {
+              montoAResponsabilidad = montoOriginal * 0.5
+            }
+
+            montoResponsable += montoAResponsabilidad
+            pagadoTotal += montoPago
+            const deuda = montoAResponsabilidad - montoPago
+            
+            if (deuda > 0) {
+              adeudadoTotal += deuda
+            }
+          })
+
+          const porcentajeDeuda = montoResponsable > 0 ? (adeudadoTotal / montoResponsable) * 100 : 0
+
+          return {
+            id: est.id,
+            dni: est.dni,
+            nombre_completo: `${est.nombre} ${est.apellido}`,
+            carrera: carrerasMap.get(est.carrera_id) || 'Sin carrera',
+            institucion: 'Institución',
+            estado: est.estado,
+            total_adeudado: adeudadoTotal,
+            total_pagado: pagadoTotal,
+            porcentaje_deuda: parseFloat(porcentajeDeuda.toFixed(1)),
+          }
+        })
+        // ✅ FILTRAR: Solo mostrar si deuda > 50%
+        .filter(deuda => deuda.porcentaje_deuda > 50 && deuda.total_adeudado > 0)
+
+      console.log(`✓ Deudas Críticas (>50%): ${deudasCriticasCalculadas.length} estudiantes para institución ${institucion_id}`)
+      set({ deudasCriticas: deudasCriticasCalculadas })
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Error al cargar deudas críticas'
+      set({ error: message })
+      console.error('Error:', err)
+    } finally {
+      set({ loading: false })
+    }
+  },
+
+  obtenerDeudaEstudiante: (estudiante_id: number) => {
+    return get().deudas.find((d) => d.estudiante_id === estudiante_id)
+  },
+
+  obtenerResumenDeudas: async (institucion_id: number) => {
+    try {
+      const deudas = get().deudas
+      if (deudas.length === 0) {
+        await get().cargarDeudas(institucion_id)
+      }
+
+      const deudasActuales = get().deudas
+      const totalDeuda = deudasActuales.reduce((sum, d) => sum + d.saldo_adeudado, 0)
+      const enMora = deudasActuales.filter((d) => d.es_deudor && d.saldo_adeudado > 0).length
+      const porcentaje = deudasActuales.length > 0 ? (enMora / deudasActuales.length) * 100 : 0
+
+      return {
+        totalDeudaGeneral: totalDeuda,
+        estudiantesEnMora: enMora,
+        porcentajeMora: parseFloat(porcentaje.toFixed(1)),
+      }
+    } catch (err) {
+      console.error('Error:', err)
+      return {
+        totalDeudaGeneral: 0,
+        estudiantesEnMora: 0,
+        porcentajeMora: 0,
+      }
+    }
+  },
+}))

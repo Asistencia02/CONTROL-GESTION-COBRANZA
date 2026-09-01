@@ -1,0 +1,976 @@
+// ==================== GOOGLE APPS SCRIPT - FULL AUTO v2.8 ====================
+// ✅ MULTI-INSTITUCIÓN EN MISMO EXCEL
+// ✅ DNI autoincrementable + Anti-duplicados con ACTUALIZACIÓN de montos
+// ==================== CONFIGURACIÓN ====================
+
+const CONFIG_SHEET_NAME = "CONFIG";
+const LOG_SHEET_NAME = "LOG_SINCRONIZACION";
+const BATCH_SIZE = 10;
+const DELAY_MS = 200;
+const MAX_REINTENTOS = 5;
+const EXCEL_NORMALIZADO_NOMBRE = "SYNC_NORMALIZADO_MULTI_2026";
+
+// ✅ v2.8: MAPEO DINÁMICO - HOJA → INSTITUCIÓN + CARRERA
+const MAPEO_HOJAS = {
+  "ANALISTA2026": { institucion_id: 1, carrera_id: 1 },
+  "HIGIENE2026": { institucion_id: 1, carrera_id: 3 },
+  "INICIAL2026": { institucion_id: 2, carrera_id: 4 },
+  "PRIMARIA2026": { institucion_id: 2, carrera_id: 5 },
+  "SECUNDARIA2026": { institucion_id: 2, carrera_id: 6 }
+};
+
+const SUPABASE_URL = "https://tcqamchiwtijniiwbpde.supabase.co";
+const SUPABASE_KEY = "sb_publishable_p2KFfCQlF79Q5WTgMgrlNQ_sYCsxxCP";
+
+// ==================== FUNCIÓN HTTP-WRAPPER ====================
+
+function doGet(e) {
+  return HtmlService.createHtmlOutput('OK').setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+}
+
+function doPost(e) {
+  try {
+    const resultado = ejecutarFullAutoHTTP();
+    return ContentService
+      .createTextOutput(JSON.stringify(resultado))
+      .setMimeType(ContentService.MimeType.JSON);
+  } catch (error) {
+    return ContentService
+      .createTextOutput(JSON.stringify({ exito: false, mensaje: error.toString() }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+function ejecutarFullAutoHTTP() {
+  try {
+    Logger.log("\n" + "=".repeat(70));
+    Logger.log("🚀 INICIANDO FULL AUTO v2.8 MULTI-INSTITUCIÓN (VÍA HTTP)");
+    Logger.log("=".repeat(70));
+    
+    // PASO 1: NORMALIZAR
+    Logger.log("\n📋 FASE 1: Normalizando datos...");
+    const resultNorm = normalizarExcelMulti();
+    
+    if (!resultNorm || Object.keys(resultNorm.datosNormalizados).length === 0) {
+      return { exito: false, mensaje: "Error en normalización", data: null };
+    }
+    
+    // PASO 2: SINCRONIZAR (por institución)
+    Logger.log("\n🔄 FASE 2: Sincronizando por institución...");
+    const resultadoSync = {};
+    
+    for (let instId in resultNorm.datosNormalizados) {
+      const datosInst = resultNorm.datosNormalizados[instId];
+      const config = {
+        supabaseUrl: SUPABASE_URL,
+        supabaseKey: SUPABASE_KEY,
+        institucionId: instId
+      };
+      
+      Logger.log(`   Sincronizando institución ${instId}...`);
+      resultadoSync[instId] = sincronizarDatos(config, datosInst);
+    }
+    
+    // PASO 3: GUARDAR LOG
+    Logger.log("\n📝 FASE 3: Guardando logs...");
+    guardarResultadoFinalMulti(resultNorm.hojaSync, resultadoSync);
+    
+    return { exito: true, mensaje: "OK", data: resultadoSync };
+  } catch (error) {
+    return { exito: false, mensaje: error.toString() };
+  }
+}
+
+// ==================== MENÚ PERSONALIZADO ====================
+
+function onOpen() {
+  const ui = SpreadsheetApp.getUi();
+  ui.createMenu('🔄 SINCRONIZACIÓN')
+    .addItem('▶️ FULL AUTO MULTI', 'ejecutarFullAuto')
+    .addSeparator()
+    .addItem('📋 Ver Resumen', 'mostrarResumen')
+    .addItem('📊 Ver Logs', 'mostrarLogs')
+    .addToUi();
+}
+
+// ==================== FUNCIÓN PRINCIPAL ====================
+
+function ejecutarFullAuto() {
+  try {
+    const ui = SpreadsheetApp.getUi();
+    
+    Logger.log("\n" + "=".repeat(70));
+    Logger.log("🚀 INICIANDO FULL AUTO v2.8 MULTI-INSTITUCIÓN");
+    Logger.log("=".repeat(70));
+    
+    ui.showModelessDialog(
+      HtmlService.createHtmlOutput('<p>⏳ Procesando múltiples instituciones... por favor espera.</p>'),
+      '🔄 Sincronización'
+    );
+    
+    // PASO 1: NORMALIZAR
+    Logger.log("\n📋 FASE 1: Normalizando datos...");
+    const resultNorm = normalizarExcelMulti();
+    
+    if (!resultNorm || Object.keys(resultNorm.datosNormalizados).length === 0) {
+      ui.alert("❌ Error en normalización o sin hojas detectadas");
+      return;
+    }
+    
+    Logger.log(`✅ Instituciones detectadas: ${Object.keys(resultNorm.datosNormalizados).join(", ")}`);
+    
+    // PASO 2: SINCRONIZAR (por institución)
+    Logger.log("\n🔄 FASE 2: Sincronizando por institución...");
+    const resultadoSync = {};
+    
+    for (let instId in resultNorm.datosNormalizados) {
+      const datosInst = resultNorm.datosNormalizados[instId];
+      const config = {
+        supabaseUrl: SUPABASE_URL,
+        supabaseKey: SUPABASE_KEY,
+        institucionId: instId
+      };
+      
+      Logger.log(`\n   🔄 Sincronizando institución ${instId}...`);
+      resultadoSync[instId] = sincronizarDatos(config, datosInst);
+    }
+    
+    // PASO 3: GUARDAR LOG
+    Logger.log("\n📝 FASE 3: Guardando logs...");
+    guardarResultadoFinalMulti(resultNorm.hojaSync, resultadoSync);
+    
+    // PASO 4: RESUMEN
+    let resumenFinal = "✅ COMPLETADO MULTI-INSTITUCIÓN\n\n";
+    
+    for (let instId in resultadoSync) {
+      const sync = resultadoSync[instId];
+      resumenFinal += `📦 INSTITUCIÓN ${instId}:\n`;
+      resumenFinal += `   • Estudiantes: ${sync.contadores.estudiantesInsertados}\n`;
+      resumenFinal += `   • Inscripciones: ${sync.contadores.pagosInscInsertados} (${sync.contadores.inscripcionesActualizadas} act.)\n`;
+      resumenFinal += `   • Cuotas: ${sync.contadores.pagosCuotaInsertados} (${sync.contadores.cuotasActualizadas} act.)\n`;
+      resumenFinal += `   • Seguros: ${sync.contadores.pagosSeguroInsertados} (${sync.contadores.segurosActualizados} act.)\n`;
+      resumenFinal += `   • Ignorados: ${sync.contadores.ignorados} | Errores: ${sync.contadores.errores}\n\n`;
+    }
+    
+    resumenFinal += `Fecha: ${new Date().toLocaleString('es-AR')}`;
+    
+    ui.alert(resumenFinal);
+    
+  } catch (error) {
+    Logger.log("❌ ERROR: " + error);
+    SpreadsheetApp.getUi().alert("❌ Error: " + error.toString());
+  }
+}
+
+// ==================== NORMALIZACIÓN MULTI-INSTITUCIÓN ====================
+
+function normalizarExcelMulti() {
+  Logger.log("🚀 normalizarExcelMulti() iniciado");
+  
+  // Obtener archivo Excel
+  Logger.log("Obteniendo archivo Excel...");
+  const nombreArchivo = "CUOTAS 2025 INSM vigente para cristian.xlsx";
+  const files = DriveApp.getFilesByName(nombreArchivo);
+  
+  if (!files.hasNext()) {
+    Logger.log("❌ Archivo no encontrado: " + nombreArchivo);
+    return null;
+  }
+  
+  const file = files.next();
+  Logger.log("✅ Archivo encontrado");
+  
+  // Buscar o crear spreadsheet NORMALIZADO
+  Logger.log("Buscando/creando Excel normalizado...");
+  const spreadsheet = buscarOCrearNormalizadoFijo();
+  Logger.log("✅ Excel normalizado OK");
+  
+  // Procesar Excel - AGRUPAR POR INSTITUCIÓN
+  const fileId = file.getId();
+  const tempSpreadsheet = SpreadsheetApp.openById(fileId);
+  
+  const datosNormalizadosPorInst = {}; // { instId: { estudiantes, pagosInscripcion, etc } }
+  
+  const hojas = tempSpreadsheet.getSheets();
+  Logger.log(`Procesando ${hojas.length} hojas...`);
+  
+  for (let h = 0; h < hojas.length; h++) {
+    const hoja = hojas[h];
+    const nombreHoja = hoja.getName();
+    
+    // ✅ v2.8: BUSCAR EN MAPEO
+    const mapeo = MAPEO_HOJAS[nombreHoja];
+    if (!mapeo) {
+      Logger.log(`   ⏭️ Hoja ignorada (no en mapeo): ${nombreHoja}`);
+      continue;
+    }
+    
+    const instId = mapeo.institucion_id;
+    const carreraId = mapeo.carrera_id;
+    
+    // Inicializar institución si no existe
+    if (!datosNormalizadosPorInst[instId]) {
+      datosNormalizadosPorInst[instId] = {
+        estudiantes: {},
+        pagosInscripcion: [],
+        pagosCuota: [],
+        pagosSeguro: [],
+        institucion_id: instId
+      };
+    }
+    
+    Logger.log(`  Procesando ${nombreHoja} (inst ${instId}, carrera ${carreraId})...`);
+    
+    // ✅ Obtener config de carrera
+    const config = obtenerConfiguracionCarrera(instId, carreraId);
+    if (!config) {
+      Logger.log(`  ⚠️ Sin configuración para carrera ${carreraId}`);
+      continue;
+    }
+    
+    // Procesar hoja
+    procesarHoja(
+      hoja,
+      carreraId,
+      config,
+      2026,
+      datosNormalizadosPorInst[instId].estudiantes,
+      datosNormalizadosPorInst[instId].pagosInscripcion,
+      datosNormalizadosPorInst[instId].pagosCuota,
+      datosNormalizadosPorInst[instId].pagosSeguro
+    );
+  }
+  
+  Logger.log(`✅ Procesamiento OK`);
+  
+  // Llenar hojas de CADA INSTITUCIÓN
+  Logger.log("Actualizando hojas normalizadas...");
+  for (let instId in datosNormalizadosPorInst) {
+    const datos = datosNormalizadosPorInst[instId];
+    
+    const hojaEst = obtenerOCrearHoja(spreadsheet, `ESTUDIANTES_INST${instId}`);
+    const hojaInsc = obtenerOCrearHoja(spreadsheet, `PAGOS_INSCRIPCION_INST${instId}`);
+    const hojaCuota = obtenerOCrearHoja(spreadsheet, `PAGOS_CUOTA_INST${instId}`);
+    const hojaSeguro = obtenerOCrearHoja(spreadsheet, `PAGOS_SEGURO_INST${instId}`);
+    
+    limpiarYLlenarHojas(
+      hojaEst, hojaInsc, hojaCuota, hojaSeguro,
+      datos.estudiantes,
+      datos.pagosInscripcion,
+      datos.pagosCuota,
+      datos.pagosSeguro
+    );
+    
+    Logger.log(`✅ Hojas de institución ${instId} actualizadas`);
+  }
+  
+  Logger.log("✅ Normalización completada");
+  
+  // RETORNO
+  const retorno = {
+    datosNormalizados: {},
+    hojaSync: spreadsheet
+  };
+  
+  for (let instId in datosNormalizadosPorInst) {
+    const datos = datosNormalizadosPorInst[instId];
+    retorno.datosNormalizados[instId] = {
+      estudiantes: Object.values(datos.estudiantes),
+      pagosInscripcion: datos.pagosInscripcion,
+      pagosCuota: datos.pagosCuota,
+      pagosSeguro: datos.pagosSeguro
+    };
+  }
+  
+  return retorno;
+}
+
+// ✅ v2.8: OBTENER CONFIG DE UNA SOLA CARRERA
+function obtenerConfiguracionCarrera(instId, carreraId) {
+  try {
+    const url = `${SUPABASE_URL}/rest/v1/configuracion_carreras?institucion_id=eq.${instId}&carrera_id=eq.${carreraId}`;
+    const response = UrlFetchApp.fetch(url, {
+      method: "get",
+      headers: { "apikey": SUPABASE_KEY, "Content-Type": "application/json" },
+      muteHttpExceptions: true
+    });
+    
+    if (response.getResponseCode() === 200) {
+      const data = JSON.parse(response.getContentText());
+      if (data && data.length > 0) {
+        const c = data[0];
+        return {
+          monto_inscripcion: c.monto_inscripcion,
+          monto_cuota: c.monto_cuota,
+          monto_seguro: c.monto_seguro
+        };
+      }
+    }
+  } catch (e) {
+    Logger.log(`Error obteniendo config: ${e}`);
+  }
+  return null;
+}
+
+function buscarOCrearNormalizadoFijo() {
+  try {
+    const files = DriveApp.getFilesByName(EXCEL_NORMALIZADO_NOMBRE);
+    if (files.hasNext()) {
+      const fileId = files.next().getId();
+      Logger.log(`   ℹ️ Excel normalizado existente: ${EXCEL_NORMALIZADO_NOMBRE}`);
+      return SpreadsheetApp.openById(fileId);
+    }
+  } catch (e) {
+    Logger.log("Nota: " + e.toString());
+  }
+  
+  Logger.log(`   ℹ️ Creando Excel normalizado: ${EXCEL_NORMALIZADO_NOMBRE}`);
+  const spreadsheet = SpreadsheetApp.create(EXCEL_NORMALIZADO_NOMBRE);
+  const ss = spreadsheet.getActiveSheet();
+  ss.setName("CONFIG");
+  
+  return spreadsheet;
+}
+
+function obtenerOCrearHoja(spreadsheet, nombre) {
+  let hoja = spreadsheet.getSheetByName(nombre);
+  if (hoja) {
+    Logger.log(`   ℹ️ Hoja existente: ${nombre}`);
+  } else {
+    hoja = spreadsheet.insertSheet(nombre);
+    Logger.log(`   ℹ️ Hoja creada: ${nombre}`);
+  }
+  return hoja;
+}
+
+// ✅ v2.8: Generar DNI autoincrementable
+function generarDNISinDuplicados(dniBase, estudiantesMap) {
+  if (dniBase && dniBase !== "00000000") {
+    return dniBase;
+  }
+  
+  let contador = 0;
+  let dniGenerado = String(contador).padStart(8, '0');
+  
+  while (estudiantesMap[dniGenerado]) {
+    contador++;
+    dniGenerado = String(contador).padStart(8, '0');
+  }
+  
+  Logger.log(`   ⚠️ DNI vacío generado: ${dniGenerado}`);
+  return dniGenerado;
+}
+
+function procesarHoja(hoja, carreraId, config, año, estudiantes, pagosInscripcion, pagosCuota, pagosSeguro) {
+  const lastRow = hoja.getLastRow();
+  const lastCol = hoja.getLastColumn();
+  
+  if (lastRow < 2) return;
+  
+  const datos = hoja.getRange(1, 1, lastRow, lastCol).getValues();
+  const headers = datos[0];
+  
+  const meses = ["MARZO", "ABRIL", "MAYO", "JUNIO", "JULIO", "AGOSTO", "SEPT", "OCTUBRE", "NOV", "DIC"];
+  
+  let idxItem = -1, idxApellido = -1, idxNombres = -1, idxDNI = -1, idxTelefono = -1, idxInsc = -1;
+  const idxCuota = {}, idxSeguro = {};
+  
+  // Encontrar índices básicos
+  for (let i = 0; i < headers.length; i++) {
+    const h = String(headers[i]).toUpperCase().trim();
+    if (h.includes("ITEM")) idxItem = i;
+    else if (h === "APELLIDO") idxApellido = i;
+    else if (h === "NOMBRES") idxNombres = i;
+    else if (h === "DNI") idxDNI = i;
+    else if (h === "TELEFONO") idxTelefono = i;
+    else if (h === "INSCRIPCION") idxInsc = i;
+  }
+  
+  // Detectar meses
+  for (let i = 0; i < headers.length - 1; i++) {
+    const hActual = String(headers[i]).toUpperCase().trim();
+    const hProx = String(headers[i + 1]).toUpperCase().trim();
+    
+    for (let mes of meses) {
+      if (hActual === mes && hProx.includes("SEGURO")) {
+        idxCuota[mes] = i;
+        idxSeguro[mes] = i + 1;
+      }
+    }
+  }
+  
+  let contOmitidos = 0, contProcesados = 0;
+  
+  // Procesar filas
+  for (let r = 1; r < datos.length; r++) {
+    const fila = datos[r];
+    
+    let dniRaw = String(fila[idxDNI] || "").replace(/\./g, "").trim();
+    let dni = generarDNISinDuplicados(dniRaw, estudiantes);
+    
+    const apellido = String(fila[idxApellido] || "").trim();
+    const nombre = String(fila[idxNombres] || "").trim();
+    
+    if (!apellido) {
+      contOmitidos++;
+      continue;
+    }
+    
+    contProcesados++;
+    
+    // Estudiante
+    if (!estudiantes[dni]) {
+      estudiantes[dni] = {
+        item: fila[idxItem] || "",
+        dni: dni,
+        apellido: apellido,
+        nombres: nombre,
+        telefono: String(fila[idxTelefono] || "").trim(),
+        carrera_id: carreraId,
+        estado: "ACTIVO"
+      };
+    }
+    
+    // Inscripción
+    const montoPagadoInsc = parseInt(fila[idxInsc]) || 0;
+    if (montoPagadoInsc > 0) {
+      const montoConfigInsc = config.monto_inscripcion;
+      const montoAdeudado = Math.max(0, montoConfigInsc - montoPagadoInsc);
+      const estado = montoAdeudado === 0 ? "PAGADO" : "PARCIAL";
+      
+      pagosInscripcion.push([
+        fila[idxItem] || "", dni, apellido, nombre, carreraId,
+        montoPagadoInsc, montoConfigInsc, montoAdeudado,
+        "", "EFECTIVO", "", "", estado, ""
+      ]);
+    }
+    
+    // Cuotas
+    for (let mes of meses) {
+      if (idxCuota[mes] !== undefined) {
+        const montoPagado = parseInt(fila[idxCuota[mes]]) || 0;
+        if (montoPagado > 0) {
+          const montoConfig = config.monto_cuota;
+          const montoAdeudado = Math.max(0, montoConfig - montoPagado);
+          const estado = montoAdeudado === 0 ? "PAGADO" : "PARCIAL";
+          
+          let mesCompleto = mes;
+          if (mes === "SEPT") mesCompleto = "SEPTIEMBRE";
+          if (mes === "NOV") mesCompleto = "NOVIEMBRE";
+          if (mes === "DIC") mesCompleto = "DICIEMBRE";
+          
+          pagosCuota.push([
+            fila[idxItem] || "", dni, apellido, nombre, carreraId, mesCompleto, año,
+            montoPagado, montoConfig, montoAdeudado,
+            "", "EFECTIVO", "", estado, ""
+          ]);
+        }
+      }
+    }
+    
+    // SEGURO ANUAL
+    let totalSeguro = 0, mesesConPago = [];
+    for (let mes of meses) {
+      if (idxSeguro[mes] !== undefined) {
+        const montoPagado = parseInt(fila[idxSeguro[mes]]) || 0;
+        if (montoPagado > 0) {
+          totalSeguro += montoPagado;
+          mesesConPago.push(mes);
+        }
+      }
+    }
+    
+    if (totalSeguro > 0) {
+      const montoConfig = config.monto_seguro;
+      const montoAdeudado = Math.max(0, montoConfig - totalSeguro);
+      const estado = montoAdeudado === 0 ? "PAGADO" : "PARCIAL";
+      
+      pagosSeguro.push([
+        fila[idxItem] || "", dni, apellido, nombre, carreraId,
+        "ANUAL", año,
+        totalSeguro, montoConfig, montoAdeudado,
+        mesesConPago.length + " cuotas", "EFECTIVO", "", estado,
+        "Cuotas: " + mesesConPago.join(", ")
+      ]);
+    }
+  }
+  
+  Logger.log(`   📊 RESUMEN: ${contProcesados} procesados, ${contOmitidos} omitidos`);
+}
+
+function limpiarYLlenarHojas(hojaEst, hojaInsc, hojaCuota, hojaSeguro, estudiantes, pagosInscripcion, pagosCuota, pagosSeguro) {
+  hojaEst.clearContents();
+  hojaInsc.clearContents();
+  hojaCuota.clearContents();
+  hojaSeguro.clearContents();
+  
+  // ESTUDIANTES
+  hojaEst.appendRow(["ITEM", "DNI", "APELLIDO", "NOMBRES", "TELEFONO", "CARRERA_ID", "ESTADO"]);
+  const estData = [];
+  for (let dni in estudiantes) {
+    const e = estudiantes[dni];
+    estData.push([e.item, e.dni, e.apellido, e.nombres, e.telefono, e.carrera_id, e.estado]);
+  }
+  if (estData.length > 0) {
+    hojaEst.getRange(2, 1, estData.length, 7).setValues(estData);
+  }
+  
+  // INSCRIPCIÓN
+  hojaInsc.appendRow(["ITEM", "DNI", "APELLIDO", "NOMBRES", "CARRERA_ID", "MONTO_PAGADO", "MONTO_CONFIGURADO", "MONTO_ADEUDADO", "FECHA_PAGO", "METODO_PAGO", "TIPO_TARJETA", "NUMERO_TALONARIO", "ESTADO", "NOTAS"]);
+  for (let i = 0; i < pagosInscripcion.length; i += 500) {
+    const chunk = pagosInscripcion.slice(i, i + 500);
+    hojaInsc.getRange(hojaInsc.getLastRow() + 1, 1, chunk.length, 14).setValues(chunk);
+  }
+  
+  // CUOTA
+  hojaCuota.appendRow(["ITEM", "DNI", "APELLIDO", "NOMBRES", "CARRERA_ID", "MES", "AÑO", "MONTO_PAGADO", "MONTO_CONFIGURADO", "MONTO_ADEUDADO", "FECHA_PAGO", "METODO_PAGO", "NUMERO_TALONARIO", "ESTADO", "NOTAS"]);
+  for (let i = 0; i < pagosCuota.length; i += 500) {
+    const chunk = pagosCuota.slice(i, i + 500);
+    hojaCuota.getRange(hojaCuota.getLastRow() + 1, 1, chunk.length, 15).setValues(chunk);
+  }
+  
+  // SEGURO
+  hojaSeguro.appendRow(["ITEM", "DNI", "APELLIDO", "NOMBRES", "CARRERA_ID", "PERIODO", "AÑO", "MONTO_PAGADO", "MONTO_CONFIGURADO", "MONTO_ADEUDADO", "CUOTAS_PAGADAS", "METODO_PAGO", "NUMERO_TALONARIO", "ESTADO", "NOTAS"]);
+  for (let i = 0; i < pagosSeguro.length; i += 500) {
+    const chunk = pagosSeguro.slice(i, i + 500);
+    hojaSeguro.getRange(hojaSeguro.getLastRow() + 1, 1, chunk.length, 15).setValues(chunk);
+  }
+}
+
+// ==================== SINCRONIZACIÓN ====================
+
+function sincronizarDatos(config, datosNormalizados) {
+  const estudiantes = datosNormalizados.estudiantes;
+  const pagosInsc = datosNormalizados.pagosInscripcion;
+  const pagosCuota = datosNormalizados.pagosCuota;
+  const pagosSeguro = datosNormalizados.pagosSeguro;
+  
+  let contadores = {
+    estudiantesInsertados: 0,
+    pagosInscInsertados: 0,
+    inscripcionesActualizadas: 0,
+    pagosCuotaInsertados: 0,
+    cuotasActualizadas: 0,
+    pagosSeguroInsertados: 0,
+    segurosActualizados: 0,
+    ignorados: 0,
+    errores: 0,
+    pagosSkipped: 0
+  };
+  
+  Logger.log(`   Procesando ${estudiantes.length} estudiantes...`);
+  const resEst = procesarEstudiantes(config, estudiantes);
+  contadores.estudiantesInsertados = resEst.procesados;
+  contadores.errores += resEst.errores;
+  Logger.log(`   ✅ Estudiantes: ${contadores.estudiantesInsertados}`);
+  
+  Utilities.sleep(15000);
+  
+  Logger.log("   Buscando estudiantes en BD...");
+  const dniAId = buscarEstudiantes(config, estudiantes);
+  Logger.log(`   Encontrados: ${Object.keys(dniAId).length}/${estudiantes.length}`);
+  
+  if (Object.keys(dniAId).length === 0) {
+    return { exito: false, contadores: contadores, fecha: new Date().toISOString() };
+  }
+  
+  const conceptos = cargarConceptos(config);
+  
+  Logger.log("   Cargando pagos existentes...");
+  const pagosExistentes = obtenerPagosExistentes(config, dniAId);
+  
+  if (pagosInsc.length > 0) {
+    Logger.log(`   Procesando ${pagosInsc.length} inscripciones...`);
+    const res = procesarPagosBatch(config, pagosInsc, "INSCRIPCION", dniAId, conceptos, pagosExistentes);
+    contadores.pagosInscInsertados = res.insertados;
+    contadores.inscripcionesActualizadas = res.actualizados;
+    contadores.ignorados += res.ignorados;
+    contadores.pagosSkipped += res.skipped;
+    contadores.errores += res.errores;
+  }
+  
+  if (pagosCuota.length > 0) {
+    Logger.log(`   Procesando ${pagosCuota.length} cuotas...`);
+    const res = procesarPagosBatch(config, pagosCuota, "CUOTA", dniAId, conceptos, pagosExistentes);
+    contadores.pagosCuotaInsertados = res.insertados;
+    contadores.cuotasActualizadas = res.actualizados;
+    contadores.ignorados += res.ignorados;
+    contadores.pagosSkipped += res.skipped;
+    contadores.errores += res.errores;
+  }
+  
+  if (pagosSeguro.length > 0) {
+    Logger.log(`   Procesando ${pagosSeguro.length} seguros...`);
+    const res = procesarPagosBatch(config, pagosSeguro, "SEGURO", dniAId, conceptos, pagosExistentes);
+    contadores.pagosSeguroInsertados = res.insertados;
+    contadores.segurosActualizados = res.actualizados;
+    contadores.ignorados += res.ignorados;
+    contadores.pagosSkipped += res.skipped;
+    contadores.errores += res.errores;
+  }
+  
+  return { exito: contadores.errores === 0, contadores: contadores, fecha: new Date().toISOString() };
+}
+
+function procesarEstudiantes(config, estudiantes) {
+  const res = { procesados: 0, errores: 0 };
+  
+  for (let est of estudiantes) {
+    try {
+      const datos = {
+        institucion_id: parseInt(config.institucionId),
+        dni: est.dni.trim(),
+        nombre: est.nombres.trim(),
+        apellido: est.apellido.trim(),
+        telefono: est.telefono ? est.telefono.trim() : null,
+        carrera_id: est.carrera_id,
+        estado: "ACTIVO",
+        fecha_ingreso: new Date().toISOString().split('T')[0]
+      };
+      
+      const urlBuscar = `${config.supabaseUrl}/rest/v1/estudiantes?dni=eq.${encodeURIComponent(datos.dni)}&select=id`;
+      const respBuscar = UrlFetchApp.fetch(urlBuscar, {
+        method: "get",
+        headers: { "apikey": config.supabaseKey },
+        muteHttpExceptions: true
+      });
+      
+      if (respBuscar.getResponseCode() === 200) {
+        const existentes = JSON.parse(respBuscar.getContentText());
+        
+        if (existentes && existentes.length > 0) {
+          const id = existentes[0].id;
+          const urlUpdate = `${config.supabaseUrl}/rest/v1/estudiantes?id=eq.${id}`;
+          const respUpdate = UrlFetchApp.fetch(urlUpdate, {
+            method: "patch",
+            headers: { "apikey": config.supabaseKey, "Content-Type": "application/json" },
+            payload: JSON.stringify(datos),
+            muteHttpExceptions: true
+          });
+          if (respUpdate.getResponseCode() === 200 || respUpdate.getResponseCode() === 204) {
+            res.procesados++;
+          } else {
+            res.errores++;
+          }
+        } else {
+          const urlInsert = `${config.supabaseUrl}/rest/v1/estudiantes`;
+          const respInsert = UrlFetchApp.fetch(urlInsert, {
+            method: "post",
+            headers: { "apikey": config.supabaseKey, "Content-Type": "application/json" },
+            payload: JSON.stringify([datos]),
+            muteHttpExceptions: true
+          });
+          if (respInsert.getResponseCode() === 201 || respInsert.getResponseCode() === 200) {
+            res.procesados++;
+          } else {
+            res.errores++;
+          }
+        }
+      }
+    } catch (e) {
+      res.errores++;
+    }
+  }
+  
+  return res;
+}
+
+function buscarEstudiantes(config, estudiantes) {
+  const dniAId = {};
+  const dnis = estudiantes.map(e => e.dni);
+  
+  for (let intento = 0; intento < 5; intento++) {
+    const faltantes = dnis.filter(d => !dniAId[d]);
+    if (faltantes.length === 0) break;
+    
+    for (let dni of faltantes) {
+      try {
+        const resp = UrlFetchApp.fetch(
+          `${config.supabaseUrl}/rest/v1/estudiantes?dni=eq.${encodeURIComponent(dni)}&select=id`,
+          {
+            method: "get",
+            headers: { "apikey": config.supabaseKey },
+            muteHttpExceptions: true
+          }
+        );
+        if (resp.getResponseCode() === 200) {
+          const datos = JSON.parse(resp.getContentText());
+          if (datos && datos.length > 0) {
+            dniAId[dni] = datos[0].id;
+          }
+        }
+      } catch (e) {
+      }
+    }
+    
+    Utilities.sleep(5000);
+  }
+  
+  return dniAId;
+}
+
+function cargarConceptos(config) {
+  const conceptos = {};
+  
+  try {
+    const resp = UrlFetchApp.fetch(
+      `${config.supabaseUrl}/rest/v1/conceptos_pago?institucion_id=eq.${config.institucionId}&select=id,tipo,mes,carrera_id`,
+      {
+        method: "get",
+        headers: { "apikey": config.supabaseKey },
+        muteHttpExceptions: true
+      }
+    );
+    
+    if (resp.getResponseCode() === 200) {
+      const datos = JSON.parse(resp.getContentText());
+      for (let c of datos) {
+        const car = c.carrera_id;
+        if (!conceptos[car]) {
+          conceptos[car] = { inscripcion: null, seguros: {}, cuotas: {} };
+        }
+        if (c.tipo === "INSCRIPCION") conceptos[car].inscripcion = c.id;
+        else if (c.tipo === "SEGURO" && c.mes) conceptos[car].seguros[c.mes] = c.id;
+        else if (c.tipo === "CUOTA" && c.mes) conceptos[car].cuotas[c.mes] = c.id;
+      }
+    }
+  } catch (e) {
+  }
+  
+  return conceptos;
+}
+
+function obtenerPagosExistentes(config, dniAId) {
+  const pagos = {};
+  try {
+    const dnis = Object.keys(dniAId);
+    Logger.log(`   🔍 Verificando ${dnis.length} estudiantes en BD...`);
+    
+    for (let dni of dnis) {
+      const estId = dniAId[dni];
+      
+      try {
+        const resp = UrlFetchApp.fetch(
+          `${config.supabaseUrl}/rest/v1/pagos?estudiante_id=eq.${estId}&select=id,concepto_id,monto_pagado,estado`,
+          {
+            method: "get",
+            headers: { "apikey": config.supabaseKey },
+            muteHttpExceptions: true
+          }
+        );
+        
+        if (resp.getResponseCode() === 200) {
+          const datos = JSON.parse(resp.getContentText());
+          for (let p of datos) {
+            const key = `${estId}|${p.concepto_id}`;
+            pagos[key] = {
+              id: p.id,
+              monto_pagado: p.monto_pagado,
+              concepto_id: p.concepto_id,
+              estudiante_id: estId,
+              estado: p.estado
+            };
+          }
+        }
+      } catch (e) {
+      }
+    }
+    
+    Logger.log(`   ✅ Encontrados ${Object.keys(pagos).length} pagos existentes`);
+  } catch (e) {
+    Logger.log("   ❌ Error cargando pagos: " + e);
+  }
+  
+  return pagos;
+}
+
+function procesarPagosBatch(config, pagosArray, tipo, dniAId, conceptos, pagosExistentes) {
+  const res = { insertados: 0, actualizados: 0, ignorados: 0, skipped: 0, errores: 0 };
+  
+  const pagosParaInsertar = [];
+  const pagosParaActualizar = [];
+  
+  for (let pagoArr of pagosArray) {
+    try {
+      const estId = dniAId[pagoArr[1]];
+      if (!estId) {
+        res.skipped++;
+        continue;
+      }
+      
+      const carId = pagoArr[4];
+      let conceptoId = null;
+      
+      if (tipo === "INSCRIPCION") {
+        conceptoId = conceptos[carId] ? conceptos[carId].inscripcion : null;
+      } else if (tipo === "SEGURO") {
+        const mesNum = convertirMesANumero(pagoArr[5]);
+        conceptoId = conceptos[carId] ? conceptos[carId].seguros[mesNum] : null;
+      } else if (tipo === "CUOTA") {
+        const mesNum = convertirMesANumero(pagoArr[5]);
+        conceptoId = conceptos[carId] ? conceptos[carId].cuotas[mesNum] : null;
+      }
+      
+      if (!conceptoId) {
+        res.skipped++;
+        continue;
+      }
+      
+      const montoPagadoNuevo = parseFloat(pagoArr[tipo === "INSCRIPCION" ? 5 : (tipo === "SEGURO" ? 7 : 7)]) || 0;
+      const montoOriginal = parseFloat(pagoArr[tipo === "INSCRIPCION" ? 6 : (tipo === "SEGURO" ? 8 : 8)]) || montoPagadoNuevo;
+      
+      if (!montoPagadoNuevo) {
+        res.skipped++;
+        continue;
+      }
+      
+      const pagoKey = `${estId}|${conceptoId}`;
+      
+      if (!pagosExistentes[pagoKey]) {
+        const datos = {
+          institucion_id: parseInt(config.institucionId),
+          estudiante_id: estId,
+          concepto_id: conceptoId,
+          monto_pagado: montoPagadoNuevo,
+          monto_original: montoOriginal,
+          metodo_pago: "EFECTIVO",
+          numero_talonario: null,
+          estado: "PAGADO",
+          fecha_pago: new Date().toISOString().split('T')[0],
+          carrera_id: carId
+        };
+        
+        pagosParaInsertar.push(datos);
+      } else {
+        const pagoExistente = pagosExistentes[pagoKey];
+        const montoPagadoViejo = pagoExistente.monto_pagado;
+        
+        if (montoPagadoNuevo > montoPagadoViejo) {
+          pagosParaActualizar.push({
+            pagoId: pagoExistente.id,
+            montoNuevo: montoPagadoNuevo,
+            montoViejo: montoPagadoViejo
+          });
+          res.actualizados++;
+        } else {
+          res.ignorados++;
+        }
+      }
+    } catch (e) {
+      res.errores++;
+    }
+  }
+  
+  // INSERT batch
+  for (let i = 0; i < pagosParaInsertar.length; i += 20) {
+    const batch = pagosParaInsertar.slice(i, i + 20);
+    
+    try {
+      const resp = UrlFetchApp.fetch(
+        `${config.supabaseUrl}/rest/v1/pagos`,
+        {
+          method: "post",
+          headers: { "apikey": config.supabaseKey, "Content-Type": "application/json" },
+          payload: JSON.stringify(batch),
+          muteHttpExceptions: true
+        }
+      );
+      
+      if (resp.getResponseCode() === 201 || resp.getResponseCode() === 200) {
+        res.insertados += batch.length;
+      } else {
+        res.errores += batch.length;
+      }
+    } catch (e) {
+      res.errores += batch.length;
+    }
+    
+    Utilities.sleep(DELAY_MS);
+  }
+  
+  // UPDATE batch
+  for (let i = 0; i < pagosParaActualizar.length; i += 20) {
+    const batch = pagosParaActualizar.slice(i, i + 20);
+    
+    for (let pago of batch) {
+      try {
+        const urlUpdate = `${config.supabaseUrl}/rest/v1/pagos?id=eq.${pago.pagoId}`;
+        const respUpdate = UrlFetchApp.fetch(urlUpdate, {
+          method: "patch",
+          headers: { "apikey": config.supabaseKey, "Content-Type": "application/json" },
+          payload: JSON.stringify({
+            monto_pagado: pago.montoNuevo,
+            estado: "PAGADO"
+          }),
+          muteHttpExceptions: true
+        });
+      } catch (e) {
+      }
+    }
+    
+    Utilities.sleep(DELAY_MS);
+  }
+  
+  return res;
+}
+
+function convertirMesANumero(mesDato) {
+  if (!mesDato) return null;
+  const m = mesDato.toString().trim().toUpperCase();
+  const meses = {
+    "ENERO": 1, "FEBRERO": 2, "MARZO": 3, "ABRIL": 4, "MAYO": 5, "JUNIO": 6,
+    "JULIO": 7, "AGOSTO": 8, "SEPTIEMBRE": 9, "OCTUBRE": 10, "NOVIEMBRE": 11, "DICIEMBRE": 12,
+    "SEPT": 9, "SEP": 9, "NOV": 11, "DIC": 12,
+    "1": 1, "2": 2, "3": 3, "4": 4, "5": 5, "6": 6, "7": 7, "8": 8, "9": 9, "10": 10, "11": 11, "12": 12
+  };
+  return meses[m] || null;
+}
+
+// ✅ v2.8: GUARDAR LOG MULTI-INSTITUCIÓN
+function guardarResultadoFinalMulti(hojaSync, resultadoSync) {
+  try {
+    let logSheet = hojaSync.getSheetByName(LOG_SHEET_NAME);
+    if (!logSheet) {
+      logSheet = hojaSync.insertSheet(LOG_SHEET_NAME);
+      logSheet.appendRow(["FECHA", "INSTITUCIÓN", "ESTADO", "RESUMEN", "ACTUALIZACIONES", "IGNORADOS", "ERRORES", "SKIPPED"]);
+    }
+    
+    for (let instId in resultadoSync) {
+      const resultado = resultadoSync[instId];
+      const row = [
+        new Date().toLocaleString('es-AR'),
+        instId,
+        resultado.exito ? "✅ OK" : "⚠️ ERRORES",
+        `EST:${resultado.contadores.estudiantesInsertados} INSC:${resultado.contadores.pagosInscInsertados} CUOT:${resultado.contadores.pagosCuotaInsertados} SEG:${resultado.contadores.pagosSeguroInsertados}`,
+        `INSC:${resultado.contadores.inscripcionesActualizadas} CUOT:${resultado.contadores.cuotasActualizadas} SEG:${resultado.contadores.segurosActualizados}`,
+        resultado.contadores.ignorados,
+        resultado.contadores.errores,
+        resultado.contadores.pagosSkipped
+      ];
+      
+      logSheet.getRange(logSheet.getLastRow() + 1, 1, 1, 8).setValues([row]);
+    }
+    
+    Logger.log("✅ Logs guardados");
+  } catch (e) {
+    Logger.log("⚠️ Error guardando logs: " + e);
+  }
+}
+
+function mostrarResumen() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const logSheet = ss.getSheetByName(LOG_SHEET_NAME);
+  if (logSheet) {
+    const data = logSheet.getDataRange().getValues();
+    const ult = data[data.length - 1];
+    SpreadsheetApp.getUi().alert(`ÚLTIMA: ${ult[0]}\nINST: ${ult[1]}\n${ult[2]}\n${ult[3]}`);
+  }
+}
+
+function mostrarLogs() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const logSheet = ss.getSheetByName(LOG_SHEET_NAME);
+  if (logSheet) {
+    SpreadsheetApp.getUi().alert("Ver hoja: " + LOG_SHEET_NAME);
+  }
+}

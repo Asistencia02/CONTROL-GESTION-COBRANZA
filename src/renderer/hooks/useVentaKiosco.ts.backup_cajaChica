@@ -1,0 +1,80 @@
+import { useEffect, useState } from 'react'
+import { supabase } from '@renderer/lib/supabase'
+
+export interface VentaKiosco {
+  id: number
+  institucion_id: number
+  producto: string
+  cantidad: number
+  precio_unitario: number
+  subtotal: number
+  metodo_pago: 'EFECTIVO' | 'TRANSFERENCIA' | 'TARJETA' | 'CHEQUE'
+  fecha_venta: string
+  created_at: string
+}
+
+export const useVentaKiosco = (institucionId?: number) => {
+  const [ventasKiosco, setVentasKiosco] = useState<VentaKiosco[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  const cargarVentasKiosco = async (instId?: number) => {
+    try {
+      setLoading(true)
+      setError(null)
+
+      const id = instId || institucionId
+      if (!id) throw new Error('ID institución requerido')
+
+      const { data, error: err } = await supabase
+        .from('venta_kiosco')
+        .select('*')
+        .eq('institucion_id', id)
+        .order('fecha_venta', { ascending: false })
+
+      if (err) throw err
+      setVentasKiosco(data || [])
+    } catch (err) {
+      const mensaje = err instanceof Error ? err.message : 'Error cargando ventas kiosco'
+      setError(mensaje)
+      console.error('Error:', err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const agregarVentaKiosco = async (venta: Omit<VentaKiosco, 'id' | 'created_at'>) => {
+    try {
+      const { data, error: err } = await supabase
+        .from('venta_kiosco')
+        .insert([venta])
+        .select()
+        .single()
+
+      if (err) throw err
+      if (data) {
+        setVentasKiosco([data, ...ventasKiosco])
+      }
+    } catch (err) {
+      const mensaje = err instanceof Error ? err.message : 'Error agregando venta'
+      throw new Error(mensaje)
+    }
+  }
+
+  const totalVentasKiosco = ventasKiosco.reduce((sum, v) => sum + v.subtotal, 0)
+
+  useEffect(() => {
+    if (institucionId) {
+      cargarVentasKiosco(institucionId)
+    }
+  }, [institucionId])
+
+  return {
+    ventasKiosco,
+    loading,
+    error,
+    cargarVentasKiosco,
+    agregarVentaKiosco,
+    totalVentasKiosco,
+  }
+}
