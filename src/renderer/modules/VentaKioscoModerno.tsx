@@ -265,12 +265,34 @@ export const VentaKioscoModerno: React.FC = () => {
           >
             <Lock size={20} />
             Caja
+            </button>
+          <button
+            onClick={() => setTabActiva('cierres')}
+            className={`px-6 py-3 rounded-lg font-bold transition-all duration-300 flex items-center gap-2 whitespace-nowrap ${
+              tabActiva === 'cierres'
+                ? 'bg-gradient-to-r from-blue-600 to-cyan-600 text-white shadow-lg shadow-blue-500/50'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <History size={20} />
+            Cierres ({cierresCaja?.length || 0})
+          </button>
+          <button
+            onClick={() => setTabActiva('cajagrande')}
+            className={`px-6 py-3 rounded-lg font-bold transition-all duration-300 flex items-center gap-2 whitespace-nowrap ${
+              tabActiva === 'cajagrande'
+                ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-lg shadow-purple-500/50'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Vault size={20} />
+            Caja Grande
           </button>
           <button
             onClick={() => setTabActiva('resumen')}
             className={`px-6 py-3 rounded-lg font-bold transition-all duration-300 flex items-center gap-2 whitespace-nowrap ${
               tabActiva === 'resumen'
-                ? 'bg-gradient-to-r from-orange-600 to-amber-600 text-white shadow-lg shadow-orange-500/50'
+      ? 'bg-gradient-to-r from-orange-600 to-amber-600 text-white shadow-lg shadow-orange-500/50'
                 : 'text-slate-400 hover:text-slate-200'
             }`}
           >
