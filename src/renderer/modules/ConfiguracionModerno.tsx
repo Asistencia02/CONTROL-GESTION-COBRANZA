@@ -25,7 +25,7 @@ interface Carrera {
   duracion_años?: number
 }
 
-type TabConfig = 'institucion' | 'estudiantes' | 'insumos' | 'montos' | 'talonarios' | 'kiosco' | 'estados'
+type TabConfig = 'institucion' | 'estudiantes' | 'insumos' | 'montos' | 'talonarios' | 'estados'
 
 // Helper para extraer tipo de concepto del nombre de columna
 const obtenerTipoConcepto = (nombre: string): string | null => {
@@ -484,7 +484,6 @@ export const ConfiguracionModerno: React.FC = () => {
             { id: 'insumos', label: 'Insumos', icon: Plus },
             { id: 'montos', label: 'Montos', icon: Plus },
             { id: 'talonarios', label: 'Talonarios', icon: Receipt },
-            { id: 'kiosco', label: 'Kiosco', icon: ShoppingCart },
             { id: 'estados', label: 'Estados', icon: Plus },
           ].map((tab) => {
             const Icon = tab.icon
@@ -821,8 +820,6 @@ export const ConfiguracionModerno: React.FC = () => {
         )}
 
 
-        {/* TAB: KIOSCO */}
-        {tabActiva === 'kiosco' && <KioscoConfigTab />}
         {/* TAB: ESTADOS */}
         {tabActiva === 'estados' && (
           <div className="p-6 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-xl">
@@ -845,3 +842,5 @@ export const ConfiguracionModerno: React.FC = () => {
     </div>
   )
 }
+
+
