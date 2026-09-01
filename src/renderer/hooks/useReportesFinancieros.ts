@@ -496,13 +496,13 @@ export const useReportesFinancieros = (institucionId: number) => {
         const totalVentasIns = await obtenerTotalVentasPeriodo(institucionId, fechaInicio, fechaFin)
         setTotalVentasInsumos(totalVentasIns)
 
-        const { data: ventasKioscoData } = await supabase
-          .from('venta_kiosco')
-          .select('subtotal')
+        const { data: cajaGrandeData } = await supabase
+          .from('caja_grande')
+          .select('monto')
           .eq('institucion_id', 2)
 
-        if (ventasKioscoData) {
-          const total = ventasKioscoData.reduce((sum, v) => sum + (v.subtotal || 0), 0)
+        if (cajaGrandeData) {
+          const total = cajaGrandeData.reduce((sum, c) => sum + (c.monto || 0), 0)
           setTotalVentasKiosco(total)
         }
       }
