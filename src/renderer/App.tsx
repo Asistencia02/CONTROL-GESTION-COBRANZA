@@ -113,7 +113,7 @@ export const App: React.FC = () => {
   }
 
   return (
-    <div className="flex h-screen bg-gray-100 flex-col md:flex-row">
+    <div className="flex h-screen bg-gray-100 flex-col md:flex-row overflow-hidden">
       {/* Hamburger menu en mobile */}
       <div className="md:hidden flex items-center gap-2 bg-slate-900 border-b border-slate-700/50 px-4 py-3">
         <button
@@ -124,7 +124,7 @@ export const App: React.FC = () => {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
           </svg>
         </button>
-        <span className="text-white font-bold text-sm flex-1">GESIÓN</span>
+        <span className="text-white font-bold text-sm flex-1">GESTION</span>
       </div>
 
       <Sidebar 
@@ -143,7 +143,7 @@ export const App: React.FC = () => {
         isOpen={sidebarOpen}
         onToggle={() => setSidebarOpen(!sidebarOpen)}
       />
-      <main className="flex-1 overflow-auto w-full md:w-auto">
+      <main className="flex-1 overflow-auto w-full md:w-auto max-h-[calc(100vh-52px)] md:max-h-screen">
         {isLoading ? (
           <div className="flex items-center justify-center h-full">
             <div className="text-center">
