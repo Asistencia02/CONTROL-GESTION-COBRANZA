@@ -32,8 +32,8 @@ CREATE TABLE IF NOT EXISTS caja_grande (
   created_at TIMESTAMP DEFAULT NOW()
 );
 
--- 4. AGREGAR campos a configuracion (si no existen)
-ALTER TABLE configuracion_carreras
+-- 4. AGREGAR campo saldo_minimo_caja_chica a instituciones (CORRECCIÓN)
+ALTER TABLE instituciones
 ADD COLUMN IF NOT EXISTS saldo_minimo_caja_chica INTEGER DEFAULT 5000;
 
 -- 5. CREAR índices para mejor rendimiento
