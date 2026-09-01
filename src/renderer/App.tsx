@@ -14,6 +14,7 @@ import { CierreModerno } from '@renderer/modules/CierreModerno'
 import { VentaKioscoModerno } from '@renderer/modules/VentaKioscoModerno'
 import { Sincronizacion } from '@renderer/modules/Sincronizacion'
 import { supabase } from '@renderer/lib/supabase'
+import '@renderer/lib/verificarVariables' // Verificar variables de entorno
 
 type ModuleId = 'dashboard' | 'cobranzas' | 'deudas' | 'ventas' | 'ventakiosco' | 'gastos' | 'reportes' | 'cierre' | 'configuracion' | 'sincronizacion' | 'admin'
 
@@ -142,3 +143,4 @@ export const App: React.FC = () => {
     </div>
   )
 }
+
