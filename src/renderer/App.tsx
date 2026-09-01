@@ -33,6 +33,7 @@ export const App: React.FC = () => {
   const [activeModule, setActiveModule] = useState<ModuleId>('dashboard')
   const [supabaseConnected, setSupabaseConnected] = useState<boolean | null>(null)
   const [usuarioLoaded, setUsuarioLoaded] = useState(false)
+  const [sidebarOpen, setSidebarOpen] = useState(false)
 
   // Cargar usuario desde localStorage si existe
   useEffect(() => {
@@ -112,7 +113,20 @@ export const App: React.FC = () => {
   }
 
   return (
-    <div className="flex h-screen bg-gray-100">
+    <div className="flex h-screen bg-gray-100 flex-col md:flex-row">
+      {/* Hamburger menu en mobile */}
+      <div className="md:hidden flex items-center gap-2 bg-slate-900 border-b border-slate-700/50 px-4 py-3">
+        <button
+          onClick={() => setSidebarOpen(!sidebarOpen)}
+          className="p-2 bg-slate-800/50 hover:bg-slate-700/50 border border-slate-700/50 rounded-lg text-slate-400 hover:text-white transition"
+        >
+          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+        </button>
+        <span className="text-white font-bold text-sm flex-1">GESIÓN</span>
+      </div>
+
       <Sidebar 
         activeModule={activeModule} 
         onModuleChange={(id) => {
@@ -120,13 +134,16 @@ export const App: React.FC = () => {
             logout()
           } else {
             setActiveModule(id as ModuleId)
+            setSidebarOpen(false) // Cerrar en mobile
           }
         }}
         modulosPermitidos={modulosPermitidos}
         usuarioActual={usuarioActual}
         esAdmin={usuarioActual?.rol === 'ADMIN'}
+        isOpen={sidebarOpen}
+        onToggle={() => setSidebarOpen(!sidebarOpen)}
       />
-      <main className="flex-1 overflow-auto">
+      <main className="flex-1 overflow-auto w-full md:w-auto">
         {isLoading ? (
           <div className="flex items-center justify-center h-full">
             <div className="text-center">
