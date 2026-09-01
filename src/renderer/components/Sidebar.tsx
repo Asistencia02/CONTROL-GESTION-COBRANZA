@@ -122,8 +122,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
     return modulosPermitidos.includes(item.id)
   })
 
-  // Overlay en mobile
-  const showOverlay = !isOpen && onToggle
+  // Overlay en mobile - SOLO mostrar si está ABIERTO
+  const showOverlay = isOpen && onToggle
 
   return (
     <>
