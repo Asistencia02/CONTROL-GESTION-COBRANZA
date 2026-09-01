@@ -3,13 +3,13 @@ import { useInstitucion } from '@renderer/hooks/useInstitucion'
 import { useVentaKiosco } from '@renderer/hooks/useVentaKiosco'
 import { useProductosKiosco } from '@renderer/hooks/useProductosKiosco'
 import { formatoMoneda } from '@renderer/lib/helpers'
-import { ShoppingBag, Plus, TrendingUp, DollarSign, RefreshCw, AlertCircle, Lock, Unlock } from 'lucide-react'
+import { ShoppingBag, Plus, TrendingUp, DollarSign, RefreshCw, AlertCircle, Lock, Unlock, History, Vault } from 'lucide-react'
 
-type TabVentaKiosco = 'registro' | 'historial' | 'caja' | 'resumen'
+type TabVentaKiosco = 'registro' | 'historial' | 'caja' | 'cierres' | 'cajagrande' | 'resumen'
 
 export const VentaKioscoModerno: React.FC = () => {
   const { institucionActiva } = useInstitucion()
-  const { ventasKiosco, cajaChica, cargarVentasKiosco, cargarCajaChicaActiva, abrirCajaChica, cerrarCajaChica, agregarVentaKiosco, totalVentasKiosco, totalEfectivo, loading } = useVentaKiosco(institucionActiva.id)
+  const { ventasKiosco, cajaChica, cierresCaja, cajaGrande, cargarVentasKiosco, cargarCajaChicaActiva, cargarCierresCaja, cargarCajaGrande, abrirCajaChica, cerrarCajaChica, agregarVentaKiosco, totalVentasKiosco, totalEfectivo, totalCajaGrande, loading } = useVentaKiosco(institucionActiva.id)
 
   const { productos, cargarProductos, actualizarStock } = useProductosKiosco(institucionActiva.id)
 
@@ -542,6 +542,121 @@ export const VentaKioscoModerno: React.FC = () => {
           </div>
         )}
 
+        {/* TAB: HISTORIAL DE CIERRES */}
+        {tabActiva === 'cierres' && (
+          <div className="space-y-6">
+            <div className="p-6 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-xl">
+              <h2 className="text-xl font-bold text-white mb-4">Historial de Cierres ({cierresCaja?.length || 0})</h2>
+
+              {!cierresCaja || cierresCaja.length === 0 ? (
+                <div className="text-center py-12">
+                  <History size={32} className="text-slate-500 mx-auto mb-2" />
+                  <p className="text-slate-400 font-semibold">No hay cierres de caja registrados</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-slate-900/50">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-slate-300 font-bold">Fecha Apertura</th>
+                        <th className="px-4 py-3 text-left text-slate-300 font-bold">Fecha Cierre</th>
+                        <th className="px-4 py-3 text-right text-slate-300 font-bold">Saldo Inicial</th>
+                        <th className="px-4 py-3 text-right text-slate-300 font-bold">Saldo Final</th>
+                        <th className="px-4 py-3 text-right text-slate-300 font-bold">Transferido</th>
+                        <th className="px-4 py-3 text-right text-slate-300 font-bold">Residual</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-700/50">
+                      {cierresCaja.map(cierre => (
+                        <tr key={cierre.id} className="hover:bg-slate-700/30 transition">
+                          <td className="px-4 py-3 text-slate-300 font-semibold">{cierre.fecha_apertura}</td>
+                          <td className="px-4 py-3 text-slate-300">{cierre.fecha_cierre || '-'}</td>
+                          <td className="px-4 py-3 text-right text-blue-400 font-semibold">{formatoMoneda(cierre.saldo_inicial)}</td>
+                          <td className="px-4 py-3 text-right text-orange-400 font-semibold">{cierre.saldo_final ? formatoMoneda(cierre.saldo_final) : '-'}</td>
+                          <td className="px-4 py-3 text-right text-green-400 font-semibold">{cierre.monto_transferido ? formatoMoneda(cierre.monto_transferido) : '-'}</td>
+                          <td className="px-4 py-3 text-right text-amber-400 font-semibold">{formatoMoneda(cierre.saldo_residual)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* TAB: CAJA GRANDE */}
+        {tabActiva === 'cajagrande' && (
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+              <div className="p-6 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-xl">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="p-3 bg-purple-500/20 rounded-lg">
+                    <Vault size={24} className="text-purple-400" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-slate-400 font-bold">Total en Caja Grande</p>
+                    <p className="text-3xl font-black text-purple-400">{formatoMoneda(totalCajaGrande || 0)}</p>
+                  </div>
+                </div>
+                <p className="text-xs text-slate-400">{cajaGrande?.length || 0} transferencia(s)</p>
+              </div>
+
+              <div className="p-6 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-xl">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="p-3 bg-green-500/20 rounded-lg">
+                    <DollarSign size={24} className="text-green-400" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-slate-400 font-bold">Promedio por Transferencia</p>
+                    <p className="text-3xl font-black text-green-400">{cajaGrande && cajaGrande.length > 0 ? formatoMoneda((totalCajaGrande || 0) / cajaGrande.length) : '$0'}</p>
+                  </div>
+                </div>
+                <p className="text-xs text-slate-400">Ganancias netas acumuladas</p>
+              </div>
+            </div>
+
+            <div className="p-6 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-xl">
+              <h2 className="text-xl font-bold text-white mb-4">Transferencias Realizadas ({cajaGrande?.length || 0})</h2>
+
+              {!cajaGrande || cajaGrande.length === 0 ? (
+                <div className="text-center py-12">
+                  <Vault size={32} className="text-slate-500 mx-auto mb-2" />
+                  <p className="text-slate-400 font-semibold">No hay transferencias registradas</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-slate-900/50">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-slate-300 font-bold">Fecha</th>
+                        <th className="px-4 py-3 text-right text-slate-300 font-bold">Monto</th>
+                        <th className="px-4 py-3 text-center text-slate-300 font-bold">Estado</th>
+                        <th className="px-4 py-3 text-left text-slate-300 font-bold">Origen</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-700/50">
+                      {cajaGrande.map(transfer => (
+                        <tr key={transfer.id} className="hover:bg-slate-700/30 transition">
+                          <td className="px-4 py-3 text-slate-300 font-semibold">{transfer.fecha_transferencia}</td>
+                          <td className="px-4 py-3 text-right text-green-400 font-black text-lg">{formatoMoneda(transfer.monto)}</td>
+                          <td className="px-4 py-3 text-center">
+                            <span className="px-3 py-1 rounded bg-green-500/30 text-green-300 font-bold text-xs">
+                              {transfer.estado}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-slate-400">
+                            {transfer.origen_caja_chica_id ? `Caja #${transfer.origen_caja_chica_id}` : 'Manual'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
         {/* TAB: RESUMEN */}
         {tabActiva === 'resumen' && (
           <div className="space-y-6">
@@ -582,3 +697,6 @@ export const VentaKioscoModerno: React.FC = () => {
 }
 
 export default VentaKioscoModerno
+
+
+
