@@ -1,7 +1,8 @@
-// ==================== GOOGLE APPS SCRIPT - FULL AUTO v2.9 ====================
+// ==================== GOOGLE APPS SCRIPT - FULL AUTO v2.9 ARREGLADO ====================
 // ✅ MULTI-INSTITUCIÓN EN MISMO EXCEL
 // ✅ DNI autoincrementable + Anti-duplicados con ACTUALIZACIÓN de montos
 // ✅ FIX v2.9: Sin UI en triggers automáticos
+// ✅ FIX v2.10: doPost llama a ejecutarFullAutoInterno() correctamente
 // ==================== CONFIGURACIÓN ====================
 
 const CONFIG_SHEET_NAME = "CONFIG";
@@ -24,6 +25,7 @@ const SUPABASE_URL = "https://tcqamchiwtijniiwbpde.supabase.co";
 const SUPABASE_KEY = "sb_publishable_p2KFfCQlF79Q5WTgMgrlNQ_sYCsxxCP";
 
 // ==================== FUNCIÓN HTTP-WRAPPER ====================
+// ✅ v2.10: doPost llama a ejecutarFullAutoInterno()
 
 function doGet(e) {
   return HtmlService.createHtmlOutput('OK').setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
@@ -31,56 +33,31 @@ function doGet(e) {
 
 function doPost(e) {
   try {
-    Logger.log('?? doPost LLAMADO');
+    Logger.log("📍 doPost LLAMADO");
     const resultado = ejecutarFullAutoInterno();
+    Logger.log("📤 Devolviendo resultado: " + JSON.stringify(resultado).substring(0, 200));
     return ContentService
       .createTextOutput(JSON.stringify(resultado))
-      .setMimeType(ContentService.MimeType.JSON);
+      .setMimeType(ContentService.MimeType.JSON)
+      .addHeader("Access-Control-Allow-Origin", "*")
+      .addHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+      .addHeader("Access-Control-Allow-Headers", "Content-Type");
   } catch (error) {
+    Logger.log("❌ ERROR en doPost: " + error);
     return ContentService
       .createTextOutput(JSON.stringify({ exito: false, mensaje: error.toString() }))
-      .setMimeType(ContentService.MimeType.JSON);
+      .setMimeType(ContentService.MimeType.JSON)
+      .addHeader("Access-Control-Allow-Origin", "*")
+      .addHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+      .addHeader("Access-Control-Allow-Headers", "Content-Type");
   }
 }
 
-function ejecutarFullAutoHTTP() {
-  try {
-    Logger.log("\n" + "=".repeat(70));
-    Logger.log("🚀 INICIANDO FULL AUTO v2.9 MULTI-INSTITUCIÓN (VÍA HTTP)");
-    Logger.log("=".repeat(70));
-    
-    // PASO 1: NORMALIZAR
-    Logger.log("\n📋 FASE 1: Normalizando datos...");
-    const resultNorm = normalizarExcelMulti();
-    
-    if (!resultNorm || Object.keys(resultNorm.datosNormalizados).length === 0) {
-      return { exito: false, mensaje: "Error en normalización", data: null };
-    }
-    
-    // PASO 2: SINCRONIZAR (por institución)
-    Logger.log("\n🔄 FASE 2: Sincronizando por institución...");
-    const resultadoSync = {};
-    
-    for (let instId in resultNorm.datosNormalizados) {
-      const datosInst = resultNorm.datosNormalizados[instId];
-      const config = {
-        supabaseUrl: SUPABASE_URL,
-        supabaseKey: SUPABASE_KEY,
-        institucionId: instId
-      };
-      
-      Logger.log(`   Sincronizando institución ${instId}...`);
-      resultadoSync[instId] = sincronizarDatos(config, datosInst);
-    }
-    
-    // PASO 3: GUARDAR LOG
-    Logger.log("\n📝 FASE 3: Guardando logs...");
-    guardarResultadoFinalMulti(resultNorm.hojaSync, resultadoSync);
-    
-    return { exito: true, mensaje: "OK", data: resultadoSync };
-  } catch (error) {
-    return { exito: false, mensaje: error.toString() };
-  }
+function doOptions(e) {
+  return ContentService.createTextOutput()
+    .addHeader("Access-Control-Allow-Origin", "*")
+    .addHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+    .addHeader("Access-Control-Allow-Headers", "Content-Type");
 }
 
 // ==================== MENÚ PERSONALIZADO ====================
@@ -1049,4 +1026,3 @@ function mostrarLogsManual() {
     Logger.log("Error en mostrarLogsManual: " + e);
   }
 }
-

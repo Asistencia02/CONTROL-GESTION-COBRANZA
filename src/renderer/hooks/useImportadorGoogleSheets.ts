@@ -17,17 +17,13 @@ export const useImportadorGoogleSheets = create<ImportadorStore>((set, get) => (
   sincronizarManualmente: async (institucion_id: number) => {
     set({ loading: true, error: null, resultado: null })
     try {
-      const webhookUrl = get().obtenerWebhookUrl()
-      
-      if (!webhookUrl) {
-        throw new Error("URL del webhook no configurada")
-      }
+      // ✅ ARREGLADO v2.10: Usar proxy de Vercel para evitar CORS
+      const proxyUrl = '/api/sincronizar'
       
       console.log(`🔄 Sincronizando...`)
-      console.log(`📍 URL: ${webhookUrl}`)
+      console.log(`📍 URL proxy: ${proxyUrl}`)
       
-      // ✅ ARREGLADO v2.9: Sin mode:'no-cors' para recibir JSON
-      const response = await fetch(webhookUrl, {
+      const response = await fetch(proxyUrl, {
         method: "POST",
         headers: { 
           "Content-Type": "application/json",
@@ -69,6 +65,7 @@ export const useImportadorGoogleSheets = create<ImportadorStore>((set, get) => (
   },
 
   obtenerWebhookUrl: () => {
+    // Ya no se usa, pero lo dejamos por compatibilidad
     return import.meta.env.VITE_GOOGLE_APPS_SCRIPT_URL || ""
   }
 }))
