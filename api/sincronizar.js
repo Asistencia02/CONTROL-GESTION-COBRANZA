@@ -16,13 +16,13 @@ export default async function handler(req, res) {
   }
 
   try {
-    const googleAppsScriptUrl = process.env.GOOGLE_APPS_SCRIPT_URL
+    // ✅ Usar la URL hardcodeada como fallback si no está en env
+    const googleAppsScriptUrl = process.env.GOOGLE_APPS_SCRIPT_URL || 
+      'https://script.google.com/macros/s/AKfycbx91rHcYaxu-Jgc6st2XSs3nwjh7DYt2ZEJH_WPPiXA35g__13VhhmxfvNuTRXEbVOt1Q/exec'
 
-    if (!googleAppsScriptUrl) {
-      return res.status(500).json({ error: 'GOOGLE_APPS_SCRIPT_URL no configurada' })
-    }
-
-    console.log(`📍 Llamando a Google Apps Script: ${googleAppsScriptUrl}`)
+    console.log(`📍 [API] Llamando a Google Apps Script`)
+    console.log(`📍 [API] URL: ${googleAppsScriptUrl.substring(0, 80)}...`)
+    console.log(`📍 [API] Body: ${JSON.stringify(req.body).substring(0, 100)}`)
 
     // Llamar a Google Apps Script desde el servidor (sin CORS)
     const response = await fetch(googleAppsScriptUrl, {
@@ -33,27 +33,30 @@ export default async function handler(req, res) {
       body: JSON.stringify(req.body)
     })
 
-    console.log(`📊 Google Apps Script response: ${response.status}`)
+    console.log(`📊 [API] Google Apps Script status: ${response.status}`)
 
     if (!response.ok) {
       const errorText = await response.text()
-      console.error(`❌ Google Apps Script error: ${errorText}`)
+      console.error(`❌ [API] Google Apps Script error: ${errorText.substring(0, 200)}`)
       return res.status(response.status).json({
         exito: false,
-        mensaje: `Google Apps Script error: ${errorText}`
+        mensaje: `Google Apps Script error: ${errorText.substring(0, 100)}`
       })
     }
 
     const data = await response.json()
 
-    console.log(`✅ Sincronización completada`)
+    console.log(`✅ [API] Sincronización completada`)
+    console.log(`✅ [API] Response: ${JSON.stringify(data).substring(0, 100)}...`)
+    
     return res.status(200).json(data)
 
   } catch (error) {
-    console.error('❌ Error en proxy:', error)
+    console.error('❌ [API] Error en proxy:', error)
     return res.status(500).json({
       exito: false,
-      mensaje: error instanceof Error ? error.message : 'Error interno del servidor'
+      mensaje: error instanceof Error ? error.message : 'Error interno del servidor',
+      error: error instanceof Error ? error.stack : 'Sin detalles'
     })
   }
 }
