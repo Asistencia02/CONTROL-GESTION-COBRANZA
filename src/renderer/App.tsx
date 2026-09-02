@@ -13,6 +13,7 @@ import { ReportesFinancierosModerno } from '@renderer/modules/ReportesFinanciero
 import { CierreModerno } from '@renderer/modules/CierreModerno'
 import { VentaKioscoModerno } from '@renderer/modules/VentaKioscoModerno'
 import { KioscoConfiguracionModerno } from '@renderer/modules/KioscoConfiguracionModerno'
+import { Sincronizacion } from '@renderer/modules/Sincronizacion'
 import { supabase } from '@renderer/lib/supabase'
 import '@renderer/lib/verificarVariables' // Verificar variables de entorno
 
