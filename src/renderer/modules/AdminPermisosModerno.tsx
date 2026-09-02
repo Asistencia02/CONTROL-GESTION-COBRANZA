@@ -21,6 +21,7 @@ const MODULOS = [
   { id: 'gastos', label: 'Gastos', icon: '📉' },
   { id: 'reportes', label: 'Reportes', icon: '📈' },
   { id: 'cierre', label: 'Cierre', icon: '🔒' },
+  { id: 'kioscoconfig', label: 'Config. Kiosco', icon: '??' },
   { id: 'configuracion', label: 'Configuración', icon: '⚙️' },
   { id: 'sincronizacion', label: 'Sincronización', icon: '🔄' },
 ]
@@ -466,4 +467,6 @@ export const AdminPermisosModerno: React.FC = () => {
     </div>
   )
 }
+
+
 

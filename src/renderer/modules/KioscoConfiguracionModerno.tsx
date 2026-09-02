@@ -170,7 +170,7 @@ export const KioscoConfiguracionModerno: React.FC = () => {
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-2 sm:p-4 md:p-8">
       {/* HEADER */}
       <div className="mb-4 sm:mb-8 md:mb-12">
-        <div className="flex items-center justify-between mb-8">
+        <div className="flex items-center justify-between mb-8 flex-col sm:flex-row gap-4">
           <div className="flex items-center gap-4">
             <div className="p-3 bg-gradient-to-br from-orange-500 to-amber-500 rounded-xl shadow-lg shadow-orange-500/50">
               <Settings size={32} className="text-white" />
@@ -179,7 +179,7 @@ export const KioscoConfiguracionModerno: React.FC = () => {
               <h1 className="text-2xl sm:text-3xl md:text-4xl font-black bg-gradient-to-r from-orange-400 to-amber-400 bg-clip-text text-transparent">
                 Configuración Kiosco
               </h1>
-              <p className="text-slate-400 mt-1">Productos y control de caja</p>
+              <p className="text-xs sm:text-sm text-slate-400 mt-1">Productos y control de caja</p>
             </div>
           </div>
           <button
@@ -195,7 +195,7 @@ export const KioscoConfiguracionModerno: React.FC = () => {
         </div>
 
         {(mensaje || mensajeCaja) && (
-          <div className={`p-4 rounded-lg border-l-4 mb-6 font-semibold flex items-center gap-2 ${
+          <div className={`p-4 rounded-lg border-l-4 mb-6 font-semibold flex items-center gap-2 text-xs sm:text-sm ${
             (mensaje.includes('✓') || mensajeCaja.includes('✓'))
               ? 'bg-green-500/20 border-green-500/50 text-green-400'
               : 'bg-red-500/20 border-red-500/50 text-red-400'
@@ -277,11 +277,11 @@ export const KioscoConfiguracionModerno: React.FC = () => {
                 </button>
 
                 <div className="p-4 sm:p-6 md:p-6 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-xl overflow-x-auto">
-                  <h2 className="text-xl font-bold text-white mb-4">Productos Disponibles</h2>
+                  <h2 className="text-lg sm:text-xl font-bold text-white mb-4">Productos Disponibles</h2>
                   {productos.length === 0 ? (
                     <div className="text-center py-8 text-slate-400">
                       <Package size={32} className="mx-auto mb-2 opacity-50" />
-                      <p>No hay productos registrados</p>
+                      <p className="text-xs sm:text-sm">No hay productos registrados</p>
                     </div>
                   ) : (
                     <table className="w-full text-xs sm:text-sm">
@@ -346,9 +346,9 @@ export const KioscoConfiguracionModerno: React.FC = () => {
 
             {(mostrando === 'agregar' || mostrando === 'editar') && (
               <div className="p-4 sm:p-6 md:p-6 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-xl">
-                <h2 className="text-xl font-bold text-white mb-4">{mostrando === 'agregar' ? 'Nuevo Producto' : 'Editar Producto'}</h2>
+                <h2 className="text-lg sm:text-xl font-bold text-white mb-4">{mostrando === 'agregar' ? 'Nuevo Producto' : 'Editar Producto'}</h2>
                 <div className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 gap-3 sm:gap-4">
                     <div>
                       <label className="block text-sm font-bold text-slate-300 mb-2">Nombre *</label>
                       <input
@@ -449,10 +449,10 @@ export const KioscoConfiguracionModerno: React.FC = () => {
                 <div className="p-3 bg-green-500/20 rounded-lg">
                   <Lock size={24} className="text-green-400" />
                 </div>
-                <h2 className="text-xl sm:text-2xl font-bold text-white">Configuración de Caja Chica</h2>
+                <h2 className="text-xl sm:text-xl sm:text-2xl font-bold text-white">Configuración de Caja Chica</h2>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-6">
                 <div className="p-4 sm:p-6 md:p-6 bg-slate-700/30 border border-green-500/50 rounded-lg space-y-4">
                   <div>
                     <label className="block text-sm font-bold text-slate-300 mb-3">Saldo Mínimo a Dejar en Caja</label>
@@ -487,7 +487,7 @@ export const KioscoConfiguracionModerno: React.FC = () => {
 
                 <div className="p-4 sm:p-6 md:p-6 bg-green-500/10 border border-green-500/30 rounded-lg">
                   <h3 className="text-lg font-bold text-green-400 mb-4">ℹ️ Cómo funciona</h3>
-                  <ul className="space-y-3 text-xs sm:text-sm text-slate-300">
+                  <ul className="space-y-2 sm:space-y-3 text-xs sm:text-sm text-slate-300">
                     <li className="flex gap-2">
                       <span className="text-green-400 font-bold flex-shrink-0">1.</span>
                       <span>Al abrir caja, estableces el saldo inicial</span>
@@ -530,3 +530,6 @@ export const KioscoConfiguracionModerno: React.FC = () => {
 }
 
 export default KioscoConfiguracionModerno
+
+
+
