@@ -32,6 +32,8 @@ export interface CajaChica {
 export const useVentaKiosco = (institucionId?: number) => {
   const [ventasKiosco, setVentasKiosco] = useState<VentaKiosco[]>([])
   const [cajaChica, setCajaChica] = useState<CajaChica | null>(null)
+  const [cierresCaja, setCierresCaja] = useState<CajaChica[]>([])
+  const [cajaGrande, setCajaGrande] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -83,6 +85,45 @@ export const useVentaKiosco = (institucionId?: number) => {
     }
   }
 
+  const cargarCierresCaja = async (instId?: number) => {
+    try {
+      const id = instId || institucionId
+      if (!id) throw new Error('ID institución requerido')
+
+      const { data, error: err } = await supabase
+        .from('caja_chica')
+        .select('*')
+        .eq('institucion_id', id)
+        .eq('estado', 'CERRADA')
+        .order('fecha_cierre', { ascending: false })
+
+      if (err) throw err
+      setCierresCaja(data || [])
+    } catch (err) {
+      console.error('Error cargando cierres:', err)
+      setCierresCaja([])
+    }
+  }
+
+  const cargarCajaGrande = async (instId?: number) => {
+    try {
+      const id = instId || institucionId
+      if (!id) throw new Error('ID institución requerido')
+
+      const { data, error: err } = await supabase
+        .from('caja_grande')
+        .select('*')
+        .eq('institucion_id', id)
+        .order('fecha_transferencia', { ascending: false })
+
+      if (err) throw err
+      setCajaGrande(data || [])
+    } catch (err) {
+      console.error('Error cargando caja grande:', err)
+      setCajaGrande([])
+    }
+  }
+
   const abrirCajaChica = async (instId: number, saldo_inicial: number) => {
     try {
       const hoy = new Date().toISOString().split('T')[0]
@@ -127,6 +168,9 @@ export const useVentaKiosco = (institucionId?: number) => {
       if (err) throw err
       setCajaChica(null)
       
+      // Cargar cierres actualizado
+      await cargarCierresCaja()
+      
       // Crear transferencia a caja grande si hay monto
       if (monto_transferido > 0) {
         await supabase
@@ -138,6 +182,9 @@ export const useVentaKiosco = (institucionId?: number) => {
             origen_caja_chica_id: cajaId,
             estado: 'COMPLETADA'
           }])
+        
+        // Cargar caja grande actualizada
+        await cargarCajaGrande()
       }
 
       return data
@@ -164,29 +211,49 @@ export const useVentaKiosco = (institucionId?: number) => {
     }
   }
 
+  // Cálculos correctos
   const totalVentasKiosco = ventasKiosco.reduce((sum, v) => sum + v.subtotal, 0)
-  const totalEfectivo = ventasKiosco
+  
+  // Efectivo que ENTRA de pagos - Cambio que SALE
+  const montoEntregadoTotal = ventasKiosco
     .filter(v => v.metodo_pago === 'EFECTIVO')
-    .reduce((sum, v) => sum + v.subtotal, 0)
+    .reduce((sum, v) => sum + (v.monto_entregado || v.subtotal), 0)
+  
+  const cambioTotalEntregado = ventasKiosco
+    .filter(v => v.metodo_pago === 'EFECTIVO')
+    .reduce((sum, v) => sum + (v.cambio || 0), 0)
+  
+  const totalEfectivo = montoEntregadoTotal - cambioTotalEntregado
+  
+  const totalCajaGrande = cajaGrande.reduce((sum, c) => sum + c.monto, 0)
 
   useEffect(() => {
     if (institucionId) {
       cargarVentasKiosco(institucionId)
       cargarCajaChicaActiva(institucionId)
+      cargarCierresCaja(institucionId)
+      cargarCajaGrande(institucionId)
     }
   }, [institucionId])
 
   return {
     ventasKiosco,
     cajaChica,
+    cierresCaja,
+    cajaGrande,
     loading,
     error,
     cargarVentasKiosco,
     cargarCajaChicaActiva,
+    cargarCierresCaja,
+    cargarCajaGrande,
     abrirCajaChica,
     cerrarCajaChica,
     agregarVentaKiosco,
     totalVentasKiosco,
     totalEfectivo,
+    totalCajaGrande,
+    montoEntregadoTotal,
+    cambioTotalEntregado,
   }
 }
