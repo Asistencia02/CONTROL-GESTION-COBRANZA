@@ -4,6 +4,7 @@ import { useVentaKiosco } from '@renderer/hooks/useVentaKiosco'
 import { useProductosKiosco } from '@renderer/hooks/useProductosKiosco'
 import { formatoMoneda } from '@renderer/lib/helpers'
 import { ShoppingBag, Plus, TrendingUp, DollarSign, RefreshCw, AlertCircle, Lock, Unlock, History, Vault } from 'lucide-react'
+import { supabase } from '@renderer/lib/supabase'
 
 type TabVentaKiosco = 'registro' | 'historial' | 'caja' | 'cierres' | 'cajagrande' | 'resumen'
 
@@ -36,7 +37,7 @@ export const VentaKioscoModerno: React.FC = () => {
   const handleAbrirCaja = async () => {
     setCajaAbriendo(true)
     try {
-      await abrirCajaChica(institucionActiva.id, 0)
+      await abrirCajaChica(institucionActiva.id, saldoMinimoCaja)
       await cargarCajaChicaActiva(institucionActiva.id)
       setSuccessMessage('✓ Caja abierta')
       setTimeout(() => setSuccessMessage(''), 3000)
@@ -719,6 +720,7 @@ export const VentaKioscoModerno: React.FC = () => {
 }
 
 export default VentaKioscoModerno
+
 
 
 
