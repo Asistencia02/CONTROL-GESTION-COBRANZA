@@ -1,8 +1,11 @@
-// ==================== GOOGLE APPS SCRIPT - FULL AUTO v2.9 ARREGLADO ====================
+// ==================== GOOGLE APPS SCRIPT - FULL AUTO v2.16 FINAL ====================
 // ✅ MULTI-INSTITUCIÓN EN MISMO EXCEL
-// ✅ DNI autoincrementable + Anti-duplicados con ACTUALIZACIÓN de montos
-// ✅ FIX v2.9: Sin UI en triggers automáticos
+// ✅ DNI autoincrementable ÚNICO POR INSTITUCIÓN (offset)
 // ✅ FIX v2.10: doPost llama a ejecutarFullAutoInterno() correctamente
+// ✅ FIX v2.13: LOGS DETALLADOS DE SKIPPED Y ERRORES
+// ✅ FIX v2.14: SEGUROS expandidos por mes + instId parseado como INT
+// ✅ FIX v2.15: BATCH QUERIES - obtenerPagosExistentes, buscarEstudiantes, procesarEstudiantes OPTIMIZADAS
+// ✅ FIX v2.16: POST QUERIES - Evita URLs largas con RPC Supabase (sin romper nada)
 // ==================== CONFIGURACIÓN ====================
 
 const CONFIG_SHEET_NAME = "CONFIG";
@@ -12,7 +15,6 @@ const DELAY_MS = 200;
 const MAX_REINTENTOS = 5;
 const EXCEL_NORMALIZADO_NOMBRE = "SYNC_NORMALIZADO_MULTI_2026";
 
-// ✅ v2.8: MAPEO DINÁMICO - HOJA → INSTITUCIÓN + CARRERA
 const MAPEO_HOJAS = {
   "ANALISTA2026": { institucion_id: 1, carrera_id: 1 },
   "HIGIENE2026": { institucion_id: 1, carrera_id: 3 },
@@ -25,7 +27,6 @@ const SUPABASE_URL = "https://tcqamchiwtijniiwbpde.supabase.co";
 const SUPABASE_KEY = "sb_publishable_p2KFfCQlF79Q5WTgMgrlNQ_sYCsxxCP";
 
 // ==================== FUNCIÓN HTTP-WRAPPER ====================
-// ✅ v2.10: doPost llama a ejecutarFullAutoInterno()
 
 function doGet(e) {
   return HtmlService.createHtmlOutput('OK').setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
@@ -61,7 +62,6 @@ function doOptions(e) {
 }
 
 // ==================== MENÚ PERSONALIZADO ====================
-// ✅ v2.9: SIN LLAMADAS A getUi() - Solo para ejecución manual
 
 function onOpen() {
   try {
@@ -84,7 +84,7 @@ function ejecutarFullAutoManual() {
     const ui = SpreadsheetApp.getUi();
     
     Logger.log("\n" + "=".repeat(70));
-    Logger.log("🚀 INICIANDO FULL AUTO v2.9 MULTI-INSTITUCIÓN (MANUAL)");
+    Logger.log("🚀 INICIANDO FULL AUTO v2.16 MULTI-INSTITUCIÓN (MANUAL) - OPTIMIZADO");
     Logger.log("=".repeat(70));
     
     ui.showModelessDialog(
@@ -92,10 +92,8 @@ function ejecutarFullAutoManual() {
       '🔄 Sincronización'
     );
     
-    // Ejecutar la lógica
     const resultado = ejecutarFullAutoInterno();
     
-    // Mostrar resultado
     if (resultado.exito) {
       let resumenFinal = "✅ COMPLETADO MULTI-INSTITUCIÓN\n\n";
       
@@ -126,15 +124,13 @@ function ejecutarFullAutoManual() {
 }
 
 // ==================== FUNCIÓN INTERNA (SIN UI) ====================
-// ✅ v2.9: Usado por triggers automáticos y funciones manuales
 
 function ejecutarFullAutoInterno() {
   try {
     Logger.log("\n" + "=".repeat(70));
-    Logger.log("🚀 EJECUTANDO LÓGICA INTERNA");
+    Logger.log("🚀 EJECUTANDO LÓGICA INTERNA v2.16 (OPTIMIZADO + POST QUERIES)");
     Logger.log("=".repeat(70));
     
-    // PASO 1: NORMALIZAR
     Logger.log("\n📋 FASE 1: Normalizando datos...");
     const resultNorm = normalizarExcelMulti();
     
@@ -144,7 +140,6 @@ function ejecutarFullAutoInterno() {
     
     Logger.log(`✅ Instituciones detectadas: ${Object.keys(resultNorm.datosNormalizados).join(", ")}`);
     
-    // PASO 2: SINCRONIZAR (por institución)
     Logger.log("\n🔄 FASE 2: Sincronizando por institución...");
     const resultadoSync = {};
     
@@ -160,7 +155,6 @@ function ejecutarFullAutoInterno() {
       resultadoSync[instId] = sincronizarDatos(config, datosInst);
     }
     
-    // PASO 3: GUARDAR LOG
     Logger.log("\n📝 FASE 3: Guardando logs...");
     guardarResultadoFinalMulti(resultNorm.hojaSync, resultadoSync);
     
@@ -174,27 +168,20 @@ function ejecutarFullAutoInterno() {
 }
 
 // ==================== FUNCIÓN PARA TRIGGERS AUTOMÁTICOS ====================
-// ✅ v2.9: SIN UI - Solo logs
 
 function ejecutarFullAutoTrigger() {
   try {
     Logger.log("\n" + "=".repeat(70));
-    Logger.log("🚀 TRIGGER AUTOMÁTICO - FULL AUTO v2.9");
+    Logger.log("🚀 TRIGGER AUTOMÁTICO - FULL AUTO v2.16 (OPTIMIZADO)");
     Logger.log("=".repeat(70));
     
     const resultado = ejecutarFullAutoInterno();
     
     if (resultado.exito) {
       Logger.log("\n✅ TRIGGER COMPLETADO EXITOSAMENTE");
-      Logger.log("Resumen por institución:");
       for (let instId in resultado.resultadoSync) {
         const sync = resultado.resultadoSync[instId];
-        Logger.log(`  Institución ${instId}:`);
-        Logger.log(`    - Estudiantes: ${sync.contadores.estudiantesInsertados}`);
-        Logger.log(`    - Inscripciones: ${sync.contadores.pagosInscInsertados}`);
-        Logger.log(`    - Cuotas: ${sync.contadores.pagosCuotaInsertados}`);
-        Logger.log(`    - Seguros: ${sync.contadores.pagosSeguroInsertados}`);
-        Logger.log(`    - Errores: ${sync.contadores.errores}`);
+        Logger.log(`  Institución ${instId}: EST=${sync.contadores.estudiantesInsertados}, INSC=${sync.contadores.pagosInscInsertados}, CUOT=${sync.contadores.pagosCuotaInsertados}, SEG=${sync.contadores.pagosSeguroInsertados}`);
       }
     } else {
       Logger.log("\n❌ TRIGGER FALLÓ: " + resultado.mensaje);
@@ -210,7 +197,6 @@ function ejecutarFullAutoTrigger() {
 function normalizarExcelMulti() {
   Logger.log("🚀 normalizarExcelMulti() iniciado");
   
-  // Obtener archivo Excel
   Logger.log("Obteniendo archivo Excel...");
   const nombreArchivo = "CUOTAS 2025 INSM vigente para cristian.xlsx";
   const files = DriveApp.getFilesByName(nombreArchivo);
@@ -223,16 +209,14 @@ function normalizarExcelMulti() {
   const file = files.next();
   Logger.log("✅ Archivo encontrado");
   
-  // Buscar o crear spreadsheet NORMALIZADO
   Logger.log("Buscando/creando Excel normalizado...");
   const spreadsheet = buscarOCrearNormalizadoFijo();
   Logger.log("✅ Excel normalizado OK");
   
-  // Procesar Excel - AGRUPAR POR INSTITUCIÓN
   const fileId = file.getId();
   const tempSpreadsheet = SpreadsheetApp.openById(fileId);
   
-  const datosNormalizadosPorInst = {}; // { instId: { estudiantes, pagosInscripcion, etc } }
+  const datosNormalizadosPorInst = {};
   
   const hojas = tempSpreadsheet.getSheets();
   Logger.log(`Procesando ${hojas.length} hojas...`);
@@ -241,7 +225,6 @@ function normalizarExcelMulti() {
     const hoja = hojas[h];
     const nombreHoja = hoja.getName();
     
-    // ✅ v2.8: BUSCAR EN MAPEO
     const mapeo = MAPEO_HOJAS[nombreHoja];
     if (!mapeo) {
       Logger.log(`   ⏭️ Hoja ignorada (no en mapeo): ${nombreHoja}`);
@@ -251,7 +234,6 @@ function normalizarExcelMulti() {
     const instId = mapeo.institucion_id;
     const carreraId = mapeo.carrera_id;
     
-    // Inicializar institución si no existe
     if (!datosNormalizadosPorInst[instId]) {
       datosNormalizadosPorInst[instId] = {
         estudiantes: {},
@@ -264,14 +246,12 @@ function normalizarExcelMulti() {
     
     Logger.log(`  Procesando ${nombreHoja} (inst ${instId}, carrera ${carreraId})...`);
     
-    // ✅ Obtener config de carrera
     const config = obtenerConfiguracionCarrera(instId, carreraId);
     if (!config) {
       Logger.log(`  ⚠️ Sin configuración para carrera ${carreraId}`);
       continue;
     }
     
-    // Procesar hoja
     procesarHoja(
       hoja,
       carreraId,
@@ -287,7 +267,6 @@ function normalizarExcelMulti() {
   
   Logger.log(`✅ Procesamiento OK`);
   
-  // Llenar hojas de CADA INSTITUCIÓN
   Logger.log("Actualizando hojas normalizadas...");
   for (let instId in datosNormalizadosPorInst) {
     const datos = datosNormalizadosPorInst[instId];
@@ -310,7 +289,6 @@ function normalizarExcelMulti() {
   
   Logger.log("✅ Normalización completada");
   
-  // RETORNO
   const retorno = {
     datosNormalizados: {},
     hojaSync: spreadsheet
@@ -329,7 +307,6 @@ function normalizarExcelMulti() {
   return retorno;
 }
 
-// ✅ v2.8: OBTENER CONFIG DE UNA SOLA CARRERA
 function obtenerConfiguracionCarrera(instId, carreraId) {
   try {
     const url = `${SUPABASE_URL}/rest/v1/configuracion_carreras?institucion_id=eq.${instId}&carrera_id=eq.${carreraId}`;
@@ -387,8 +364,7 @@ function obtenerOCrearHoja(spreadsheet, nombre) {
   return hoja;
 }
 
-// ✅ v2.12: Generar DNI autoincrementable ÚNICO POR INSTITUCIÓN
-// INST 1: 00000000-00099999, INST 2: 00100000-00199999
+// ✅ v2.13: DNI ÚNICO POR INSTITUCIÓN - Offset para evitar duplicados
 function generarDNISinDuplicados(dniBase, estudiantesMap, instId) {
   if (dniBase && dniBase !== "00000000") {
     return dniBase;
@@ -425,7 +401,6 @@ function procesarHoja(hoja, carreraId, config, año, instId, estudiantes, pagosI
   let idxItem = -1, idxApellido = -1, idxNombres = -1, idxDNI = -1, idxTelefono = -1, idxInsc = -1;
   const idxCuota = {}, idxSeguro = {};
   
-  // Encontrar índices básicos
   for (let i = 0; i < headers.length; i++) {
     const h = String(headers[i]).toUpperCase().trim();
     if (h.includes("ITEM")) idxItem = i;
@@ -436,7 +411,6 @@ function procesarHoja(hoja, carreraId, config, año, instId, estudiantes, pagosI
     else if (h === "INSCRIPCION") idxInsc = i;
   }
   
-  // Detectar meses
   for (let i = 0; i < headers.length - 1; i++) {
     const hActual = String(headers[i]).toUpperCase().trim();
     const hProx = String(headers[i + 1]).toUpperCase().trim();
@@ -451,7 +425,6 @@ function procesarHoja(hoja, carreraId, config, año, instId, estudiantes, pagosI
   
   let contOmitidos = 0, contProcesados = 0;
   
-  // Procesar filas
   for (let r = 1; r < datos.length; r++) {
     const fila = datos[r];
     
@@ -470,7 +443,6 @@ function procesarHoja(hoja, carreraId, config, año, instId, estudiantes, pagosI
     
     contProcesados++;
     
-    // Estudiante
     if (!estudiantes[dni]) {
       estudiantes[dni] = {
         item: fila[idxItem] || "",
@@ -483,7 +455,6 @@ function procesarHoja(hoja, carreraId, config, año, instId, estudiantes, pagosI
       };
     }
     
-    // Inscripción
     const montoPagadoInsc = parseInt(fila[idxInsc]) || 0;
     if (montoPagadoInsc > 0) {
       const montoConfigInsc = config.monto_inscripcion;
@@ -497,7 +468,6 @@ function procesarHoja(hoja, carreraId, config, año, instId, estudiantes, pagosI
       ]);
     }
     
-    // Cuotas
     for (let mes of meses) {
       if (idxCuota[mes] !== undefined) {
         const montoPagado = parseInt(fila[idxCuota[mes]]) || 0;
@@ -520,7 +490,6 @@ function procesarHoja(hoja, carreraId, config, año, instId, estudiantes, pagosI
       }
     }
     
-    // SEGURO ANUAL
     let totalSeguro = 0, mesesConPago = [];
     for (let mes of meses) {
       if (idxSeguro[mes] !== undefined) {
@@ -556,7 +525,6 @@ function limpiarYLlenarHojas(hojaEst, hojaInsc, hojaCuota, hojaSeguro, estudiant
   hojaCuota.clearContents();
   hojaSeguro.clearContents();
   
-  // ESTUDIANTES
   hojaEst.appendRow(["ITEM", "DNI", "APELLIDO", "NOMBRES", "TELEFONO", "CARRERA_ID", "ESTADO"]);
   const estData = [];
   for (let dni in estudiantes) {
@@ -567,21 +535,18 @@ function limpiarYLlenarHojas(hojaEst, hojaInsc, hojaCuota, hojaSeguro, estudiant
     hojaEst.getRange(2, 1, estData.length, 7).setValues(estData);
   }
   
-  // INSCRIPCIÓN
   hojaInsc.appendRow(["ITEM", "DNI", "APELLIDO", "NOMBRES", "CARRERA_ID", "MONTO_PAGADO", "MONTO_CONFIGURADO", "MONTO_ADEUDADO", "FECHA_PAGO", "METODO_PAGO", "TIPO_TARJETA", "NUMERO_TALONARIO", "ESTADO", "NOTAS"]);
   for (let i = 0; i < pagosInscripcion.length; i += 500) {
     const chunk = pagosInscripcion.slice(i, i + 500);
     hojaInsc.getRange(hojaInsc.getLastRow() + 1, 1, chunk.length, 14).setValues(chunk);
   }
   
-  // CUOTA
   hojaCuota.appendRow(["ITEM", "DNI", "APELLIDO", "NOMBRES", "CARRERA_ID", "MES", "AÑO", "MONTO_PAGADO", "MONTO_CONFIGURADO", "MONTO_ADEUDADO", "FECHA_PAGO", "METODO_PAGO", "NUMERO_TALONARIO", "ESTADO", "NOTAS"]);
   for (let i = 0; i < pagosCuota.length; i += 500) {
     const chunk = pagosCuota.slice(i, i + 500);
     hojaCuota.getRange(hojaCuota.getLastRow() + 1, 1, chunk.length, 15).setValues(chunk);
   }
   
-  // SEGURO
   hojaSeguro.appendRow(["ITEM", "DNI", "APELLIDO", "NOMBRES", "CARRERA_ID", "PERIODO", "AÑO", "MONTO_PAGADO", "MONTO_CONFIGURADO", "MONTO_ADEUDADO", "CUOTAS_PAGADAS", "METODO_PAGO", "NUMERO_TALONARIO", "ESTADO", "NOTAS"]);
   for (let i = 0; i < pagosSeguro.length; i += 500) {
     const chunk = pagosSeguro.slice(i, i + 500);
@@ -615,12 +580,16 @@ function sincronizarDatos(config, datosNormalizados) {
   contadores.estudiantesInsertados = resEst.procesados;
   contadores.errores += resEst.errores;
   Logger.log(`   ✅ Estudiantes: ${contadores.estudiantesInsertados}`);
+  if (resEst.errores > 0) Logger.log(`   ❌ Errores en estudiantes: ${resEst.errores}`);
   
   Utilities.sleep(15000);
   
   Logger.log("   Buscando estudiantes en BD...");
   const dniAId = buscarEstudiantes(config, estudiantes);
   Logger.log(`   Encontrados: ${Object.keys(dniAId).length}/${estudiantes.length}`);
+  if (Object.keys(dniAId).length < estudiantes.length) {
+    Logger.log(`   ⚠️ FALTANTES: ${estudiantes.length - Object.keys(dniAId).length} estudiantes no encontrados`);
+  }
   
   if (Object.keys(dniAId).length === 0) {
     return { exito: false, contadores: contadores, fecha: new Date().toISOString() };
@@ -639,6 +608,7 @@ function sincronizarDatos(config, datosNormalizados) {
     contadores.ignorados += res.ignorados;
     contadores.pagosSkipped += res.skipped;
     contadores.errores += res.errores;
+    Logger.log(`   ✅ INSCRIPCIÓN: ${res.insertados} insertados, ${res.actualizados} actualizados, ${res.skipped} skipped, ${res.errores} errores`);
   }
   
   if (pagosCuota.length > 0) {
@@ -649,26 +619,91 @@ function sincronizarDatos(config, datosNormalizados) {
     contadores.ignorados += res.ignorados;
     contadores.pagosSkipped += res.skipped;
     contadores.errores += res.errores;
+    Logger.log(`   ✅ CUOTAS: ${res.insertados} insertados, ${res.actualizados} actualizados, ${res.skipped} skipped, ${res.errores} errores`);
   }
   
   if (pagosSeguro.length > 0) {
-    Logger.log(`   Procesando ${pagosSeguro.length} seguros...`);
-    const res = procesarPagosBatch(config, pagosSeguro, "SEGURO", dniAId, conceptos, pagosExistentes);
+    Logger.log(`   Procesando ${pagosSeguro.length} seguros (expandiendo por mes)...`);
+    const pagosSeguroExpandidos = expandirSegurosPorMes(pagosSeguro);
+    Logger.log(`   📊 Expandidos a ${pagosSeguroExpandidos.length} registros individuales`);
+    const res = procesarPagosBatch(config, pagosSeguroExpandidos, "SEGURO", dniAId, conceptos, pagosExistentes);
     contadores.pagosSeguroInsertados = res.insertados;
     contadores.segurosActualizados = res.actualizados;
     contadores.ignorados += res.ignorados;
     contadores.pagosSkipped += res.skipped;
     contadores.errores += res.errores;
+    Logger.log(`   ✅ SEGUROS: ${res.insertados} insertados, ${res.actualizados} actualizados, ${res.skipped} skipped, ${res.errores} errores`);
   }
   
   return { exito: contadores.errores === 0, contadores: contadores, fecha: new Date().toISOString() };
 }
 
+// ✅ v2.16: FIXED - POST queries usando RPC Supabase
 function procesarEstudiantes(config, estudiantes) {
   const res = { procesados: 0, errores: 0 };
   
-  for (let est of estudiantes) {
+  Logger.log(`   📝 Procesando ${estudiantes.length} estudiantes (batch POST RPC)...`);
+  
+  const batchSize = 50;
+  
+  for (let i = 0; i < estudiantes.length; i += batchSize) {
+    const batch = estudiantes.slice(i, i + batchSize);
+    
+    const dnisBatch = batch.map(function(e) { return e.dni; });
+    
+    const existentesMap = {};
     try {
+      const respBuscar = UrlFetchApp.fetch(
+        `${config.supabaseUrl}/rest/v1/rpc/search_estudiantes_by_dni`,
+        {
+          method: "post",
+          headers: { 
+            "apikey": config.supabaseKey,
+            "Content-Type": "application/json" 
+          },
+          payload: JSON.stringify({ dni_list: dnisBatch }),
+          muteHttpExceptions: true,
+          timeout: 60
+        }
+      );
+      
+      if (respBuscar.getResponseCode() === 200) {
+        const existentes = JSON.parse(respBuscar.getContentText());
+        for (let est of existentes) {
+          existentesMap[est.dni] = est.id;
+        }
+      } else {
+        Logger.log(`   ⚠️ Fallback a queries individuales para batch ${Math.floor(i/batchSize)}...`);
+        for (let dni of dnisBatch) {
+          try {
+            const respInd = UrlFetchApp.fetch(
+              `${config.supabaseUrl}/rest/v1/estudiantes?dni=eq.${encodeURIComponent(dni)}&select=id,dni`,
+              {
+                method: "get",
+                headers: { "apikey": config.supabaseKey },
+                muteHttpExceptions: true,
+                timeout: 60
+              }
+            );
+            
+            if (respInd.getResponseCode() === 200) {
+              const datosInd = JSON.parse(respInd.getContentText());
+              if (datosInd && datosInd.length > 0) {
+                existentesMap[dni] = datosInd[0].id;
+              }
+            }
+          } catch (e) {
+          }
+        }
+      }
+    } catch (e) {
+      Logger.log(`   ⚠️ Error búsqueda batch ${Math.floor(i/batchSize)}: ${e}`);
+    }
+    
+    const paraInsertar = [];
+    const paraActualizar = [];
+    
+    for (let est of batch) {
       const datos = {
         institucion_id: parseInt(config.institucionId),
         dni: est.dni.trim(),
@@ -680,82 +715,125 @@ function procesarEstudiantes(config, estudiantes) {
         fecha_ingreso: new Date().toISOString().split('T')[0]
       };
       
-      const urlBuscar = `${config.supabaseUrl}/rest/v1/estudiantes?dni=eq.${encodeURIComponent(datos.dni)}&select=id`;
-      const respBuscar = UrlFetchApp.fetch(urlBuscar, {
-        method: "get",
-        headers: { "apikey": config.supabaseKey },
-        muteHttpExceptions: true
-      });
-      
-      if (respBuscar.getResponseCode() === 200) {
-        const existentes = JSON.parse(respBuscar.getContentText());
-        
-        if (existentes && existentes.length > 0) {
-          const id = existentes[0].id;
-          const urlUpdate = `${config.supabaseUrl}/rest/v1/estudiantes?id=eq.${id}`;
-          const respUpdate = UrlFetchApp.fetch(urlUpdate, {
-            method: "patch",
-            headers: { "apikey": config.supabaseKey, "Content-Type": "application/json" },
-            payload: JSON.stringify(datos),
-            muteHttpExceptions: true
-          });
-          if (respUpdate.getResponseCode() === 200 || respUpdate.getResponseCode() === 204) {
-            res.procesados++;
-          } else {
-            res.errores++;
-          }
-        } else {
-          const urlInsert = `${config.supabaseUrl}/rest/v1/estudiantes`;
-          const respInsert = UrlFetchApp.fetch(urlInsert, {
+      if (existentesMap[est.dni]) {
+        paraActualizar.push({ id: existentesMap[est.dni], datos: datos });
+      } else {
+        paraInsertar.push(datos);
+      }
+    }
+    
+    if (paraInsertar.length > 0) {
+      try {
+        const respInsert = UrlFetchApp.fetch(
+          `${config.supabaseUrl}/rest/v1/estudiantes`,
+          {
             method: "post",
             headers: { "apikey": config.supabaseKey, "Content-Type": "application/json" },
-            payload: JSON.stringify([datos]),
+            payload: JSON.stringify(paraInsertar),
             muteHttpExceptions: true
-          });
-          if (respInsert.getResponseCode() === 201 || respInsert.getResponseCode() === 200) {
-            res.procesados++;
-          } else {
-            res.errores++;
           }
+        );
+        
+        if (respInsert.getResponseCode() === 201 || respInsert.getResponseCode() === 200) {
+          res.procesados += paraInsertar.length;
+        } else {
+          res.errores += paraInsertar.length;
         }
+      } catch (e) {
+        res.errores += paraInsertar.length;
       }
-    } catch (e) {
-      res.errores++;
     }
+    
+    for (let item of paraActualizar) {
+      try {
+        const respUpdate = UrlFetchApp.fetch(
+          `${config.supabaseUrl}/rest/v1/estudiantes?id=eq.${item.id}`,
+          {
+            method: "patch",
+            headers: { "apikey": config.supabaseKey, "Content-Type": "application/json" },
+            payload: JSON.stringify(item.datos),
+            muteHttpExceptions: true
+          }
+        );
+        
+        if (respUpdate.getResponseCode() === 200 || respUpdate.getResponseCode() === 204) {
+          res.procesados++;
+        } else {
+          res.errores++;
+        }
+      } catch (e) {
+        res.errores++;
+      }
+    }
+    
+    Utilities.sleep(1000);
   }
   
   return res;
 }
 
+// ✅ v2.16: FIXED - POST RPC para búsqueda batch
 function buscarEstudiantes(config, estudiantes) {
   const dniAId = {};
-  const dnis = estudiantes.map(e => e.dni);
+  const dnis = estudiantes.map(function(e) { return e.dni; });
   
-  for (let intento = 0; intento < 5; intento++) {
-    const faltantes = dnis.filter(d => !dniAId[d]);
-    if (faltantes.length === 0) break;
+  Logger.log(`   🔄 Buscando ${dnis.length} estudiantes (batch POST RPC)...`);
+  
+  const chunkSize = 50;
+  
+  for (let i = 0; i < dnis.length; i += chunkSize) {
+    const chunk = dnis.slice(i, i + chunkSize);
     
-    for (let dni of faltantes) {
-      try {
-        const resp = UrlFetchApp.fetch(
-          `${config.supabaseUrl}/rest/v1/estudiantes?dni=eq.${encodeURIComponent(dni)}&select=id`,
-          {
-            method: "get",
-            headers: { "apikey": config.supabaseKey },
-            muteHttpExceptions: true
-          }
-        );
-        if (resp.getResponseCode() === 200) {
-          const datos = JSON.parse(resp.getContentText());
-          if (datos && datos.length > 0) {
-            dniAId[dni] = datos[0].id;
+    try {
+      const resp = UrlFetchApp.fetch(
+        `${config.supabaseUrl}/rest/v1/rpc/search_estudiantes_by_dni`,
+        {
+          method: "post",
+          headers: { 
+            "apikey": config.supabaseKey,
+            "Content-Type": "application/json" 
+          },
+          payload: JSON.stringify({ dni_list: chunk }),
+          muteHttpExceptions: true,
+          timeout: 60
+        }
+      );
+      
+      if (resp.getResponseCode() === 200) {
+        const datos = JSON.parse(resp.getContentText());
+        
+        for (let est of datos) {
+          dniAId[est.dni] = est.id;
+        }
+      } else {
+        Logger.log(`   ⚠️ Fallback a queries individuales para chunk ${Math.floor(i/chunkSize)}...`);
+        for (let dni of chunk) {
+          try {
+            const respInd = UrlFetchApp.fetch(
+              `${config.supabaseUrl}/rest/v1/estudiantes?dni=eq.${encodeURIComponent(dni)}&select=id,dni`,
+              {
+                method: "get",
+                headers: { "apikey": config.supabaseKey },
+                muteHttpExceptions: true,
+                timeout: 60
+              }
+            );
+            
+            if (respInd.getResponseCode() === 200) {
+              const datosInd = JSON.parse(respInd.getContentText());
+              if (datosInd && datosInd.length > 0) {
+                dniAId[dni] = datosInd[0].id;
+              }
+            }
+          } catch (e) {
           }
         }
-      } catch (e) {
       }
+      
+      Utilities.sleep(300);
+    } catch (e) {
+      Logger.log(`   ⚠️ Error chunk ${Math.floor(i/chunkSize)}: ${e}`);
     }
-    
-    Utilities.sleep(5000);
   }
   
   return dniAId;
@@ -765,8 +843,9 @@ function cargarConceptos(config) {
   const conceptos = {};
   
   try {
+    const instId = parseInt(config.institucionId);
     const resp = UrlFetchApp.fetch(
-      `${config.supabaseUrl}/rest/v1/conceptos_pago?institucion_id=eq.${config.institucionId}&select=id,tipo,mes,carrera_id`,
+      `${config.supabaseUrl}/rest/v1/conceptos_pago?institucion_id=eq.${instId}&select=id,tipo,mes,carrera_id`,
       {
         method: "get",
         headers: { "apikey": config.supabaseKey },
@@ -776,6 +855,7 @@ function cargarConceptos(config) {
     
     if (resp.getResponseCode() === 200) {
       const datos = JSON.parse(resp.getContentText());
+      Logger.log(`   📊 Conceptos cargados: ${datos.length} total`);
       for (let c of datos) {
         const car = c.carrera_id;
         if (!conceptos[car]) {
@@ -787,53 +867,165 @@ function cargarConceptos(config) {
       }
     }
   } catch (e) {
+    Logger.log(`   ❌ Error cargando conceptos: ${e}`);
   }
   
   return conceptos;
 }
 
+// ✅ v2.16: FIXED - POST RPC para pagos batch
 function obtenerPagosExistentes(config, dniAId) {
   const pagos = {};
   try {
     const dnis = Object.keys(dniAId);
-    Logger.log(`   🔍 Verificando ${dnis.length} estudiantes en BD...`);
+    const estIds = dnis.map(function(dni) { return dniAId[dni]; });
     
-    for (let dni of dnis) {
-      const estId = dniAId[dni];
+    Logger.log(`   🔍 Cargando pagos para ${estIds.length} estudiantes (batch POST RPC)...`);
+    
+    try {
+      const resp = UrlFetchApp.fetch(
+        `${config.supabaseUrl}/rest/v1/rpc/search_pagos_by_estudiantes`,
+        {
+          method: "post",
+          headers: { 
+            "apikey": config.supabaseKey,
+            "Content-Type": "application/json" 
+          },
+          payload: JSON.stringify({ est_id_list: estIds }),
+          muteHttpExceptions: true,
+          timeout: 60
+        }
+      );
       
-      try {
-        const resp = UrlFetchApp.fetch(
-          `${config.supabaseUrl}/rest/v1/pagos?estudiante_id=eq.${estId}&select=id,concepto_id,monto_pagado,estado`,
-          {
-            method: "get",
-            headers: { "apikey": config.supabaseKey },
-            muteHttpExceptions: true
-          }
-        );
+      if (resp.getResponseCode() === 200) {
+        const datos = JSON.parse(resp.getContentText());
         
-        if (resp.getResponseCode() === 200) {
-          const datos = JSON.parse(resp.getContentText());
-          for (let p of datos) {
-            const key = `${estId}|${p.concepto_id}`;
-            pagos[key] = {
-              id: p.id,
-              monto_pagado: p.monto_pagado,
-              concepto_id: p.concepto_id,
-              estudiante_id: estId,
-              estado: p.estado
-            };
+        for (let p of datos) {
+          const key = `${p.estudiante_id}|${p.concepto_id}`;
+          pagos[key] = {
+            id: p.id,
+            monto_pagado: p.monto_pagado,
+            concepto_id: p.concepto_id,
+            estudiante_id: p.estudiante_id,
+            estado: p.estado
+          };
+        }
+        
+        Logger.log(`   ✅ Encontrados ${Object.keys(pagos).length} pagos existentes (batch POST RPC)`);
+      } else {
+        Logger.log(`   🔄 Reintentando con query por chunks...`);
+        const chunkSize = 10;
+        
+        for (let i = 0; i < estIds.length; i += chunkSize) {
+          const chunk = estIds.slice(i, i + chunkSize);
+          
+          try {
+            const respChunk = UrlFetchApp.fetch(
+              `${config.supabaseUrl}/rest/v1/rpc/search_pagos_by_estudiantes`,
+              {
+                method: "post",
+                headers: { 
+                  "apikey": config.supabaseKey,
+                  "Content-Type": "application/json" 
+                },
+                payload: JSON.stringify({ est_id_list: chunk }),
+                muteHttpExceptions: true,
+                timeout: 60
+              }
+            );
+            
+            if (respChunk.getResponseCode() === 200) {
+              const datosChunk = JSON.parse(respChunk.getContentText());
+              
+              for (let p of datosChunk) {
+                const key = `${p.estudiante_id}|${p.concepto_id}`;
+                pagos[key] = {
+                  id: p.id,
+                  monto_pagado: p.monto_pagado,
+                  concepto_id: p.concepto_id,
+                  estudiante_id: p.estudiante_id,
+                  estado: p.estado
+                };
+              }
+            }
+            
+            Utilities.sleep(500);
+          } catch (e) {
+            Logger.log(`   ⚠️ Error chunk ${Math.floor(i/chunkSize)}: ${e}`);
           }
         }
-      } catch (e) {
+        
+        Logger.log(`   ✅ Encontrados ${Object.keys(pagos).length} pagos existentes (chunks POST)`);
       }
+    } catch (e) {
+      Logger.log(`   ❌ Error crítico cargando pagos: ${e}`);
     }
     
-    Logger.log(`   ✅ Encontrados ${Object.keys(pagos).length} pagos existentes`);
   } catch (e) {
-    Logger.log("   ❌ Error cargando pagos: " + e);
+    Logger.log("   ❌ Error fatal en obtenerPagosExistentes: " + e);
   }
   
   return pagos;
+}
+
+// ✅ v2.14: Expandir SEGUROS ANUAL → 1 registro por mes pagado
+function expandirSegurosPorMes(pagosSeguro) {
+  const expandidos = [];
+  
+  for (let i = 0; i < pagosSeguro.length; i++) {
+    const pagoArr = pagosSeguro[i];
+    const notas = pagoArr[14] || "";
+    const mesesMatch = notas.match(/Cuotas: ([^\n]*)/);
+    let meses = [];
+    
+    if (mesesMatch && mesesMatch[1]) {
+      meses = mesesMatch[1]
+        .split(",")
+        .map(function(m) { return m.trim(); })
+        .filter(function(m) { return m; });
+    }
+    
+    if (meses.length === 0) {
+      expandidos.push(pagoArr);
+      continue;
+    }
+    
+    const montoTotal = parseFloat(pagoArr[7]) || 0;
+    const montoPorMes = Math.round(montoTotal / meses.length);
+    const montoConfigTotal = parseFloat(pagoArr[8]) || 0;
+    const montoConfigMes = Math.round(montoConfigTotal / meses.length);
+    
+    for (let j = 0; j < meses.length; j++) {
+      const mes = meses[j];
+      const mesNum = convertirMesANumero(mes);
+      if (!mesNum) continue;
+      
+      const montoAdeudado = Math.max(0, montoConfigMes - montoPorMes);
+      const estado = montoAdeudado === 0 ? "PAGADO" : "PARCIAL";
+      
+      const nuevoPago = [
+        pagoArr[0],
+        pagoArr[1],
+        pagoArr[2],
+        pagoArr[3],
+        pagoArr[4],
+        mesNum,
+        pagoArr[6],
+        montoPorMes,
+        montoConfigMes,
+        montoAdeudado,
+        "1 cuota",
+        "EFECTIVO",
+        "",
+        estado,
+        mes
+      ];
+      
+      expandidos.push(nuevoPago);
+    }
+  }
+  
+  return expandidos;
 }
 
 function procesarPagosBatch(config, pagosArray, tipo, dniAId, conceptos, pagosExistentes) {
@@ -844,9 +1036,11 @@ function procesarPagosBatch(config, pagosArray, tipo, dniAId, conceptos, pagosEx
   
   for (let pagoArr of pagosArray) {
     try {
-      const estId = dniAId[pagoArr[1]];
+      const dni = pagoArr[1];
+      const estId = dniAId[dni];
       if (!estId) {
         res.skipped++;
+        if (res.skipped <= 3) Logger.log(`     ⚠️ SKIP: DNI ${dni} no encontrado`);
         continue;
       }
       
@@ -913,7 +1107,6 @@ function procesarPagosBatch(config, pagosArray, tipo, dniAId, conceptos, pagosEx
     }
   }
   
-  // INSERT batch
   for (let i = 0; i < pagosParaInsertar.length; i += 20) {
     const batch = pagosParaInsertar.slice(i, i + 20);
     
@@ -931,16 +1124,17 @@ function procesarPagosBatch(config, pagosArray, tipo, dniAId, conceptos, pagosEx
       if (resp.getResponseCode() === 201 || resp.getResponseCode() === 200) {
         res.insertados += batch.length;
       } else {
+        Logger.log(`     ❌ Error INSERT batch ${i/20}: ${resp.getResponseCode()}`);
         res.errores += batch.length;
       }
     } catch (e) {
+      Logger.log(`     ❌ Error INSERT batch ${i/20}: ${e}`);
       res.errores += batch.length;
     }
     
     Utilities.sleep(DELAY_MS);
   }
   
-  // UPDATE batch
   for (let i = 0; i < pagosParaActualizar.length; i += 20) {
     const batch = pagosParaActualizar.slice(i, i + 20);
     
@@ -978,7 +1172,6 @@ function convertirMesANumero(mesDato) {
   return meses[m] || null;
 }
 
-// ✅ v2.9: GUARDAR LOG MULTI-INSTITUCIÓN
 function guardarResultadoFinalMulti(hojaSync, resultadoSync) {
   try {
     let logSheet = hojaSync.getSheetByName(LOG_SHEET_NAME);
@@ -1009,7 +1202,6 @@ function guardarResultadoFinalMulti(hojaSync, resultadoSync) {
   }
 }
 
-// ✅ v2.9: FUNCIONES MANUALES (CON UI) - SOLO PARA EJECUCIÓN MANUAL
 function mostrarResumenManual() {
   try {
     const ss = SpreadsheetApp.getActiveSpreadsheet();

@@ -655,7 +655,7 @@ export const ConfiguracionModerno: React.FC = () => {
                           {[
                             { label: 'Inscripción', key: 'monto_inscripcion' },
                             { label: 'Cuota Mensual', key: 'monto_cuota' },
-                            { label: 'Seguro (Total - se distribuye en 10 meses)', key: 'monto_seguro' },
+                            { label: 'Seguro (por mes)', key: 'monto_seguro' },
                           ].map((field) => (
                             <div key={field.key}>
                               <label className="block text-xs font-bold text-slate-300 mb-1">{field.label}</label>
@@ -719,7 +719,7 @@ export const ConfiguracionModerno: React.FC = () => {
                         <div>
                           <p className="text-slate-400">Seguro (total)</p>
                           <p className="font-semibold text-indigo-400">${form.monto_seguro.toFixed(2)}</p>
-                          <p className="text-xs text-slate-500">${(form.monto_seguro / 10).toFixed(2)}/mes</p>
+                          
                         </div>
                       </div>
                     )}
@@ -842,5 +842,6 @@ export const ConfiguracionModerno: React.FC = () => {
     </div>
   )
 }
+
 
 

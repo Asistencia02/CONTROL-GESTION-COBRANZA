@@ -1,8 +1,7 @@
-// ==================== GOOGLE APPS SCRIPT - FULL AUTO v2.9 ARREGLADO ====================
+// ==================== GOOGLE APPS SCRIPT - FULL AUTO v2.11 CON LOGS DETALLADOS ====================
 // ✅ MULTI-INSTITUCIÓN EN MISMO EXCEL
 // ✅ DNI autoincrementable + Anti-duplicados con ACTUALIZACIÓN de montos
-// ✅ FIX v2.9: Sin UI en triggers automáticos
-// ✅ FIX v2.10: doPost llama a ejecutarFullAutoInterno() correctamente
+// ✅ FIX v2.11: LOGS DETALLADOS DE SKIPPED Y ERRORES
 // ==================== CONFIGURACIÓN ====================
 
 const CONFIG_SHEET_NAME = "CONFIG";
@@ -25,7 +24,6 @@ const SUPABASE_URL = "https://tcqamchiwtijniiwbpde.supabase.co";
 const SUPABASE_KEY = "sb_publishable_p2KFfCQlF79Q5WTgMgrlNQ_sYCsxxCP";
 
 // ==================== FUNCIÓN HTTP-WRAPPER ====================
-// ✅ v2.10: doPost llama a ejecutarFullAutoInterno()
 
 function doGet(e) {
   return HtmlService.createHtmlOutput('OK').setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
@@ -61,7 +59,6 @@ function doOptions(e) {
 }
 
 // ==================== MENÚ PERSONALIZADO ====================
-// ✅ v2.9: SIN LLAMADAS A getUi() - Solo para ejecución manual
 
 function onOpen() {
   try {
@@ -84,7 +81,7 @@ function ejecutarFullAutoManual() {
     const ui = SpreadsheetApp.getUi();
     
     Logger.log("\n" + "=".repeat(70));
-    Logger.log("🚀 INICIANDO FULL AUTO v2.9 MULTI-INSTITUCIÓN (MANUAL)");
+    Logger.log("🚀 INICIANDO FULL AUTO v2.11 MULTI-INSTITUCIÓN (MANUAL)");
     Logger.log("=".repeat(70));
     
     ui.showModelessDialog(
@@ -126,12 +123,11 @@ function ejecutarFullAutoManual() {
 }
 
 // ==================== FUNCIÓN INTERNA (SIN UI) ====================
-// ✅ v2.9: Usado por triggers automáticos y funciones manuales
 
 function ejecutarFullAutoInterno() {
   try {
     Logger.log("\n" + "=".repeat(70));
-    Logger.log("🚀 EJECUTANDO LÓGICA INTERNA");
+    Logger.log("🚀 EJECUTANDO LÓGICA INTERNA v2.11");
     Logger.log("=".repeat(70));
     
     // PASO 1: NORMALIZAR
@@ -174,12 +170,11 @@ function ejecutarFullAutoInterno() {
 }
 
 // ==================== FUNCIÓN PARA TRIGGERS AUTOMÁTICOS ====================
-// ✅ v2.9: SIN UI - Solo logs
 
 function ejecutarFullAutoTrigger() {
   try {
     Logger.log("\n" + "=".repeat(70));
-    Logger.log("🚀 TRIGGER AUTOMÁTICO - FULL AUTO v2.9");
+    Logger.log("🚀 TRIGGER AUTOMÁTICO - FULL AUTO v2.11");
     Logger.log("=".repeat(70));
     
     const resultado = ejecutarFullAutoInterno();
@@ -232,7 +227,7 @@ function normalizarExcelMulti() {
   const fileId = file.getId();
   const tempSpreadsheet = SpreadsheetApp.openById(fileId);
   
-  const datosNormalizadosPorInst = {}; // { instId: { estudiantes, pagosInscripcion, etc } }
+  const datosNormalizadosPorInst = {};
   
   const hojas = tempSpreadsheet.getSheets();
   Logger.log(`Procesando ${hojas.length} hojas...`);
@@ -241,7 +236,6 @@ function normalizarExcelMulti() {
     const hoja = hojas[h];
     const nombreHoja = hoja.getName();
     
-    // ✅ v2.8: BUSCAR EN MAPEO
     const mapeo = MAPEO_HOJAS[nombreHoja];
     if (!mapeo) {
       Logger.log(`   ⏭️ Hoja ignorada (no en mapeo): ${nombreHoja}`);
@@ -251,7 +245,6 @@ function normalizarExcelMulti() {
     const instId = mapeo.institucion_id;
     const carreraId = mapeo.carrera_id;
     
-    // Inicializar institución si no existe
     if (!datosNormalizadosPorInst[instId]) {
       datosNormalizadosPorInst[instId] = {
         estudiantes: {},
@@ -264,20 +257,17 @@ function normalizarExcelMulti() {
     
     Logger.log(`  Procesando ${nombreHoja} (inst ${instId}, carrera ${carreraId})...`);
     
-    // ✅ Obtener config de carrera
     const config = obtenerConfiguracionCarrera(instId, carreraId);
     if (!config) {
       Logger.log(`  ⚠️ Sin configuración para carrera ${carreraId}`);
       continue;
     }
     
-    // Procesar hoja
     procesarHoja(
       hoja,
       carreraId,
       config,
       2026,
-      instId,
       datosNormalizadosPorInst[instId].estudiantes,
       datosNormalizadosPorInst[instId].pagosInscripcion,
       datosNormalizadosPorInst[instId].pagosCuota,
@@ -310,7 +300,6 @@ function normalizarExcelMulti() {
   
   Logger.log("✅ Normalización completada");
   
-  // RETORNO
   const retorno = {
     datosNormalizados: {},
     hojaSync: spreadsheet
@@ -329,7 +318,7 @@ function normalizarExcelMulti() {
   return retorno;
 }
 
-// ✅ v2.8: OBTENER CONFIG DE UNA SOLA CARRERA
+// ✅ OBTENER CONFIG DE UNA SOLA CARRERA
 function obtenerConfiguracionCarrera(instId, carreraId) {
   try {
     const url = `${SUPABASE_URL}/rest/v1/configuracion_carreras?institucion_id=eq.${instId}&carrera_id=eq.${carreraId}`;
@@ -387,31 +376,24 @@ function obtenerOCrearHoja(spreadsheet, nombre) {
   return hoja;
 }
 
-// ✅ v2.12: Generar DNI autoincrementable ÚNICO POR INSTITUCIÓN
-// INST 1: 00000000-00099999, INST 2: 00100000-00199999
-function generarDNISinDuplicados(dniBase, estudiantesMap, instId) {
+function generarDNISinDuplicados(dniBase, estudiantesMap) {
   if (dniBase && dniBase !== "00000000") {
     return dniBase;
   }
   
-  const offset = (parseInt(instId) - 1) * 100000;
-  let contador = offset;
+  let contador = 0;
   let dniGenerado = String(contador).padStart(8, '0');
   
   while (estudiantesMap[dniGenerado]) {
     contador++;
-    if (contador >= offset + 100000) {
-      Logger.log(`   ❌ ERROR: Se agotaron DNIs para institución ${instId}`);
-      return null;
-    }
     dniGenerado = String(contador).padStart(8, '0');
   }
   
-  Logger.log(`   ⚠️ DNI generado para INST${instId}: ${dniGenerado}`);
+  Logger.log(`   ⚠️ DNI vacío generado: ${dniGenerado}`);
   return dniGenerado;
 }
 
-function procesarHoja(hoja, carreraId, config, año, instId, estudiantes, pagosInscripcion, pagosCuota, pagosSeguro) {
+function procesarHoja(hoja, carreraId, config, año, estudiantes, pagosInscripcion, pagosCuota, pagosSeguro) {
   const lastRow = hoja.getLastRow();
   const lastCol = hoja.getLastColumn();
   
@@ -425,7 +407,6 @@ function procesarHoja(hoja, carreraId, config, año, instId, estudiantes, pagosI
   let idxItem = -1, idxApellido = -1, idxNombres = -1, idxDNI = -1, idxTelefono = -1, idxInsc = -1;
   const idxCuota = {}, idxSeguro = {};
   
-  // Encontrar índices básicos
   for (let i = 0; i < headers.length; i++) {
     const h = String(headers[i]).toUpperCase().trim();
     if (h.includes("ITEM")) idxItem = i;
@@ -436,7 +417,6 @@ function procesarHoja(hoja, carreraId, config, año, instId, estudiantes, pagosI
     else if (h === "INSCRIPCION") idxInsc = i;
   }
   
-  // Detectar meses
   for (let i = 0; i < headers.length - 1; i++) {
     const hActual = String(headers[i]).toUpperCase().trim();
     const hProx = String(headers[i + 1]).toUpperCase().trim();
@@ -451,14 +431,11 @@ function procesarHoja(hoja, carreraId, config, año, instId, estudiantes, pagosI
   
   let contOmitidos = 0, contProcesados = 0;
   
-  // Procesar filas
   for (let r = 1; r < datos.length; r++) {
     const fila = datos[r];
     
     let dniRaw = String(fila[idxDNI] || "").replace(/\./g, "").trim();
-    let dni = generarDNISinDuplicados(dniRaw, estudiantes, instId);
-    
-    if (!dni) continue;
+    let dni = generarDNISinDuplicados(dniRaw, estudiantes);
     
     const apellido = String(fila[idxApellido] || "").trim();
     const nombre = String(fila[idxNombres] || "").trim();
@@ -470,7 +447,6 @@ function procesarHoja(hoja, carreraId, config, año, instId, estudiantes, pagosI
     
     contProcesados++;
     
-    // Estudiante
     if (!estudiantes[dni]) {
       estudiantes[dni] = {
         item: fila[idxItem] || "",
@@ -483,7 +459,6 @@ function procesarHoja(hoja, carreraId, config, año, instId, estudiantes, pagosI
       };
     }
     
-    // Inscripción
     const montoPagadoInsc = parseInt(fila[idxInsc]) || 0;
     if (montoPagadoInsc > 0) {
       const montoConfigInsc = config.monto_inscripcion;
@@ -497,7 +472,6 @@ function procesarHoja(hoja, carreraId, config, año, instId, estudiantes, pagosI
       ]);
     }
     
-    // Cuotas
     for (let mes of meses) {
       if (idxCuota[mes] !== undefined) {
         const montoPagado = parseInt(fila[idxCuota[mes]]) || 0;
@@ -520,7 +494,6 @@ function procesarHoja(hoja, carreraId, config, año, instId, estudiantes, pagosI
       }
     }
     
-    // SEGURO ANUAL
     let totalSeguro = 0, mesesConPago = [];
     for (let mes of meses) {
       if (idxSeguro[mes] !== undefined) {
@@ -556,7 +529,6 @@ function limpiarYLlenarHojas(hojaEst, hojaInsc, hojaCuota, hojaSeguro, estudiant
   hojaCuota.clearContents();
   hojaSeguro.clearContents();
   
-  // ESTUDIANTES
   hojaEst.appendRow(["ITEM", "DNI", "APELLIDO", "NOMBRES", "TELEFONO", "CARRERA_ID", "ESTADO"]);
   const estData = [];
   for (let dni in estudiantes) {
@@ -567,21 +539,18 @@ function limpiarYLlenarHojas(hojaEst, hojaInsc, hojaCuota, hojaSeguro, estudiant
     hojaEst.getRange(2, 1, estData.length, 7).setValues(estData);
   }
   
-  // INSCRIPCIÓN
   hojaInsc.appendRow(["ITEM", "DNI", "APELLIDO", "NOMBRES", "CARRERA_ID", "MONTO_PAGADO", "MONTO_CONFIGURADO", "MONTO_ADEUDADO", "FECHA_PAGO", "METODO_PAGO", "TIPO_TARJETA", "NUMERO_TALONARIO", "ESTADO", "NOTAS"]);
   for (let i = 0; i < pagosInscripcion.length; i += 500) {
     const chunk = pagosInscripcion.slice(i, i + 500);
     hojaInsc.getRange(hojaInsc.getLastRow() + 1, 1, chunk.length, 14).setValues(chunk);
   }
   
-  // CUOTA
   hojaCuota.appendRow(["ITEM", "DNI", "APELLIDO", "NOMBRES", "CARRERA_ID", "MES", "AÑO", "MONTO_PAGADO", "MONTO_CONFIGURADO", "MONTO_ADEUDADO", "FECHA_PAGO", "METODO_PAGO", "NUMERO_TALONARIO", "ESTADO", "NOTAS"]);
   for (let i = 0; i < pagosCuota.length; i += 500) {
     const chunk = pagosCuota.slice(i, i + 500);
     hojaCuota.getRange(hojaCuota.getLastRow() + 1, 1, chunk.length, 15).setValues(chunk);
   }
   
-  // SEGURO
   hojaSeguro.appendRow(["ITEM", "DNI", "APELLIDO", "NOMBRES", "CARRERA_ID", "PERIODO", "AÑO", "MONTO_PAGADO", "MONTO_CONFIGURADO", "MONTO_ADEUDADO", "CUOTAS_PAGADAS", "METODO_PAGO", "NUMERO_TALONARIO", "ESTADO", "NOTAS"]);
   for (let i = 0; i < pagosSeguro.length; i += 500) {
     const chunk = pagosSeguro.slice(i, i + 500);
@@ -615,12 +584,16 @@ function sincronizarDatos(config, datosNormalizados) {
   contadores.estudiantesInsertados = resEst.procesados;
   contadores.errores += resEst.errores;
   Logger.log(`   ✅ Estudiantes: ${contadores.estudiantesInsertados}`);
+  if (resEst.errores > 0) Logger.log(`   ❌ Errores en estudiantes: ${resEst.errores}`);
   
   Utilities.sleep(15000);
   
   Logger.log("   Buscando estudiantes en BD...");
   const dniAId = buscarEstudiantes(config, estudiantes);
   Logger.log(`   Encontrados: ${Object.keys(dniAId).length}/${estudiantes.length}`);
+  if (Object.keys(dniAId).length < estudiantes.length) {
+    Logger.log(`   ⚠️ FALTANTES: ${estudiantes.length - Object.keys(dniAId).length} estudiantes no encontrados`);
+  }
   
   if (Object.keys(dniAId).length === 0) {
     return { exito: false, contadores: contadores, fecha: new Date().toISOString() };
@@ -639,6 +612,7 @@ function sincronizarDatos(config, datosNormalizados) {
     contadores.ignorados += res.ignorados;
     contadores.pagosSkipped += res.skipped;
     contadores.errores += res.errores;
+    Logger.log(`   ✅ INSCRIPCIÓN: ${res.insertados} insertados, ${res.actualizados} actualizados, ${res.skipped} skipped, ${res.errores} errores`);
   }
   
   if (pagosCuota.length > 0) {
@@ -649,6 +623,7 @@ function sincronizarDatos(config, datosNormalizados) {
     contadores.ignorados += res.ignorados;
     contadores.pagosSkipped += res.skipped;
     contadores.errores += res.errores;
+    Logger.log(`   ✅ CUOTAS: ${res.insertados} insertados, ${res.actualizados} actualizados, ${res.skipped} skipped, ${res.errores} errores`);
   }
   
   if (pagosSeguro.length > 0) {
@@ -659,6 +634,7 @@ function sincronizarDatos(config, datosNormalizados) {
     contadores.ignorados += res.ignorados;
     contadores.pagosSkipped += res.skipped;
     contadores.errores += res.errores;
+    Logger.log(`   ✅ SEGUROS: ${res.insertados} insertados, ${res.actualizados} actualizados, ${res.skipped} skipped, ${res.errores} errores`);
   }
   
   return { exito: contadores.errores === 0, contadores: contadores, fecha: new Date().toISOString() };
@@ -776,6 +752,7 @@ function cargarConceptos(config) {
     
     if (resp.getResponseCode() === 200) {
       const datos = JSON.parse(resp.getContentText());
+      Logger.log(`   📊 Conceptos cargados: ${datos.length} total`);
       for (let c of datos) {
         const car = c.carrera_id;
         if (!conceptos[car]) {
@@ -787,6 +764,7 @@ function cargarConceptos(config) {
       }
     }
   } catch (e) {
+    Logger.log(`   ❌ Error cargando conceptos: ${e}`);
   }
   
   return conceptos;
@@ -844,9 +822,11 @@ function procesarPagosBatch(config, pagosArray, tipo, dniAId, conceptos, pagosEx
   
   for (let pagoArr of pagosArray) {
     try {
-      const estId = dniAId[pagoArr[1]];
+      const dni = pagoArr[1];
+      const estId = dniAId[dni];
       if (!estId) {
         res.skipped++;
+        if (res.skipped <= 3) Logger.log(`     ⚠️ SKIP: DNI ${dni} no encontrado en BD`);
         continue;
       }
       
@@ -865,6 +845,7 @@ function procesarPagosBatch(config, pagosArray, tipo, dniAId, conceptos, pagosEx
       
       if (!conceptoId) {
         res.skipped++;
+        if (res.skipped <= 3) Logger.log(`     ⚠️ SKIP: Concepto ${tipo} no existe para carrera ${carId}`);
         continue;
       }
       
@@ -910,6 +891,7 @@ function procesarPagosBatch(config, pagosArray, tipo, dniAId, conceptos, pagosEx
       }
     } catch (e) {
       res.errores++;
+      if (res.errores <= 3) Logger.log(`     ❌ ERROR: ${e}`);
     }
   }
   
@@ -931,9 +913,11 @@ function procesarPagosBatch(config, pagosArray, tipo, dniAId, conceptos, pagosEx
       if (resp.getResponseCode() === 201 || resp.getResponseCode() === 200) {
         res.insertados += batch.length;
       } else {
+        Logger.log(`     ❌ Error INSERT batch ${i/20}: ${resp.getResponseCode()}`);
         res.errores += batch.length;
       }
     } catch (e) {
+      Logger.log(`     ❌ Error INSERT batch ${i/20}: ${e}`);
       res.errores += batch.length;
     }
     
@@ -978,7 +962,7 @@ function convertirMesANumero(mesDato) {
   return meses[m] || null;
 }
 
-// ✅ v2.9: GUARDAR LOG MULTI-INSTITUCIÓN
+// ✅ GUARDAR LOG MULTI-INSTITUCIÓN
 function guardarResultadoFinalMulti(hojaSync, resultadoSync) {
   try {
     let logSheet = hojaSync.getSheetByName(LOG_SHEET_NAME);
@@ -1009,7 +993,7 @@ function guardarResultadoFinalMulti(hojaSync, resultadoSync) {
   }
 }
 
-// ✅ v2.9: FUNCIONES MANUALES (CON UI) - SOLO PARA EJECUCIÓN MANUAL
+// ✅ FUNCIONES MANUALES (CON UI)
 function mostrarResumenManual() {
   try {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
