@@ -24,39 +24,47 @@ export const useImportadorGoogleSheets = create<ImportadorStore>((set, get) => (
       }
       
       console.log(`🔄 Sincronizando...`)
+      console.log(`📍 URL: ${webhookUrl}`)
       
-      const response = await fetch(webhookUrl + "?accion=sincronizar", {
+      // ✅ ARREGLADO v2.9: Sin mode:'no-cors' para recibir JSON
+      const response = await fetch(webhookUrl, {
         method: "POST",
-        mode: 'no-cors',
-        headers: { "Content-Type": "application/json" }
+        headers: { 
+          "Content-Type": "application/json",
+          "Accept": "application/json"
+        },
+        body: JSON.stringify({ accion: "sincronizar", institucion_id })
       })
       
-      const resultado = await response.text()
-      console.log('Response recibida:', resultado)
+      console.log(`📊 Status: ${response.status} ${response.statusText}`)
       
-      if (!resultado || resultado.trim() === '') {
-        throw new Error('Respuesta vacía del servidor')
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`)
       }
       
       let data
       try {
-        data = JSON.parse(resultado)
-      } catch (e) {
-        console.error('Error parseando JSON:', e)
-        console.error('Response text:', resultado)
-        throw new Error(`Respuesta inválida del servidor: ${resultado.substring(0, 100)}`)
+        data = await response.json()
+      } catch (parseError) {
+        console.error('❌ Error parseando JSON:', parseError)
+        const text = await response.text()
+        console.error('📝 Response text:', text)
+        throw new Error(`Respuesta inválida: ${text.substring(0, 100)}`)
       }
       
-      if (!data.exito) {
-        throw new Error(data.mensaje || "Error en sincronización")
+      console.log('✅ Resultado:', data)
+      
+      if (!data || !data.exito) {
+        throw new Error(data?.mensaje || "Error en sincronización")
       }
       
       set({ resultado: data, loading: false })
+      console.log('🎉 Sincronización exitosa')
       
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Error al sincronizar'
       set({ error: message, loading: false })
-      console.error('Error sincronizando:', err)
+      console.error('❌ Error sincronizando:', err)
     }
   },
 
