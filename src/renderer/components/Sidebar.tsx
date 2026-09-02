@@ -85,6 +85,12 @@ const NAV_ITEMS: NavItem[] = [
     color: 'from-amber-500 to-yellow-500',
   },
   {
+    id: 'kioscoconfig',
+    label: 'Config. Kiosco',
+    icon: <Settings size={20} />,
+    color: 'from-orange-500 to-amber-500',
+  },
+  {
     id: 'testing',
     label: '🧪 Testing (Deuda)',
     icon: <TestTube size={20} />,
