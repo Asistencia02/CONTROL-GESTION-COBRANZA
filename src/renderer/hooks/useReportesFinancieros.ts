@@ -72,6 +72,11 @@ export interface ProyeccionAño {
   fecha_calculo: string
 }
 
+// ========== CONSTANTES ==========
+const PRIMER_MES_ACADEMICO = 3  // Marzo
+const ULTIMO_MES_ACADEMICO = 8  // Agosto
+const PRIMER_DIA_VENCIMIENTO = 10
+
 export const useReportesFinancieros = (institucionId: number) => {
   const { obtenerTotalVentasPeriodo } = useVentasInsumos()
   const [resumenEjecutivo, setResumenEjecutivo] = useState<ResumenEjecutivo | null>(null)
@@ -96,8 +101,8 @@ export const useReportesFinancieros = (institucionId: number) => {
       const mesActual = today.getMonth() + 1
       const anioActual = today.getFullYear()
       
-      // Mes se vence el día 10 - si es antes del día 10, aún no vence
-      const mesVencidoActual = diaActual >= 10 ? mesActual : mesActual - 1
+      // Día de vencimiento: 10 - si es antes del día 10, el mes aún no vence
+      const mesVencidoActual = diaActual >= PRIMER_DIA_VENCIMIENTO ? mesActual : mesActual - 1
       const anioVencidoActual = mesVencidoActual < mesActual ? anioActual : anioActual
 
       const mesesNombre = ['', 'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
@@ -150,15 +155,17 @@ export const useReportesFinancieros = (institucionId: number) => {
         (!c.mes || !c.año)
       )
 
-      // CUOTAS + SEGURO (ambos con mes/año - hasta el mes actual inclusive)
-      // ✅ ARREGLADO: Incluir INSCRIPCION incluso sin mes/año
+      // CUOTAS + SEGURO (ambos con mes/año - SOLO meses académicos 3-8, hasta el mes actual inclusive)
       const conceptosVencidos = (conceptos || []).filter(c => {
         // Incluir INSCRIPCION sin mes/año
         if (c.tipo?.toUpperCase() === 'INSCRIPCION' && (!c.mes || !c.año)) {
-          return true  // ← CAMBIO: Antes era return false
+          return true
         }
         // Para CUOTA y SEGURO, aplicar filtro de mes/año
         if (c.mes && c.año) {
+          // Excluir enero y febrero - solo contar marzo a agosto
+          if (c.mes < PRIMER_MES_ACADEMICO || c.mes > ULTIMO_MES_ACADEMICO) return false
+          
           if (c.año < anioActual) return true
           if (c.año === anioActual && c.mes <= mesActual) return true
         }
@@ -223,6 +230,7 @@ export const useReportesFinancieros = (institucionId: number) => {
       // Si día >= 10: mes actual ya vence
       const conceptosVencidosMoraLocal = conceptosVencidos.filter(c => {
         if (c.mes && c.año) {
+          if (c.mes < PRIMER_MES_ACADEMICO || c.mes > ULTIMO_MES_ACADEMICO) return false
           if (c.año < anioVencidoActual) return true
           if (c.año === anioVencidoActual && c.mes <= mesVencidoActual) return true
         }
@@ -275,8 +283,9 @@ export const useReportesFinancieros = (institucionId: number) => {
         if (c.tipo?.toUpperCase() === 'INSCRIPCION' && (!c.mes || !c.año)) {
           return false
         }
-        // Solo incluir CUOTA y SEGURO de meses ANTERIORES
+        // Solo incluir CUOTA y SEGURO de meses ANTERIORES - excluir enero y febrero
         if (c.mes && c.año) {
+          if (c.mes < PRIMER_MES_ACADEMICO || c.mes > ULTIMO_MES_ACADEMICO) return false
           if (c.año < anioActual) return true
           if (c.año === anioActual && c.mes < mesActual) return true
         }
