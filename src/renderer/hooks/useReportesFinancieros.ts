@@ -236,10 +236,10 @@ export const useReportesFinancieros = (institucionId: number) => {
       let estudiantesEnMora = 0
       const conceptoPorEstudiante = new Map<number, number>()
 
-      // Calcular deuda por estudiante - SOLO CONCEPTOS VENCIDOS ANTES DE DÍA 10
+      // Calcular deuda por estudiante - USAR conceptosVencidos COMPLETO (sin filtro día 10)
       estudiantesActivos.forEach(est => {
         let deudaEst = 0
-        conceptosVencidosMoraLocal.forEach(concepto => {
+        conceptosVencidos.forEach(concepto => {
           // SOLO conceptos de la carrera del estudiante
           if (concepto.carrera_id !== est.carrera_id) return
           
