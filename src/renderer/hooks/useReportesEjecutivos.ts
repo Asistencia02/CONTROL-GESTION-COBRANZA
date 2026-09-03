@@ -234,6 +234,12 @@ export const useReportesEjecutivos = () => {
       )
 
       const conceptosVencidos = (conceptos || []).filter(c => {
+        // INSCRIPCIONES sin mes/año (vencidas siempre)
+        if (!c.mes && !c.año && c.tipo?.toUpperCase() === 'INSCRIPCION') {
+          return true
+        }
+        
+        // Conceptos con mes/año vencidos
         if (c.mes && c.año) {
           if (c.año < anioActual) return true
           if (c.año === anioActual) {
@@ -241,9 +247,9 @@ export const useReportesEjecutivos = () => {
             if (c.mes === mesActual && diaActual > 10) return true
           }
           return false
-        } else {
-          return c.tipo?.toUpperCase() === 'INSCRIPCION'  // SOLO INSCRIPCIONES sin mes/año
         }
+        
+        return false
       })
 
       const conceptosFiltrados = [...inscripciones, ...conceptosVencidos]
