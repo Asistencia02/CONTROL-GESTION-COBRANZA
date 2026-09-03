@@ -275,6 +275,13 @@ export const useReportesEjecutivos = () => {
 
       const pagosValidos = [...(pagos || []), ...pagosMultiplesFormato]
 
+      // Crear map de pagos: ULTIMO PAGO por concepto-estudiante (igual a useDeudas.ts)
+      const pagosMap = new Map<string, number>()
+      pagosValidos.forEach(p => {
+        const key = `${p.estudiante_id}-${p.concepto_id}`
+        pagosMap.set(key, p.monto_pagado)  // Sobrescribe con el ultimo pago
+      })
+
       // ========== GASTOS ==========
       const { data: gastosData, error: errGastos } = await supabase
         .from('gastos')
@@ -309,8 +316,8 @@ export const useReportesEjecutivos = () => {
         let tieneDeuda = false
         conceptosVencidos.forEach(concepto => {
           if (concepto.carrera_id !== est.carrera_id) return
-          const totalPagado = pagosValidos.filter(p => p.estudiante_id === est.id && p.concepto_id === concepto.id).reduce((sum, p) => sum + p.monto_pagado, 0)
-          const deudaConcepto = Math.max(0, concepto.monto - totalPagado)
+          const montoPago = pagosMap.get(`${est.id}-${concepto.id}`) || 0
+          const deudaConcepto = Math.max(0, concepto.monto - montoPago)
           deudaEst += deudaConcepto
           if (deudaConcepto > 0) tieneDeuda = true
         })
@@ -405,8 +412,8 @@ export const useReportesEjecutivos = () => {
             if (c.carrera_id !== carr.carrera_id) return
             const est = estudiantesActivos.find(e => e.id === estId)
             if (!est || est.carrera_id !== carr.carrera_id) return
-            const totalPagado = pagosValidos.filter(p => p.estudiante_id === estId && p.concepto_id === c.id).reduce((sum, p) => sum + p.monto_pagado, 0)
-            const deudaConcepto = Math.max(0, c.monto - totalPagado)
+            const montoPago = pagosMap.get(`${estId}-${c.id}`) || 0
+            const deudaConcepto = Math.max(0, c.monto - montoPago)
             deudaEst += deudaConcepto
             if (deudaConcepto > 0) tieneDeuda = true
           })
@@ -444,8 +451,8 @@ export const useReportesEjecutivos = () => {
           let mesesEnMora = 1
           conceptosVencidos.forEach(c => {
             if (c.carrera_id === est.carrera_id) {
-              const totalPagado = pagosValidos.filter(p => p.estudiante_id === est.id && p.concepto_id === c.id).reduce((sum, p) => sum + p.monto_pagado, 0)
-              const deudaConcepto = Math.max(0, c.monto - totalPagado)
+              const montoPago = pagosMap.get(`${est.id}-${c.id}`) || 0
+              const deudaConcepto = Math.max(0, c.monto - montoPago)
               if (deudaConcepto > 0 && c.mes && c.año) {
                 mesesEnMora = Math.max(mesesEnMora, mesActual - c.mes + (anioActual - c.año) * 12)
               }
