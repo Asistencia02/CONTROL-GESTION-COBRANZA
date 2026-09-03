@@ -234,12 +234,16 @@ export const useReportesEjecutivos = () => {
       )
 
       const conceptosVencidos = (conceptos || []).filter(c => {
-        if (c.tipo?.toUpperCase() === 'INSCRIPCION' && (!c.mes || !c.año)) return true
         if (c.mes && c.año) {
           if (c.año < anioActual) return true
-          if (c.año === anioActual && c.mes <= mesActual) return true
+          if (c.año === anioActual) {
+            if (c.mes < mesActual) return true
+            if (c.mes === mesActual && diaActual > 10) return true
+          }
+          return false
+        } else {
+          return true
         }
-        return false
       })
 
       const conceptosFiltrados = [...inscripciones, ...conceptosVencidos]
