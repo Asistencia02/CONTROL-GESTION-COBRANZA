@@ -293,24 +293,25 @@ export const useReportesEjecutivos = () => {
         gastosPorCategoria[g.categoria] = (gastosPorCategoria[g.categoria] || 0) + g.monto
       })
 
-      // ========== CALCULAR MÉTRICAS ANUAL ==========
+      // ========== CALCULAR METRICAS ANUAL ==========
       let totalRecaudable = 0
       let totalRecaudado = 0
       let estudiantesEnMora = 0
 
-      // Calcular deuda por estudiante PRIMERO para identificar quiénes están en mora
+      // Calcular deuda: AL DIA = pago TODOS los conceptos vencidos
       const deudaPorEstudiante = new Map<number, number>()
       estudiantesActivos.forEach(est => {
         let deudaEst = 0
+        let tieneDeuda = false
         conceptosVencidos.forEach(concepto => {
           if (concepto.carrera_id !== est.carrera_id) return
-          const tienePago = pagosValidos.some(p => p.estudiante_id === est.id && p.concepto_id === concepto.id && p.monto_pagado >= concepto.monto)
-          if (!tienePago) {
-            deudaEst += concepto.monto
-          }
+          const totalPagado = pagosValidos.filter(p => p.estudiante_id === est.id && p.concepto_id === concepto.id).reduce((sum, p) => sum + p.monto_pagado, 0)
+          const deudaConcepto = Math.max(0, concepto.monto - totalPagado)
+          deudaEst += deudaConcepto
+          if (deudaConcepto > 0) tieneDeuda = true
         })
         deudaPorEstudiante.set(est.id, deudaEst)
-        if (deudaEst > 0) {
+        if (tieneDeuda) {
           estudiantesEnMora++
         }
       })
@@ -395,16 +396,17 @@ export const useReportesEjecutivos = () => {
 
         estCarrera.forEach(estId => {
           let deudaEst = 0
+          let tieneDeuda = false
           conceptosVencidos.forEach(c => {
             if (c.carrera_id !== carr.carrera_id) return
             const est = estudiantesActivos.find(e => e.id === estId)
             if (!est || est.carrera_id !== carr.carrera_id) return
-            const tienePago = pagosValidos.some(p => p.estudiante_id === estId && p.concepto_id === c.id && p.monto_pagado >= c.monto)
-            if (!tienePago) {
-              deudaEst += c.monto
-            }
+            const totalPagado = pagosValidos.filter(p => p.estudiante_id === estId && p.concepto_id === c.id).reduce((sum, p) => sum + p.monto_pagado, 0)
+            const deudaConcepto = Math.max(0, c.monto - totalPagado)
+            deudaEst += deudaConcepto
+            if (deudaConcepto > 0) tieneDeuda = true
           })
-          if (deudaEst > 0) {
+          if (tieneDeuda) {
             enMoraCarrera++
             deudaCarrera += deudaEst
           }
@@ -438,8 +440,9 @@ export const useReportesEjecutivos = () => {
           let mesesEnMora = 1
           conceptosVencidos.forEach(c => {
             if (c.carrera_id === est.carrera_id) {
-              const tienePago = pagosValidos.some(p => p.estudiante_id === est.id && p.concepto_id === c.id && p.monto_pagado >= c.monto)
-              if (!tienePago && c.mes && c.año) {
+              const totalPagado = pagosValidos.filter(p => p.estudiante_id === est.id && p.concepto_id === c.id).reduce((sum, p) => sum + p.monto_pagado, 0)
+              const deudaConcepto = Math.max(0, c.monto - totalPagado)
+              if (deudaConcepto > 0 && c.mes && c.año) {
                 mesesEnMora = Math.max(mesesEnMora, mesActual - c.mes + (anioActual - c.año) * 12)
               }
             }
@@ -481,7 +484,7 @@ export const useReportesEjecutivos = () => {
         gastosPorCategoria,
       }
     } catch (err) {
-      console.error(`[REPORTES] Error calculando métricas:`, err)
+      console.error(`[REPORTES] Error calculando metricas:`, err)
       throw err
     }
   }
@@ -489,7 +492,7 @@ export const useReportesEjecutivos = () => {
   const generarAlertas = (isipp: any, milagros: any, consolidado: any): Alerta[] => {
     const alertas: Alerta[] = []
 
-    // Alertas CRÍTICAS
+    // Alertas CRITICAS
     if (isipp.mora > 65) {
       alertas.push({
         id: 'mora-isipp',
@@ -542,7 +545,7 @@ export const useReportesEjecutivos = () => {
         titulo: 'Gastos Altos en ISIPP',
         descripcion: `Gastos representan ${((isipp.gastosAnual / isipp.recaudoAnual) * 100).toFixed(1)}% de recaudos`,
         instituo: 'ISIPP',
-        accion: 'Revisar gastos - posible reducción',
+        accion: 'Revisar gastos - posible reduccion',
       })
     }
 
@@ -553,7 +556,7 @@ export const useReportesEjecutivos = () => {
         titulo: 'Gastos Altos en Milagros',
         descripcion: `Gastos representan ${((milagros.gastosAnual / milagros.recaudoAnual) * 100).toFixed(1)}% de recaudos`,
         instituo: 'Milagros',
-        accion: 'Revisar gastos - posible reducción',
+        accion: 'Revisar gastos - posible reduccion',
       })
     }
 
@@ -691,7 +694,7 @@ export const useReportesEjecutivos = () => {
           roiEstimado: (milagrosAjustado.netoAnual / milagrosData.gastosAnual) * 100,
         },
         oportunidades: [
-          `${comparativa.institucionMejor} es más eficiente (+${Math.abs(comparativa.eficienciaDif).toFixed(1)}%)`,
+          `${comparativa.institucionMejor} es mas eficiente (+${Math.abs(comparativa.eficienciaDif).toFixed(1)}%)`,
           `Dinero disponible para mejoras: ${new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(consolidado.dineroParaMejoras)}`,
           `Top 10 morosos representa: ${new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(isippData.topMorosos.slice(0, 10).reduce((s, m) => s + m.deuda, 0) + milagrosData.topMorosos.slice(0, 10).reduce((s, m) => s + m.deuda, 0))}`,
         ],
@@ -763,7 +766,7 @@ const generateRecommendations = (isipp: any, milagros: any): string[] => {
     recs.push(`Milagros: estrategia de cobranza intensiva para recuperar ${new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(milagros.topMorosos.slice(0, 10).reduce((s, m) => s + m.deuda, 0))}`)
   }
 
-  recs.push(`Dinero disponible para inversión: reinvertir en TI, infraestructura o publicidad`)
+  recs.push(`Dinero disponible para inversion: reinvertir en TI, infraestructura o publicidad`)
 
   return recs
 }
