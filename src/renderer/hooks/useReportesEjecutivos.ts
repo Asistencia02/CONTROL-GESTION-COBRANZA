@@ -298,6 +298,8 @@ export const useReportesEjecutivos = () => {
       let totalRecaudado = 0
       let estudiantesEnMora = 0
 
+      // Calcular deuda por estudiante PRIMERO para identificar quiénes están en mora
+      const deudaPorEstudiante = new Map<number, number>()
       estudiantesActivos.forEach(est => {
         let deudaEst = 0
         conceptosVencidos.forEach(concepto => {
@@ -307,18 +309,22 @@ export const useReportesEjecutivos = () => {
             deudaEst += concepto.monto
           }
         })
+        deudaPorEstudiante.set(est.id, deudaEst)
         if (deudaEst > 0) {
           estudiantesEnMora++
         }
       })
 
-      totalRecaudable = 0
+      // Calcular totalRecaudable: cada estudiante tiene conceptos por su carrera
       estudiantesActivos.forEach(est => {
-        const conceptosDelEstudiante = conceptosFiltrados.filter(c => c.carrera_id === est.carrera_id)
-        conceptosDelEstudiante.forEach(c => {
-          totalRecaudable += c.monto
+        conceptosFiltrados.forEach(c => {
+          if (c.carrera_id === est.carrera_id) {
+            totalRecaudable += c.monto
+          }
         })
       })
+
+      // Calcular totalRecaudado: suma de todos los pagos registrados
       totalRecaudado = pagosValidos.reduce((sum, p) => sum + p.monto_pagado, 0)
 
       const adeudadoAnual = Math.max(0, totalRecaudable - totalRecaudado)
@@ -426,31 +432,26 @@ export const useReportesEjecutivos = () => {
       // ========== TOP MOROSOS ==========
       const morosos: TopMoroso[] = []
       estudiantesActivos.forEach(est => {
-        let deudaEst = 0
-        let mesesEnMora = 0
-
-        conceptosVencidos.forEach(c => {
-          if (c.carrera_id !== est.carrera_id) return
-          const tienePago = pagosValidos.some(p => p.estudiante_id === est.id && p.concepto_id === c.id && p.monto_pagado >= c.monto)
-          if (!tienePago) {
-            deudaEst += c.monto
-            if (c.mes && c.año) {
-              const mesKey = `${c.año}-${c.mes}`
-              if (!morosos.find(m => m.dni === est.dni)?.mesesEnMora) {
-                mesesEnMora = Math.max(mesesEnMora, mesActual - c.mes)
+        const deudaEst = deudaPorEstudiante.get(est.id) || 0
+        if (deudaEst > 0) {
+          // Calcular meses en mora
+          let mesesEnMora = 1
+          conceptosVencidos.forEach(c => {
+            if (c.carrera_id === est.carrera_id) {
+              const tienePago = pagosValidos.some(p => p.estudiante_id === est.id && p.concepto_id === c.id && p.monto_pagado >= c.monto)
+              if (!tienePago && c.mes && c.año) {
+                mesesEnMora = Math.max(mesesEnMora, mesActual - c.mes + (anioActual - c.año) * 12)
               }
             }
-          }
-        })
+          })
 
-        if (deudaEst > 0) {
           morosos.push({
             ranking: 0,
             dni: est.dni || '',
             nombre: `${est.nombre} ${est.apellido}`,
             carrera: (est as any).carreras?.nombre || '',
             deuda: deudaEst,
-            mesesEnMora: Math.max(1, mesesEnMora),
+            mesesEnMora,
             institucion: institucionId === 1 ? 'ISIPP' : 'Milagros',
           })
         }
@@ -480,7 +481,7 @@ export const useReportesEjecutivos = () => {
         gastosPorCategoria,
       }
     } catch (err) {
-      console.error(`[REPORTES] Error calculando ISIPP:`, err)
+      console.error(`[REPORTES] Error calculando métricas:`, err)
       throw err
     }
   }
@@ -561,8 +562,8 @@ export const useReportesEjecutivos = () => {
       alertas.push({
         id: 'neto-excelente',
         tipo: 'BUENA',
-        titulo: '¡Excelente Neto!',
-        descripcion: `Neto disponible: $${consolidado.netoTotal.toLocaleString()}`,
+        titulo: 'Excelente Neto',
+        descripcion: `Neto disponible: ${new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(consolidado.netoTotal)}`,
         accion: 'Dinero disponible para reinversiones y mejoras',
       })
     }
@@ -691,18 +692,13 @@ export const useReportesEjecutivos = () => {
         },
         oportunidades: [
           `${comparativa.institucionMejor} es más eficiente (+${Math.abs(comparativa.eficienciaDif).toFixed(1)}%)`,
-          `Dinero disponible para mejoras: $${consolidado.dineroParaMejoras.toLocaleString()}`,
-          `Top 10 morosos representa: $${(isippData.topMorosos.slice(0, 10).reduce((s, m) => s + m.deuda, 0) + milagrosData.topMorosos.slice(0, 10).reduce((s, m) => s + m.deuda, 0)).toLocaleString()}`,
+          `Dinero disponible para mejoras: ${new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(consolidado.dineroParaMejoras)}`,
+          `Top 10 morosos representa: ${new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(isippData.topMorosos.slice(0, 10).reduce((s, m) => s + m.deuda, 0) + milagrosData.topMorosos.slice(0, 10).reduce((s, m) => s + m.deuda, 0))}`,
         ],
       }
 
       // ALERTAS
       const alertas = generarAlertas(isippData, milagrosAjustado, consolidado)
-
-      // TOP MOROSOS CONSOLIDADO
-      const topMorososGlobal = [...isippData.topMorosos, ...milagrosData.topMorosos]
-        .sort((a, b) => b.deuda - a.deuda)
-        .slice(0, 20)
 
       setData({
         consolidado,
@@ -756,15 +752,15 @@ const generateRecommendations = (isipp: any, milagros: any): string[] => {
   }
 
   if ((isipp.gastosAnual / isipp.recaudoAnual) > (milagros.gastosAnual / milagros.recaudoAnual)) {
-    recs.push(`ISIPP: reducir gastos 10% = +$${Math.round((isipp.gastosAnual * 0.1).toLocaleString())} neto`)
+    recs.push(`ISIPP: reducir gastos 10% = +${new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(isipp.gastosAnual * 0.1)} neto`)
   }
 
   if (isipp.mora > 50) {
-    recs.push(`ISIPP: contactar top morosos para recuperar $${Math.round(isipp.topMorosos.slice(0, 10).reduce((s, m) => s + m.deuda, 0)).toLocaleString()}`)
+    recs.push(`ISIPP: contactar top morosos para recuperar ${new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(isipp.topMorosos.slice(0, 10).reduce((s, m) => s + m.deuda, 0))}`)
   }
 
   if (milagros.mora > 50) {
-    recs.push(`Milagros: estrategia de cobranza intensiva para recuperar $${Math.round(milagros.topMorosos.slice(0, 10).reduce((s, m) => s + m.deuda, 0)).toLocaleString()}`)
+    recs.push(`Milagros: estrategia de cobranza intensiva para recuperar ${new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(milagros.topMorosos.slice(0, 10).reduce((s, m) => s + m.deuda, 0))}`)
   }
 
   recs.push(`Dinero disponible para inversión: reinvertir en TI, infraestructura o publicidad`)
