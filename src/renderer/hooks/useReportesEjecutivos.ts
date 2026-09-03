@@ -242,7 +242,7 @@ export const useReportesEjecutivos = () => {
           }
           return false
         } else {
-          return true
+          return c.tipo?.toUpperCase() === 'INSCRIPCION'  // SOLO INSCRIPCIONES sin mes/año
         }
       })
 
