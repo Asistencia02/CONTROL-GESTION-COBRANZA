@@ -81,7 +81,7 @@ export const App: React.FC = () => {
     }
 
     // Validar acceso al módulo
-    if (!modulosPermitidos.includes(activeModule) && activeModule !== 'dashboard') {
+    if (!modulosPermitidos.includes(activeModule) && activeModule !== 'dashboard' && activeModule !== 'reportesejecutivos') {
       return (
         <div className="flex items-center justify-center h-screen">
           <div className="text-center">

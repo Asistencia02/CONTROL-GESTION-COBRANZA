@@ -127,9 +127,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   const [hoveredItem, setHoveredItem] = useState<string | null>(null)
 
-  // Filtrar items según permisos - NO MOSTRAR DASHBOARD SI NO TIENE PERMISO
+  // Filtrar items según permisos
   const itemsVisibles = NAV_ITEMS.filter(item => {
-    if (item.id === 'testing') return false // Ocultar testing
+    if (item.id === 'testing') return false
+    if (item.id === 'reportesejecutivos') return true
     if (item.id === 'dashboard') return modulosPermitidos.includes('dashboard')
     return modulosPermitidos.includes(item.id)
   })
