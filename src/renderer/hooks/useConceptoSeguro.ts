@@ -19,8 +19,8 @@ export const crearConceptosSeguroDistribuido = async (institucionId: number, car
       return { success: true, created: 0, message: 'Ya existen 10 conceptos de seguro' }
     }
 
-    // Crear 10 conceptos de seguro (1 por mes)
-    const montoMensual = Math.round((montoSeguro / 10) * 100) / 100 // Redondear a 2 decimales
+    // ✅ v2.FIX: Usar monto_seguro directamente (NO dividir por 10)
+    // Crear 10 conceptos de seguro (1 por mes) con el monto configurado
     const conceptosACrear: any[] = []
 
     for (let mes = 1; mes <= 10; mes++) {
@@ -29,11 +29,11 @@ export const crearConceptosSeguroDistribuido = async (institucionId: number, car
         carrera_id: carreraId,
         nombre: `Seguro - Mes ${mes}`,
         tipo: 'SEGURO',
-        monto: montoMensual,
+        monto: montoSeguro,
         mes: mes,
         año: new Date().getFullYear(),
         activo: true,
-        descripcion: `Pago de seguro mensual (${montoMensual * 10} total distribuido en 10 cuotas)`,
+        descripcion: `Pago de seguro mensual (${montoSeguro} por mes)`,
       })
     }
 

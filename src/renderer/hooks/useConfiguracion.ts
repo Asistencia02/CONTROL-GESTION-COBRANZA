@@ -1,4 +1,4 @@
-﻿import { create } from 'zustand'
+import { create } from 'zustand'
 import { supabase } from '@renderer/lib/supabase'
 
 export interface ConfiguracionCarrera {
@@ -140,12 +140,12 @@ export const useConfiguracion = create<UseConfiguracionStore>((set, get) => ({
         // Meses existentes
         const mesesExistentes = new Set(conceptosSeguro.map(c => `${c.año}-${c.mes}`))
         
-        // UPDATE conceptos existentes - DIVIDIR SEGURO POR 10
-        const montoSeguroMensual = Math.round((updates.monto_seguro / 10) * 100) / 100
+        // ✅ v2.FIX: Usar monto_seguro directamente (NO dividir por 10)
+        // UPDATE conceptos existentes
         for (const concepto of conceptosSeguro) {
           const { error: errorUpdate } = await supabase
             .from('conceptos_pago')
-            .update({ monto: montoSeguroMensual })
+            .update({ monto: updates.monto_seguro })
             .eq('id', concepto.id)
           
           if (!errorUpdate) {
