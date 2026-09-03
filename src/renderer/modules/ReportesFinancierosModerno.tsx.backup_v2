@@ -1,0 +1,456 @@
+﻿import React, { useState, useEffect } from 'react'
+import { useInstitucion } from '@renderer/hooks/useInstitucion'
+import { useReportesFinancieros } from '@renderer/hooks/useReportesFinancieros'
+import { useConfiguracion } from '@renderer/hooks/useConfiguracion'
+import { formatoMoneda } from '@renderer/lib/helpers'
+import { BarChart3, TrendingUp, AlertCircle, Users, RefreshCw, Target, Zap, DollarSign, Gauge, TrendingDown, Award, Clock, PieChart, CheckCircle, Activity } from 'lucide-react'
+import { Chart as ChartJS, ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, Title } from 'chart.js'
+import { Bar, Pie } from 'react-chartjs-2'
+
+ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, Title)
+
+type TabReporte = 'resumen' | 'carrera' | 'mes' | 'mora' | 'proyeccion'
+
+const getEfficiencyClass = (porcentaje: number): string => {
+  if (porcentaje >= 100) return 'bg-green-500/30 text-green-300'
+  if (porcentaje >= 80) return 'bg-yellow-500/30 text-yellow-300'
+  return 'bg-red-500/30 text-red-300'
+}
+
+const getRankingClass = (ranking: number): string => {
+  if (ranking === 1) return 'bg-red-600 shadow-lg shadow-red-500/50'
+  if (ranking <= 5) return 'bg-orange-600'
+  if (ranking <= 10) return 'bg-yellow-600'
+  return 'bg-slate-600'
+}
+
+export const ReportesFinancierosModerno: React.FC = () => {
+  const { institucionActiva } = useInstitucion()
+  const { resumenEjecutivo, reportePorCarrera, reporteMesAMes, topEstudiantesMora, proyeccionAño, loading, error, refrescar, totalGastos, totalVentasInsumos, totalVentasKiosco } = useReportesFinancieros(institucionActiva.id)
+  const { configuraciones, cargarConfiguracionesPorInstitucion } = useConfiguracion()
+  const [tabActiva, setTabActiva] = useState<TabReporte>('resumen')
+
+  // Cargar configuraciones
+  useEffect(() => {
+    if (institucionActiva.id) {
+      cargarConfiguracionesPorInstitucion(institucionActiva.id)
+    }
+  }, [institucionActiva.id, cargarConfiguracionesPorInstitucion])
+
+  // Solo INSM (id=2) muestra Gastos y Ventas
+  const esINSM = institucionActiva.id === 2
+  const netoTotal = (resumenEjecutivo?.recaudado_hasta_hoy || 0) + (totalVentasInsumos || 0) + (totalVentasKiosco || 0) - (totalGastos || 0)
+
+  if (loading) return <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center"><BarChart3 size={48} className="text-cyan-400 animate-spin" /></div>
+  if (error) return <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4"><div className="bg-red-500/20 border border-red-500/50 rounded-lg p-4"><p className="text-red-400 font-bold text-sm">{error}</p><button onClick={refrescar} className="mt-2 px-4 py-1 bg-red-600 text-white rounded text-sm">Reintentar</button></div></div>
+  
+  // ARREGLADO: Si no hay datos validos y BD esta vacia, mostrar mensaje
+  if (!resumenEjecutivo && reportePorCarrera.length === 0 && reporteMesAMes.length === 0) {
+    return <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4"><div className="text-center"><BarChart3 size={64} className="text-slate-500 mx-auto mb-4" /><h2 className="text-2xl font-bold text-slate-300 mb-2">Sin datos disponibles</h2><p className="text-slate-400 mb-6">No hay estudiantes, conceptos o pagos registrados para esta institucion</p><button onClick={refrescar} className="px-6 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded-lg font-bold">Recargar</button></div></div>
+  }
+
+  // Obtener configuración por carrera_id
+  const obtenerConfigPorCarrera = (carreraId: number) => {
+    return configuraciones.find(c => c.carrera_id === carreraId)
+  }
+
+  const chartResumen = resumenEjecutivo ? { labels: ['Cobrado', 'Pendiente'], datasets: [{ data: [Math.round(resumenEjecutivo.recaudado_hasta_hoy), Math.round(resumenEjecutivo.pendiente_hasta_hoy)], backgroundColor: ['rgba(34, 197, 94, 0.95)', 'rgba(239, 68, 68, 0.95)'], borderColor: ['rgba(34, 197, 94, 1)', 'rgba(239, 68, 68, 1)'], borderWidth: 3 }] } : null
+  const chartCarreras = { labels: reportePorCarrera.map(c => c.carrera.replace('Nivel ', '')), datasets: [{ label: 'Recaudado', data: reportePorCarrera.map(c => c.realmente_recaudado_hasta_hoy), backgroundColor: 'rgba(34, 197, 94, 0.85)', borderColor: 'rgba(34, 197, 94, 1)', borderWidth: 1 }, { label: 'Pendiente', data: reportePorCarrera.map(c => c.pendiente_hasta_hoy), backgroundColor: 'rgba(239, 68, 68, 0.85)', borderColor: 'rgba(239, 68, 68, 1)', borderWidth: 1 }] }
+  const chartEficiencia = { labels: reportePorCarrera.map(c => c.carrera.replace('Nivel ', '')), datasets: [{ label: 'Eficiencia %', data: reportePorCarrera.map(c => c.porcentaje_cobro), backgroundColor: reportePorCarrera.map(c => c.porcentaje_cobro >= 100 ? 'rgba(34, 197, 94, 0.9)' : c.porcentaje_cobro >= 80 ? 'rgba(251, 146, 60, 0.9)' : 'rgba(239, 68, 68, 0.9)'), borderColor: reportePorCarrera.map(c => c.porcentaje_cobro >= 100 ? 'rgba(34, 197, 94, 1)' : c.porcentaje_cobro >= 80 ? 'rgba(251, 146, 60, 1)' : 'rgba(239, 68, 68, 1)'), borderWidth: 2 }] }
+
+  const renderContent = () => {
+    switch (tabActiva) {
+      case 'resumen':
+        return resumenEjecutivo ? (
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="p-6 bg-gradient-to-br from-slate-800/80 to-slate-900/40 border border-slate-700/60 rounded-2xl shadow-2xl backdrop-blur-xl hover:shadow-2xl transition-all">
+                <h2 className="text-xl font-bold text-white mb-1 flex items-center gap-2"><PieChart size={24} className="text-purple-400" />Distribución de Cobranza</h2>
+                <p className="text-xs text-slate-400 mb-4">Estado actual vs pendiente</p>
+                <div style={{ height: '300px' }}>{chartResumen ? <Pie data={chartResumen} options={{ maintainAspectRatio: false, responsive: true, plugins: { legend: { labels: { color: '#cbd5e1', font: { size: 14, weight: 'bold' } }, padding: 20 } }, tooltip: { titleFont: { size: 14 }, bodyFont: { size: 12 } } }} /> : null}</div>
+              </div>
+
+              <div className="space-y-4">
+                <div className="p-5 bg-gradient-to-br from-blue-600/30 to-blue-900/20 border border-blue-500/40 rounded-xl shadow-lg hover:shadow-xl transition-all">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-sm text-blue-300 font-bold flex items-center gap-2"><Users size={18} />ESTUDIANTES ACTIVOS</p>
+                    <span className="text-2xl font-black text-blue-400">{resumenEjecutivo.total_estudiantes}</span>
+                  </div>
+                  <div className="h-2 bg-blue-900/50 rounded-full overflow-hidden"><div className="h-full bg-gradient-to-r from-blue-500 to-cyan-400" style={{ width: '100%' }} /></div>
+                </div>
+
+                <div className="p-5 bg-gradient-to-br from-green-600/30 to-green-900/20 border border-green-500/40 rounded-xl shadow-lg hover:shadow-xl transition-all">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-sm text-green-300 font-bold flex items-center gap-2"><CheckCircle size={18} />PAGADORES AL DÍA</p>
+                    <span className="text-2xl font-black text-green-400">{resumenEjecutivo.total_estudiantes - resumenEjecutivo.estudiantes_en_mora}</span>
+                  </div>
+                  <div className="h-2 bg-green-900/50 rounded-full overflow-hidden"><div className="h-full bg-gradient-to-r from-green-500 to-emerald-400" style={{ width: `${((resumenEjecutivo.total_estudiantes - resumenEjecutivo.estudiantes_en_mora) / resumenEjecutivo.total_estudiantes * 100)}%` }} /></div>
+                </div>
+
+                <div className="p-5 bg-gradient-to-br from-red-600/30 to-red-900/20 border border-red-500/40 rounded-xl shadow-lg hover:shadow-xl transition-all">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-sm text-red-300 font-bold flex items-center gap-2"><AlertCircle size={18} />EN MORA</p>
+                    <span className="text-2xl font-black text-red-400">{resumenEjecutivo.estudiantes_en_mora}</span>
+                  </div>
+                  <div className="h-2 bg-red-900/50 rounded-full overflow-hidden"><div className="h-full bg-gradient-to-r from-red-500 to-orange-400" style={{ width: `${(resumenEjecutivo.estudiantes_en_mora / resumenEjecutivo.total_estudiantes * 100)}%` }} /></div>
+                  <p className="text-xs text-red-400 font-bold mt-2">{((resumenEjecutivo.estudiantes_en_mora / resumenEjecutivo.total_estudiantes) * 100).toFixed(1)}% del total</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="p-5 bg-gradient-to-br from-blue-700/40 to-blue-900/30 border-2 border-blue-500/50 rounded-xl shadow-lg">
+                <p className="text-xs text-blue-300 font-bold mb-2">RECAUDABLE</p>
+                <p className="text-2xl font-black text-blue-200 mb-2">{formatoMoneda(resumenEjecutivo.total_recaudable_año)}</p>
+                <div className="flex items-center gap-1 text-blue-400 text-xs"><DollarSign size={14} />Meta anual</div>
+              </div>
+
+              <div className="p-5 bg-gradient-to-br from-green-700/40 to-green-900/30 border-2 border-green-500/50 rounded-xl shadow-lg">
+                <p className="text-xs text-green-300 font-bold mb-2">COBRADO</p>
+                <p className="text-2xl font-black text-green-200 mb-2">{formatoMoneda(resumenEjecutivo.recaudado_hasta_hoy)}</p>
+                <div className="flex items-center gap-1 text-green-400 text-xs font-bold"><TrendingUp size={14} />{resumenEjecutivo.porcentaje_cobro.toFixed(1)}%</div>
+              </div>
+
+              {esINSM && (
+                <>
+                  <div className="p-5 bg-gradient-to-br from-emerald-700/40 to-emerald-900/30 border-2 border-emerald-500/50 rounded-xl shadow-lg">
+                    <p className="text-xs text-emerald-300 font-bold mb-2">VENTAS INSUMOS</p>
+                    <p className="text-2xl font-black text-emerald-200 mb-2">{formatoMoneda(totalVentasInsumos)}</p>
+                    <div className="flex items-center gap-1 text-emerald-400 text-xs font-bold"><TrendingUp size={14} />+{(totalVentasInsumos / (resumenEjecutivo.recaudado_hasta_hoy || 1) * 100).toFixed(1)}%</div>
+                  </div>
+
+                  <div className="p-5 bg-gradient-to-br from-orange-700/40 to-orange-900/30 border-2 border-orange-500/50 rounded-xl shadow-lg">
+                    <p className="text-xs text-orange-300 font-bold mb-2">VENTAS KIOSCO</p>
+                    <p className="text-2xl font-black text-orange-200 mb-2">{formatoMoneda(totalVentasKiosco)}</p>
+                    <div className="flex items-center gap-1 text-orange-400 text-xs font-bold"><TrendingUp size={14} />+{(totalVentasKiosco / (resumenEjecutivo.recaudado_hasta_hoy || 1) * 100).toFixed(1)}%</div>
+                  </div>
+
+                  <div className="p-5 bg-gradient-to-br from-red-700/40 to-red-900/30 border-2 border-red-500/50 rounded-xl shadow-lg">
+                    <p className="text-xs text-red-300 font-bold mb-2">GASTOS</p>
+                    <p className="text-2xl font-black text-red-200 mb-2">{formatoMoneda(totalGastos)}</p>
+                    <div className="flex items-center gap-1 text-red-400 text-xs font-bold"><TrendingDown size={14} />-{(totalGastos / (resumenEjecutivo.recaudado_hasta_hoy || 1) * 100).toFixed(1)}%</div>
+                  </div>
+
+                  <div className="p-5 bg-gradient-to-br from-violet-700/40 to-violet-900/30 border-2 border-violet-500/50 rounded-xl shadow-lg">
+                    <p className="text-xs text-violet-300 font-bold mb-2">NETO TOTAL</p>
+                    <p className="text-2xl font-black text-violet-200 mb-2">{formatoMoneda(netoTotal)}</p>
+                    <div className="flex items-center gap-1 text-violet-400 text-xs font-bold"><DollarSign size={14} />{((netoTotal / (resumenEjecutivo.recaudable_hasta_hoy || 1)) * 100).toFixed(1)}% del recaudable</div>
+                  </div>
+                </>
+              )}
+
+              {!esINSM && (
+                <>
+                  <div className="p-5 bg-gradient-to-br from-red-700/40 to-red-900/30 border-2 border-red-500/50 rounded-xl shadow-lg">
+                    <p className="text-xs text-red-300 font-bold mb-2">PENDIENTE</p>
+                    <p className="text-2xl font-black text-red-200 mb-2">{formatoMoneda(resumenEjecutivo.pendiente_hasta_hoy)}</p>
+                    <div className="flex items-center gap-1 text-red-400 text-xs font-bold"><TrendingDown size={14} />{resumenEjecutivo.porcentaje_pendiente.toFixed(1)}%</div>
+                  </div>
+
+                  {resumenEjecutivo.extra_por_recargo > 0 && (
+                    <div className="p-5 bg-gradient-to-br from-emerald-700/40 to-emerald-900/30 border-2 border-emerald-500/50 rounded-xl shadow-lg animate-pulse">
+                      <p className="text-xs text-emerald-300 font-bold mb-2">EXTRA POR RECARGO</p>
+                      <p className="text-2xl font-black text-emerald-200 mb-2">+{formatoMoneda(resumenEjecutivo.extra_por_recargo)}</p>
+                      <div className="flex items-center gap-1 text-emerald-400 text-xs font-bold"><TrendingUp size={14} />Por mora y recargos</div>
+                    </div>
+                  )}
+
+                  <div className="p-5 bg-gradient-to-br from-orange-700/40 to-orange-900/30 border-2 border-orange-500/50 rounded-xl shadow-lg">
+                    <p className="text-xs text-orange-300 font-bold mb-2">DEUDA PROMEDIO</p>
+                    <p className="text-2xl font-black text-orange-200 mb-2">{formatoMoneda(resumenEjecutivo.pendiente_hasta_hoy / resumenEjecutivo.estudiantes_en_mora)}</p>
+                    <div className="flex items-center gap-1 text-orange-400 text-xs"><AlertCircle size={14} />Por estudiante</div>
+                  </div>
+                </>
+              )}
+            </div>
+
+            <div className="p-6 bg-gradient-to-r from-slate-800/80 via-slate-800/60 to-slate-800/40 border border-slate-700/50 rounded-2xl shadow-xl backdrop-blur">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-bold text-white flex items-center gap-2"><Activity size={20} className="text-cyan-400" />Gestión de Cobranza</h3>
+                <div className="text-right">
+                  <p className="text-xs text-slate-400">Eficiencia</p>
+                  <p className="text-3xl font-black text-transparent bg-gradient-to-r from-green-400 to-cyan-400 bg-clip-text">{resumenEjecutivo.porcentaje_cobro.toFixed(1)}%</p>
+                </div>
+              </div>
+              <div className="relative h-8 bg-slate-700/50 rounded-full overflow-hidden border border-slate-600/50 shadow-inner">
+                <div className="h-full bg-gradient-to-r from-green-500 via-emerald-400 to-cyan-400 transition-all duration-1000" style={{ width: `${Math.min(resumenEjecutivo.porcentaje_cobro, 100)}%` }} />
+                <div className="absolute inset-0 flex items-center justify-end pr-4"><span className="text-sm font-bold text-white drop-shadow">{resumenEjecutivo.porcentaje_cobro.toFixed(1)}%</span></div>
+              </div>
+              <p className="text-xs text-slate-400 mt-3 flex items-center gap-2"><Clock size={14} />Marzo - Agosto 2026</p>
+            </div>
+          </div>
+        ) : null
+
+      case 'carrera':
+        return (
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="p-6 bg-gradient-to-br from-slate-800/80 to-slate-900/40 border border-slate-700/60 rounded-2xl shadow-2xl backdrop-blur-xl">
+                <h2 className="text-xl font-bold text-white mb-1 flex items-center gap-2"><BarChart3 size={24} className="text-green-400" />Recaudación por Carrera</h2>
+                <p className="text-xs text-slate-400 mb-4">Comparativa de ingresos vs pendiente</p>
+                <div style={{ height: '320px' }}><Bar data={chartCarreras} options={{ maintainAspectRatio: false, responsive: true, scales: { y: { ticks: { color: '#cbd5e1', font: { size: 12, weight: 'bold' } } }, x: { ticks: { color: '#cbd5e1', font: { size: 12 } } } }, plugins: { legend: { labels: { color: '#cbd5e1', font: { size: 12, weight: 'bold' }, padding: 15 } } } }} /></div>
+              </div>
+
+              <div className="p-6 bg-gradient-to-br from-slate-800/80 to-slate-900/40 border border-slate-700/60 rounded-2xl shadow-2xl backdrop-blur-xl">
+                <h2 className="text-xl font-bold text-white mb-1 flex items-center gap-2"><TrendingUp size={24} className="text-amber-400" />Eficiencia de Cobranza %</h2>
+                <p className="text-xs text-slate-400 mb-4">Porcentaje de cumplimiento por nivel</p>
+                <div style={{ height: '320px' }}><Bar data={chartEficiencia} options={{ indexAxis: 'y', maintainAspectRatio: false, responsive: true, scales: { x: { max: 120, ticks: { color: '#cbd5e1', font: { size: 12, weight: 'bold' } } }, y: { ticks: { color: '#cbd5e1', font: { size: 12 } } } }, plugins: { legend: { labels: { color: '#cbd5e1', font: { size: 12, weight: 'bold' } } } } }} /></div>
+              </div>
+            </div>
+
+            <div className="p-6 bg-gradient-to-br from-slate-800/80 to-slate-900/40 border border-slate-700/60 rounded-2xl shadow-2xl backdrop-blur-xl overflow-x-auto">
+              <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2"><Award size={24} className="text-purple-400" />Detalles por Carrera</h2>
+              <table className="w-full">
+                <thead><tr className="border-b-2 border-slate-700 bg-gradient-to-r from-slate-900/50 to-slate-800/50"><th className="px-4 py-4 text-left font-bold text-white">📚 Carrera</th><th className="px-4 py-4 text-center font-bold text-slate-300">👥 Est.</th><th className="px-4 py-4 text-center font-bold text-red-400">⚠️ Mora</th><th className="px-4 py-4 text-right font-bold text-green-400">💰 Recaudado</th><th className="px-4 py-4 text-center font-bold text-amber-400">📊 Eficiencia</th></tr></thead>
+                <tbody>{reportePorCarrera.map((c, i) => (
+                  <tr key={i} className="border-b border-slate-700/30 hover:bg-slate-900/40 transition-colors">
+                    <td className="px-4 py-4 font-bold text-slate-200">{c.carrera}</td>
+                    <td className="px-4 py-4 text-center text-slate-300 font-bold">{c.total_estudiantes}</td>
+                    <td className="px-4 py-4 text-center"><span className="px-3 py-1 bg-red-600/30 text-red-300 rounded-lg font-bold text-sm">{c.estudiantes_en_mora}</span></td>
+                    <td className="px-4 py-4 text-right text-green-400 font-bold text-lg">{formatoMoneda(c.realmente_recaudado_hasta_hoy)}</td>
+                    <td className="px-4 py-4 text-center"><span className={'px-3 py-1 rounded-lg font-bold text-sm ' + getEfficiencyClass(c.porcentaje_cobro)}>{c.porcentaje_cobro.toFixed(1)}%</span></td>
+                  </tr>
+                ))}</tbody>
+              </table>
+            </div>
+          </div>
+        )
+
+      case 'mes':
+        return (
+          <div className="space-y-6">
+            {reporteMesAMes.map((mes, i) => {
+              const carreraInfo = reportePorCarrera.find(c => c.carrera === mes.carrera)
+              
+              // Buscar configuración por carrera_id
+              // El mes.carrera puede ser "Nivel 1 - Analista" o similar
+              // Extraer el número (1 o 3) del nombre de carrera
+              let carreraId: number | null = null
+              if (mes.carrera.includes('Nivel 1')) carreraId = 1
+              else if (mes.carrera.includes('Nivel 3')) carreraId = 3
+              else if (mes.carrera.includes('Analista')) carreraId = 1
+              else if (mes.carrera.includes('Higiene') || mes.carrera.includes('Seguridad')) carreraId = 3
+              
+              const config = carreraId ? obtenerConfigPorCarrera(carreraId) : null
+              console.log('[DESGLOSE]', mes.carrera, 'carreraId:', carreraId, 'monto_cuota:', config?.monto_cuota)
+              const montoInscripcion = config?.monto_inscripcion || 10000
+              const montoCuota = config?.monto_cuota || 10000
+              const montoSeguro = config?.monto_seguro || 15000
+              
+              // Calcular meses transcurridos desde Marzo (mes 3) hasta el mes actual
+              const today = new Date()
+              const mesActual = today.getMonth() + 1 // 1-12
+              const anioActual = today.getFullYear()
+              const mesesTranscurridos = mesActual >= 3 ? mesActual - 3 + 1 : 0 // +1 para incluir marzo
+              
+              // Variables dinámicas para fechas
+              const mesesNombreArray = ['', 'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
+              const mesActualNombre = mesesNombreArray[mesActual]
+              const periodoActual = `Marzo - ${mesActualNombre} ${anioActual}`
+              
+              return (
+              <div key={i} className="p-6 bg-gradient-to-br from-slate-800/80 to-slate-900/40 border border-slate-700/60 rounded-2xl shadow-2xl backdrop-blur-xl hover:shadow-2xl transition-all">
+                <h3 className="text-2xl font-bold text-white mb-1 pb-4 border-b border-slate-700/50 flex items-center gap-3"><Target size={28} className="text-cyan-400" />{mes.carrera}</h3>
+                
+                {/* Info de Estudiantes */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6 p-4 bg-gradient-to-r from-slate-900/80 to-slate-800/50 rounded-lg border border-slate-700/50">
+                  <div>
+                    <p className="text-xs text-slate-400 font-bold mb-1">👥 Total de Estudiantes</p>
+                    <p className="text-3xl font-black text-cyan-300">{carreraInfo?.total_estudiantes || 0}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-400 font-bold mb-1">⚠️ Estudiantes en Mora</p>
+                    <p className="text-3xl font-black text-red-400">{carreraInfo?.estudiantes_en_mora || 0}</p>
+                    <p className="text-xs text-red-400 mt-1">{((carreraInfo?.estudiantes_en_mora || 0) / (carreraInfo?.total_estudiantes || 1) * 100).toFixed(1)}% del total</p>
+                  </div>
+                </div>
+
+                {/* Desglose de Conceptos con Fechas */}
+                <p className="text-sm font-bold text-white mb-3 text-slate-200">Desglose de Facturación ({periodoActual} | {carreraInfo?.total_estudiantes || 0} estudiantes)</p>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 p-4 bg-gradient-to-r from-slate-900/50 to-slate-800/30 rounded-xl border border-slate-700/30">
+                  <div className="border-l-4 border-blue-500 pl-4">
+                    <p className="text-xs text-slate-400 font-bold mb-1">💎 INSCRIPCIÓN</p>
+                    <p className="text-2xl font-black text-blue-300 mb-2">{formatoMoneda(mes.inscripcion_deberia)}</p>
+                    <div className="bg-blue-900/30 rounded p-2 border border-blue-500/20">
+                      <p className="text-xs text-blue-400 font-bold">📅 Cobro</p>
+                      <p className="text-xs text-blue-300">Marzo 2026 (1 vez)</p>
+                      <p className="text-xs text-blue-400 font-bold mt-1">Cantidad</p>
+                      <p className="text-xs text-blue-300">{carreraInfo?.total_estudiantes || 0} est. × {formatoMoneda(montoInscripcion)}</p>
+                    </div>
+                  </div>
+                  <div className="border-l-4 border-cyan-500 pl-4">
+                    <p className="text-xs text-slate-400 font-bold mb-1">📅 CUOTAS</p>
+                    <p className="text-2xl font-black text-cyan-300 mb-2">{formatoMoneda(mes.cuotas_deberia)}</p>
+                    <div className="bg-cyan-900/30 rounded p-2 border border-cyan-500/20">
+                      <p className="text-xs text-cyan-400 font-bold">📅 Período</p>
+                      <p className="text-xs text-cyan-300">Marzo - {today.toLocaleString('es-AR', { month: 'long' }).charAt(0).toUpperCase() + today.toLocaleString('es-AR', { month: 'long' }).slice(1)} ({mesesTranscurridos} meses)</p>
+                      <p className="text-xs text-cyan-400 font-bold mt-1">Cálculo</p>
+                      <p className="text-xs text-cyan-300">{carreraInfo?.total_estudiantes || 0} est. × {formatoMoneda(montoCuota)} × {mesesTranscurridos}</p>
+                    </div>
+                  </div>
+                  <div className="border-l-4 border-violet-500 pl-4">
+                    <p className="text-xs text-slate-400 font-bold mb-1">🛡️ SEGURO</p>
+                    <p className="text-2xl font-black text-violet-300 mb-2">{formatoMoneda(mes.seguro_deberia)}</p>
+                    <div className="bg-violet-900/30 rounded p-2 border border-violet-500/20">
+                      <p className="text-xs text-violet-400 font-bold">📅 Período</p>
+                      <p className="text-xs text-violet-300">Marzo - {today.toLocaleString('es-AR', { month: 'long' }).charAt(0).toUpperCase() + today.toLocaleString('es-AR', { month: 'long' }).slice(1)} ({mesesTranscurridos} meses)</p>
+                      <p className="text-xs text-violet-400 font-bold mt-1">Cálculo</p>
+                      <p className="text-xs text-violet-300">{carreraInfo?.total_estudiantes || 0} est. × {formatoMoneda(montoSeguro)} × {mesesTranscurridos}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Comparativa de Recaudación */}
+                <p className="text-sm font-bold text-white mb-3 text-slate-200">Facturado vs Recaudado ({periodoActual})</p>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="p-5 bg-gradient-to-br from-blue-600/30 to-blue-900/20 border-2 border-blue-500/40 rounded-xl">
+                    <p className="text-xs text-blue-300 font-bold mb-2 flex items-center gap-1"><DollarSign size={14} />TOTAL FACTURADO</p>
+                    <p className="text-3xl font-black text-blue-200 mb-3">{formatoMoneda(mes.deberia_cobrar_total)}</p>
+                  <div className="bg-blue-900/30 rounded p-2 border border-blue-500/20">
+                      <p className="text-xs text-blue-400">Período: Mar-Ago 2026</p>
+                      <p className="text-xs text-blue-300 font-bold mt-1">{carreraInfo?.total_estudiantes || 0} estudiantes</p>
+                    </div>
+                  </div>
+                  <div className="p-5 bg-gradient-to-br from-green-600/30 to-green-900/20 border-2 border-green-500/40 rounded-xl">
+                    <p className="text-xs text-green-300 font-bold mb-2 flex items-center gap-1"><CheckCircle size={14} />REALMENTE COBRADO</p>
+                    <p className="text-3xl font-black text-green-200 mb-3">{formatoMoneda(mes.cobre_real_total)}</p>
+                    <div className="bg-green-900/30 rounded p-2 border border-green-500/20">
+                      <p className="text-xs text-green-400 font-bold">Eficiencia de Cobro</p>
+                      <p className="text-xs text-green-300 font-bold">{mes.porcentaje_cumplimiento.toFixed(1)}%</p>
+                    </div>
+                  </div>
+                  <div className={`p-5 rounded-xl border-2 ${mes.estado_diferencia === 'FALTA' ? 'bg-red-600/30 to-red-900/20 border-red-500/40' : 'bg-yellow-600/30 to-yellow-900/20 border-yellow-500/40'}`}>
+                    <p className="text-xs font-bold mb-2 uppercase flex items-center gap-1" style={{color: mes.estado_diferencia === 'FALTA' ? '#86efac' : '#fcd34d'}}><AlertCircle size={14} />{mes.estado_diferencia}</p>
+                    <p className="text-3xl font-black mb-3" style={{color: mes.estado_diferencia === 'FALTA' ? '#fca5a5' : '#fef08a'}}>{formatoMoneda(Math.abs(mes.diferencia))}</p>
+                    <div className="rounded p-2 border" style={{backgroundColor: mes.estado_diferencia === 'FALTA' ? 'rgba(127, 29, 29, 0.3)' : 'rgba(113, 63, 18, 0.3)', borderColor: mes.estado_diferencia === 'FALTA' ? 'rgba(239, 68, 68, 0.3)' : 'rgba(217, 119, 6, 0.3)'}}>
+                      <p className="text-xs font-bold" style={{color: mes.estado_diferencia === 'FALTA' ? '#fca5a5' : '#fef08a'}}>Brecha</p>
+                      <p className="text-xs mt-1" style={{color: mes.estado_diferencia === 'FALTA' ? '#fca5a5' : '#fef08a'}}>Por cobrar del año</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )})}
+          </div>
+        )
+
+      case 'mora':
+        return (
+          <div className="p-6 bg-gradient-to-br from-slate-800/80 to-slate-900/40 border border-slate-700/60 rounded-2xl shadow-2xl backdrop-blur-xl overflow-x-auto">
+            <h2 className="text-2xl font-bold text-white mb-2 flex items-center gap-2"><AlertCircle size={28} className="text-red-400 animate-pulse" />Top 20 Estudiantes en Mora</h2>
+            <p className="text-xs text-slate-400 mb-6">Ordenado por monto adeudado</p>
+            <table className="w-full">
+              <thead><tr className="border-b-2 border-slate-700 bg-gradient-to-r from-slate-900/50 to-slate-800/50"><th className="px-4 py-4 text-center font-bold text-white">🏆 Ranking</th><th className="px-4 py-4 text-left font-bold text-white">👤 Estudiante</th><th className="px-4 py-4 text-left font-bold text-slate-300">📚 Carrera</th><th className="px-4 py-4 text-right font-bold text-red-400">💸 Deuda Total</th><th className="px-4 py-4 text-center font-bold text-orange-400">⏰ Meses</th></tr></thead>
+              <tbody>{topEstudiantesMora.map((e) => (
+                <tr key={e.ranking} className="border-b border-slate-700/30 hover:bg-slate-900/40 transition-colors">
+                  <td className="px-4 py-4 text-center"><span className={'px-4 py-2 rounded-lg text-white font-bold text-sm ' + getRankingClass(e.ranking)}>#{e.ranking}</span></td>
+                  <td className="px-4 py-4 font-bold text-slate-200">{e.nombre_completo}</td>
+                  <td className="px-4 py-4 text-slate-400">{e.carrera}</td>
+                  <td className="px-4 py-4 text-right"><span className="px-3 py-2 bg-red-600/30 text-red-300 rounded-lg font-bold text-lg">{formatoMoneda(e.deuda_monto)}</span></td>
+                  <td className="px-4 py-4 text-center"><span className="px-3 py-1 bg-orange-500/30 text-orange-300 rounded-lg font-bold">{e.meses_adeudados}</span></td>
+                </tr>
+              ))}</tbody>
+            </table>
+          </div>
+        )
+
+      case 'proyeccion':
+        return proyeccionAño ? (
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="p-8 bg-gradient-to-br from-orange-600/25 via-orange-700/15 to-orange-900/10 border-2 border-orange-500/40 rounded-2xl shadow-2xl backdrop-blur">
+                <h3 className="text-2xl font-bold text-orange-300 mb-2 flex items-center gap-2"><Activity size={28} className="text-orange-400" />Situación Actual</h3>
+                <p className="text-xs text-slate-400 mb-6 pb-4 border-b border-orange-500/30">Estado al mes {proyeccionAño.mes_actual}</p>
+                <div className="space-y-5">
+                  <div className="p-4 bg-gradient-to-r from-slate-900/60 to-slate-800/40 rounded-lg border border-slate-700/40">
+                    <p className="text-xs text-slate-400 font-bold mb-2 flex items-center gap-1"><Clock size={14} />Mes Actual</p>
+                    <p className="text-4xl font-black text-orange-300">{proyeccionAño.mes_actual}</p>
+                    <p className="text-xs text-orange-400 mt-2">Agosto 2026</p>
+                  </div>
+                  <div className="p-4 bg-gradient-to-r from-green-900/40 to-green-800/20 rounded-lg border border-green-500/30">
+                    <p className="text-xs text-green-300 font-bold mb-2 flex items-center gap-1"><TrendingUp size={14} />Recaudado hasta Hoy</p>
+                    <p className="text-3xl font-black text-green-200">{formatoMoneda(proyeccionAño.recaudado_hasta_hoy)}</p>
+                    <p className="text-xs text-green-400 mt-2">Marzo - Agosto</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-8 bg-gradient-to-br from-amber-600/25 via-amber-700/15 to-amber-900/10 border-2 border-amber-500/40 rounded-2xl shadow-2xl backdrop-blur">
+                <h3 className="text-2xl font-bold text-amber-300 mb-2 flex items-center gap-2"><Zap size={28} className="text-amber-400" />Proyección Anual</h3>
+                <p className="text-xs text-slate-400 mb-6 pb-4 border-b border-amber-500/30">Si el ritmo continúa igual</p>
+                <div className="space-y-5">
+                  <div className="p-4 bg-gradient-to-r from-slate-900/60 to-slate-800/40 rounded-lg border border-slate-700/40">
+                    <p className="text-xs text-slate-400 font-bold mb-2 flex items-center gap-1"><DollarSign size={14} />Total Recaudable</p>
+                    <p className="text-3xl font-black text-amber-200">{formatoMoneda(proyeccionAño.recaudable_año)}</p>
+                    <p className="text-xs text-amber-400 mt-2">Meta anual (Mar-Dic)</p>
+                  </div>
+                  <div className={`p-4 rounded-lg border ${proyeccionAño.porcentaje_proyeccion >= 100 ? 'bg-gradient-to-r from-green-900/40 to-green-800/20 border-green-500/30' : 'bg-gradient-to-r from-yellow-900/40 to-yellow-800/20 border-yellow-500/30'}`}>
+                    <p className={`text-xs font-bold mb-2 flex items-center gap-1 ${proyeccionAño.porcentaje_proyeccion >= 100 ? 'text-green-300' : 'text-yellow-300'}`}><TrendingUp size={14} />Proyectado al Cierre</p>
+                    <p className={`text-3xl font-black ${proyeccionAño.porcentaje_proyeccion >= 100 ? 'text-green-200' : 'text-yellow-200'}`}>{formatoMoneda(proyeccionAño.proyeccion_recaudado_año)}</p>
+                    <p className={`text-xs mt-2 ${proyeccionAño.porcentaje_proyeccion >= 100 ? 'text-green-400' : 'text-yellow-400'}`}>Diciembre 2026</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-6 bg-gradient-to-r from-slate-800/80 via-slate-800/60 to-slate-800/40 border border-slate-700/50 rounded-2xl shadow-xl backdrop-blur">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-bold text-white">Eficiencia Proyectada</h3>
+                <p className={`text-3xl font-black ${proyeccionAño.porcentaje_proyeccion >= 100 ? 'text-green-400' : 'text-yellow-400'}`}>{proyeccionAño.porcentaje_proyeccion.toFixed(1)}%</p>
+              </div>
+              <div className="relative h-10 bg-slate-700/50 rounded-full overflow-hidden border border-slate-600/50 shadow-inner">
+                <div className={`h-full bg-gradient-to-r ${proyeccionAño.porcentaje_proyeccion >= 100 ? 'from-green-500 via-emerald-400 to-cyan-400' : 'from-yellow-500 via-amber-400 to-orange-400'} transition-all duration-1000`} style={{ width: `${Math.min(proyeccionAño.porcentaje_proyeccion, 100)}%` }} />
+                <div className="absolute inset-0 flex items-center justify-end pr-4"><span className="text-sm font-bold text-white drop-shadow">{proyeccionAño.porcentaje_proyeccion.toFixed(1)}%</span></div>
+              </div>
+              <p className="text-xs text-slate-400 mt-3">{proyeccionAño.porcentaje_proyeccion >= 100 ? 'En camino a cumplir la meta' : 'Bajo la meta esperada'}</p>
+            </div>
+          </div>
+        ) : null
+
+      default:
+        return null
+    }
+  }
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 p-6">
+      <div className="mb-8">
+        <div className="flex justify-between items-start mb-4">
+          <div>
+            <h1 className="text-5xl font-black text-transparent bg-gradient-to-r from-purple-400 via-pink-400 to-purple-400 bg-clip-text mb-2">📊 Dashboard Financiero</h1>
+            <p className="text-slate-400 flex items-center gap-2"><Activity size={16} />{institucionActiva.nombre}</p>
+          </div>
+          <button onClick={refrescar} className="p-3 hover:bg-slate-700/50 rounded-xl transition-all hover:scale-110"><RefreshCw size={24} className="text-cyan-400" /></button>
+        </div>
+      </div>
+
+        <div className="mb-8 flex gap-3 overflow-x-auto pb-2 -mx-6 px-6">
+        {[
+          { id: 'resumen', label: 'Resumen', icon: Gauge, color: 'from-purple-600 to-purple-700' },
+          { id: 'carrera', label: 'Por Carrera', icon: Users, color: 'from-blue-600 to-blue-700' },
+          { id: 'mes', label: 'Meta Mensual', icon: Target, color: 'from-cyan-600 to-cyan-700' },
+          { id: 'mora', label: 'Top Mora', icon: Award, color: 'from-red-600 to-red-700' },
+          { id: 'proyeccion', label: 'Proyección', icon: Zap, color: 'from-amber-600 to-amber-700' }
+        ].map(({ id, label, icon: Icon, color }) => (
+          <button
+            key={id}
+            onClick={() => setTabActiva(id as TabReporte)}
+            className={`px-4 sm:px-6 py-3 rounded-xl text-sm font-bold flex items-center gap-2 whitespace-nowrap transition-all ${
+              tabActiva === id
+                ? `bg-gradient-to-r ${color} text-white shadow-lg`
+                : 'bg-slate-700/50 text-slate-300 hover:bg-slate-600/50'
+            }`}
+          >
+            <Icon size={18} />
+            {label}
+          </button>
+        ))}
+      </div>
+
+      <div>{renderContent()}</div>
+    </div>
+  )
+}
+
+export default ReportesFinancierosModerno
+
+
