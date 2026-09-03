@@ -140,10 +140,13 @@ export const useReportesFinancieros = (institucionId: number) => {
       )
 
       // CUOTAS + SEGURO (ambos con mes/año - hasta el mes actual inclusive)
+      // ✅ ARREGLADO: Incluir INSCRIPCION incluso sin mes/año
       const conceptosVencidos = (conceptos || []).filter(c => {
+        // Incluir INSCRIPCION sin mes/año
         if (c.tipo?.toUpperCase() === 'INSCRIPCION' && (!c.mes || !c.año)) {
-          return false
+          return true  // ← CAMBIO: Antes era return false
         }
+        // Para CUOTA y SEGURO, aplicar filtro de mes/año
         if (c.mes && c.año) {
           if (c.año < anioActual) return true
           if (c.año === anioActual && c.mes <= mesActual) return true
