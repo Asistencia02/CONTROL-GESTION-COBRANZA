@@ -42,16 +42,15 @@ export const useReporteConceptos = create<UseReporteConceptosStore>((set) => ({
 
       if (errorConceptos) throw errorConceptos
 
-      // FILTRO IMPORTANTE: Solo conceptos con mes/año DEFINIDOS
+      // FILTRO: Incluir TODOS los conceptos (con y sin mes/año)
       const conceptosFiltrados = (conceptosData || []).filter(c => {
-        if (c.mes && c.año) {
-          if (c.año < anioActual) return true
-          if (c.año === anioActual) {
-            if (c.mes <= mesActual) return true
-          }
-          return false
-        }
-        // Excluir conceptos sin mes/año (inscripción flexible, etc)
+        // Incluir conceptos SIN mes/año (inscripción flexible, etc)
+        if (!c.mes || !c.año) return true
+        
+        // Para conceptos CON mes/año, aplicar filtro de vencimiento
+        if (c.año < anioActual) return true
+        if (c.año === anioActual && c.mes <= mesActual) return true
+        
         return false
       })
 
