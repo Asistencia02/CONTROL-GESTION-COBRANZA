@@ -79,6 +79,12 @@ const NAV_ITEMS: NavItem[] = [
     color: 'from-purple-500 to-pink-500',
   },
   {
+    id: 'reportesejecutivos',
+    label: 'Panel Ejecutivo',
+    icon: <BarChart3 size={20} />,
+    color: 'from-yellow-500 to-orange-500',
+  },
+  {
     id: 'cierre',
     label: 'Cierre de Caja',
     icon: <Lock size={20} />,
