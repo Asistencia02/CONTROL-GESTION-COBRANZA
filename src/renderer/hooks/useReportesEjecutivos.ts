@@ -113,6 +113,9 @@ export interface ReportesEjecutivosData {
   error: string | null
 }
 
+// ========== CONSTANTES ==========
+const PRIMER_MES_ACADEMICO = 3  // Marzo - No contar enero ni febrero
+
 // ========== HOOK PRINCIPAL ==========
 export const useReportesEjecutivos = () => {
   const { obtenerTotalVentasPeriodo } = useVentasInsumos()
@@ -239,12 +242,12 @@ export const useReportesEjecutivos = () => {
           return true
         }
         
-        // Conceptos con mes/año vencidos
+        // Conceptos con mes/año vencidos - excluir enero y febrero
         if (c.mes && c.año) {
           if (c.año < anioActual) return true
           if (c.año === anioActual) {
-            if (c.mes < mesActual) return true
-            if (c.mes === mesActual && diaActual > 10) return true
+            if (c.mes < mesActual && c.mes >= PRIMER_MES_ACADEMICO) return true
+            if (c.mes === mesActual && diaActual > 10 && c.mes >= PRIMER_MES_ACADEMICO) return true
           }
           return false
         }
@@ -358,7 +361,7 @@ export const useReportesEjecutivos = () => {
         if (c.tipo?.toUpperCase() === 'INSCRIPCION' && (!c.mes || !c.año)) return false
         if (c.mes && c.año) {
           if (c.año < anioActual) return true
-          if (c.año === anioActual && c.mes < mesActual) return true
+          if (c.año === anioActual && c.mes < mesActual && c.mes >= PRIMER_MES_ACADEMICO) return true
         }
         return false
       })
@@ -376,7 +379,7 @@ export const useReportesEjecutivos = () => {
         if (!concepto) return false
         if (concepto.mes && concepto.año) {
           if (concepto.año < anioActual) return true
-          if (concepto.año === anioActual && concepto.mes < mesActual) return true
+          if (concepto.año === anioActual && concepto.mes < mesActual && concepto.mes >= PRIMER_MES_ACADEMICO) return true
         } else {
           return concepto.tipo?.toUpperCase() === 'INSCRIPCION'
         }
