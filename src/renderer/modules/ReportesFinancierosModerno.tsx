@@ -1,15 +1,16 @@
-﻿import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useInstitucion } from '@renderer/hooks/useInstitucion'
 import { useReportesFinancieros } from '@renderer/hooks/useReportesFinancieros'
 import { useConfiguracion } from '@renderer/hooks/useConfiguracion'
 import { formatoMoneda } from '@renderer/lib/helpers'
-import { BarChart3, TrendingUp, AlertCircle, Users, RefreshCw, Target, Zap, DollarSign, Gauge, TrendingDown, Award, Clock, PieChart, CheckCircle, Activity } from 'lucide-react'
+import { BarChart3, TrendingUp, AlertCircle, Users, RefreshCw, Target, Zap, DollarSign, Gauge, TrendingDown, Award, Clock, PieChart, CheckCircle, Activity, Calendar } from 'lucide-react'
 import { Chart as ChartJS, ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, Title } from 'chart.js'
 import { Bar, Pie } from 'react-chartjs-2'
 
 ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, Title)
 
 type TabReporte = 'resumen' | 'carrera' | 'mes' | 'mora' | 'proyeccion'
+type VistaResumen = 'anual' | 'mes-actual'
 
 const getEfficiencyClass = (porcentaje: number): string => {
   if (porcentaje >= 100) return 'bg-green-500/30 text-green-300'
@@ -29,6 +30,7 @@ export const ReportesFinancierosModerno: React.FC = () => {
   const { resumenEjecutivo, reportePorCarrera, reporteMesAMes, topEstudiantesMora, proyeccionAño, loading, error, refrescar, totalGastos, totalVentasInsumos, totalVentasKiosco } = useReportesFinancieros(institucionActiva.id)
   const { configuraciones, cargarConfiguracionesPorInstitucion } = useConfiguracion()
   const [tabActiva, setTabActiva] = useState<TabReporte>('resumen')
+  const [vistaResumen, setVistaResumen] = useState<VistaResumen>('anual')
 
   // Cargar configuraciones
   useEffect(() => {
@@ -44,17 +46,26 @@ export const ReportesFinancierosModerno: React.FC = () => {
   if (loading) return <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center"><BarChart3 size={48} className="text-cyan-400 animate-spin" /></div>
   if (error) return <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4"><div className="bg-red-500/20 border border-red-500/50 rounded-lg p-4"><p className="text-red-400 font-bold text-sm">{error}</p><button onClick={refrescar} className="mt-2 px-4 py-1 bg-red-600 text-white rounded text-sm">Reintentar</button></div></div>
   
-  // ARREGLADO: Si no hay datos validos y BD esta vacia, mostrar mensaje
   if (!resumenEjecutivo && reportePorCarrera.length === 0 && reporteMesAMes.length === 0) {
     return <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4"><div className="text-center"><BarChart3 size={64} className="text-slate-500 mx-auto mb-4" /><h2 className="text-2xl font-bold text-slate-300 mb-2">Sin datos disponibles</h2><p className="text-slate-400 mb-6">No hay estudiantes, conceptos o pagos registrados para esta institucion</p><button onClick={refrescar} className="px-6 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded-lg font-bold">Recargar</button></div></div>
   }
 
-  // Obtener configuración por carrera_id
   const obtenerConfigPorCarrera = (carreraId: number) => {
     return configuraciones.find(c => c.carrera_id === carreraId)
   }
 
-  const chartResumen = resumenEjecutivo ? { labels: ['Cobrado', 'Pendiente'], datasets: [{ data: [Math.round(resumenEjecutivo.recaudado_hasta_hoy), Math.round(resumenEjecutivo.pendiente_hasta_hoy)], backgroundColor: ['rgba(34, 197, 94, 0.95)', 'rgba(239, 68, 68, 0.95)'], borderColor: ['rgba(34, 197, 94, 1)', 'rgba(239, 68, 68, 1)'], borderWidth: 3 }] } : null
+  const chartResumen = resumenEjecutivo ? { 
+    labels: ['Cobrado', 'Pendiente'], 
+    datasets: [{ 
+      data: vistaResumen === 'anual' 
+        ? [Math.round(resumenEjecutivo.recaudado_hasta_hoy), Math.round(resumenEjecutivo.deuda_actual)]
+        : [Math.round(resumenEjecutivo.recaudado_mes_actual), Math.round(resumenEjecutivo.pendiente_mes_actual)],
+      backgroundColor: ['rgba(34, 197, 94, 0.95)', 'rgba(239, 68, 68, 0.95)'], 
+      borderColor: ['rgba(34, 197, 94, 1)', 'rgba(239, 68, 68, 1)'], 
+      borderWidth: 3 
+    }] 
+  } : null
+  
   const chartCarreras = { labels: reportePorCarrera.map(c => c.carrera.replace('Nivel ', '')), datasets: [{ label: 'Recaudado', data: reportePorCarrera.map(c => c.realmente_recaudado_hasta_hoy), backgroundColor: 'rgba(34, 197, 94, 0.85)', borderColor: 'rgba(34, 197, 94, 1)', borderWidth: 1 }, { label: 'Pendiente', data: reportePorCarrera.map(c => c.pendiente_hasta_hoy), backgroundColor: 'rgba(239, 68, 68, 0.85)', borderColor: 'rgba(239, 68, 68, 1)', borderWidth: 1 }] }
   const chartEficiencia = { labels: reportePorCarrera.map(c => c.carrera.replace('Nivel ', '')), datasets: [{ label: 'Eficiencia %', data: reportePorCarrera.map(c => c.porcentaje_cobro), backgroundColor: reportePorCarrera.map(c => c.porcentaje_cobro >= 100 ? 'rgba(34, 197, 94, 0.9)' : c.porcentaje_cobro >= 80 ? 'rgba(251, 146, 60, 0.9)' : 'rgba(239, 68, 68, 0.9)'), borderColor: reportePorCarrera.map(c => c.porcentaje_cobro >= 100 ? 'rgba(34, 197, 94, 1)' : c.porcentaje_cobro >= 80 ? 'rgba(251, 146, 60, 1)' : 'rgba(239, 68, 68, 1)'), borderWidth: 2 }] }
 
@@ -63,121 +74,232 @@ export const ReportesFinancierosModerno: React.FC = () => {
       case 'resumen':
         return resumenEjecutivo ? (
           <div className="space-y-6">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <div className="p-6 bg-gradient-to-br from-slate-800/80 to-slate-900/40 border border-slate-700/60 rounded-2xl shadow-2xl backdrop-blur-xl hover:shadow-2xl transition-all">
-                <h2 className="text-xl font-bold text-white mb-1 flex items-center gap-2"><PieChart size={24} className="text-purple-400" />Distribución de Cobranza</h2>
-                <p className="text-xs text-slate-400 mb-4">Estado actual vs pendiente</p>
-                <div style={{ height: '300px' }}>{chartResumen ? <Pie data={chartResumen} options={{ maintainAspectRatio: false, responsive: true, plugins: { legend: { labels: { color: '#cbd5e1', font: { size: 14, weight: 'bold' } }, padding: 20 } }, tooltip: { titleFont: { size: 14 }, bodyFont: { size: 12 } } }} /> : null}</div>
-              </div>
-
-              <div className="space-y-4">
-                <div className="p-5 bg-gradient-to-br from-blue-600/30 to-blue-900/20 border border-blue-500/40 rounded-xl shadow-lg hover:shadow-xl transition-all">
-                  <div className="flex items-center justify-between mb-2">
-                    <p className="text-sm text-blue-300 font-bold flex items-center gap-2"><Users size={18} />ESTUDIANTES ACTIVOS</p>
-                    <span className="text-2xl font-black text-blue-400">{resumenEjecutivo.total_estudiantes}</span>
-                  </div>
-                  <div className="h-2 bg-blue-900/50 rounded-full overflow-hidden"><div className="h-full bg-gradient-to-r from-blue-500 to-cyan-400" style={{ width: '100%' }} /></div>
-                </div>
-
-                <div className="p-5 bg-gradient-to-br from-green-600/30 to-green-900/20 border border-green-500/40 rounded-xl shadow-lg hover:shadow-xl transition-all">
-                  <div className="flex items-center justify-between mb-2">
-                    <p className="text-sm text-green-300 font-bold flex items-center gap-2"><CheckCircle size={18} />PAGADORES AL DÍA</p>
-                    <span className="text-2xl font-black text-green-400">{resumenEjecutivo.total_estudiantes - resumenEjecutivo.estudiantes_en_mora}</span>
-                  </div>
-                  <div className="h-2 bg-green-900/50 rounded-full overflow-hidden"><div className="h-full bg-gradient-to-r from-green-500 to-emerald-400" style={{ width: `${((resumenEjecutivo.total_estudiantes - resumenEjecutivo.estudiantes_en_mora) / resumenEjecutivo.total_estudiantes * 100)}%` }} /></div>
-                </div>
-
-                <div className="p-5 bg-gradient-to-br from-red-600/30 to-red-900/20 border border-red-500/40 rounded-xl shadow-lg hover:shadow-xl transition-all">
-                  <div className="flex items-center justify-between mb-2">
-                    <p className="text-sm text-red-300 font-bold flex items-center gap-2"><AlertCircle size={18} />EN MORA</p>
-                    <span className="text-2xl font-black text-red-400">{resumenEjecutivo.estudiantes_en_mora}</span>
-                  </div>
-                  <div className="h-2 bg-red-900/50 rounded-full overflow-hidden"><div className="h-full bg-gradient-to-r from-red-500 to-orange-400" style={{ width: `${(resumenEjecutivo.estudiantes_en_mora / resumenEjecutivo.total_estudiantes * 100)}%` }} /></div>
-                  <p className="text-xs text-red-400 font-bold mt-2">{((resumenEjecutivo.estudiantes_en_mora / resumenEjecutivo.total_estudiantes) * 100).toFixed(1)}% del total</p>
-                </div>
-              </div>
+            {/* TABS ANUAL / MES ACTUAL */}
+            <div className="flex gap-2 border-b border-slate-700/50">
+              <button
+                onClick={() => setVistaResumen('anual')}
+                className={`px-6 py-3 font-bold text-sm flex items-center gap-2 border-b-2 transition-all ${
+                  vistaResumen === 'anual'
+                    ? 'border-cyan-400 text-cyan-400'
+                    : 'border-transparent text-slate-400 hover:text-slate-300'
+                }`}
+              >
+                <Calendar size={18} />
+                Año Completo (Dic 2026)
+              </button>
+              <button
+                onClick={() => setVistaResumen('mes-actual')}
+                className={`px-6 py-3 font-bold text-sm flex items-center gap-2 border-b-2 transition-all ${
+                  vistaResumen === 'mes-actual'
+                    ? 'border-amber-400 text-amber-400'
+                    : 'border-transparent text-slate-400 hover:text-slate-300'
+                }`}
+              >
+                <Clock size={18} />
+                Hasta {resumenEjecutivo.mes_actual_nombre}
+              </button>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              <div className="p-5 bg-gradient-to-br from-blue-700/40 to-blue-900/30 border-2 border-blue-500/50 rounded-xl shadow-lg">
-                <p className="text-xs text-blue-300 font-bold mb-2">RECAUDABLE</p>
-                <p className="text-2xl font-black text-blue-200 mb-2">{formatoMoneda(resumenEjecutivo.total_recaudable_año)}</p>
-                <div className="flex items-center gap-1 text-blue-400 text-xs"><DollarSign size={14} />Meta anual</div>
-              </div>
-
-              <div className="p-5 bg-gradient-to-br from-green-700/40 to-green-900/30 border-2 border-green-500/50 rounded-xl shadow-lg">
-                <p className="text-xs text-green-300 font-bold mb-2">COBRADO</p>
-                <p className="text-2xl font-black text-green-200 mb-2">{formatoMoneda(resumenEjecutivo.recaudado_hasta_hoy)}</p>
-                <div className="flex items-center gap-1 text-green-400 text-xs font-bold"><TrendingUp size={14} />{resumenEjecutivo.porcentaje_cobro.toFixed(1)}%</div>
-              </div>
-
-              {esINSM && (
-                <>
-                  <div className="p-5 bg-gradient-to-br from-emerald-700/40 to-emerald-900/30 border-2 border-emerald-500/50 rounded-xl shadow-lg">
-                    <p className="text-xs text-emerald-300 font-bold mb-2">VENTAS INSUMOS</p>
-                    <p className="text-2xl font-black text-emerald-200 mb-2">{formatoMoneda(totalVentasInsumos)}</p>
-                    <div className="flex items-center gap-1 text-emerald-400 text-xs font-bold"><TrendingUp size={14} />+{(totalVentasInsumos / (resumenEjecutivo.recaudado_hasta_hoy || 1) * 100).toFixed(1)}%</div>
+            {/* CONTENIDO SEGÚN VISTA */}
+            {vistaResumen === 'anual' ? (
+              // VISTA ANUAL
+              <div className="space-y-6">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <div className="p-6 bg-gradient-to-br from-slate-800/80 to-slate-900/40 border border-slate-700/60 rounded-2xl shadow-2xl backdrop-blur-xl hover:shadow-2xl transition-all">
+                    <h2 className="text-xl font-bold text-white mb-1 flex items-center gap-2"><PieChart size={24} className="text-purple-400" />Distribución de Cobranza</h2>
+                    <p className="text-xs text-slate-400 mb-4">Meta anual: Dic 2026</p>
+                    <div style={{ height: '300px' }}>{chartResumen ? <Pie data={chartResumen} options={{ maintainAspectRatio: false, responsive: true, plugins: { legend: { labels: { color: '#cbd5e1', font: { size: 14, weight: 'bold' } }, padding: 20 } }, tooltip: { titleFont: { size: 14 }, bodyFont: { size: 12 } } }} /> : null}</div>
                   </div>
 
-                  <div className="p-5 bg-gradient-to-br from-orange-700/40 to-orange-900/30 border-2 border-orange-500/50 rounded-xl shadow-lg">
-                    <p className="text-xs text-orange-300 font-bold mb-2">VENTAS KIOSCO</p>
-                    <p className="text-2xl font-black text-orange-200 mb-2">{formatoMoneda(totalVentasKiosco)}</p>
-                    <div className="flex items-center gap-1 text-orange-400 text-xs font-bold"><TrendingUp size={14} />+{(totalVentasKiosco / (resumenEjecutivo.recaudado_hasta_hoy || 1) * 100).toFixed(1)}%</div>
-                  </div>
-
-                  <div className="p-5 bg-gradient-to-br from-red-700/40 to-red-900/30 border-2 border-red-500/50 rounded-xl shadow-lg">
-                    <p className="text-xs text-red-300 font-bold mb-2">GASTOS</p>
-                    <p className="text-2xl font-black text-red-200 mb-2">{formatoMoneda(totalGastos)}</p>
-                    <div className="flex items-center gap-1 text-red-400 text-xs font-bold"><TrendingDown size={14} />-{(totalGastos / (resumenEjecutivo.recaudado_hasta_hoy || 1) * 100).toFixed(1)}%</div>
-                  </div>
-
-                  <div className="p-5 bg-gradient-to-br from-violet-700/40 to-violet-900/30 border-2 border-violet-500/50 rounded-xl shadow-lg">
-                    <p className="text-xs text-violet-300 font-bold mb-2">NETO TOTAL</p>
-                    <p className="text-2xl font-black text-violet-200 mb-2">{formatoMoneda(netoTotal)}</p>
-                    <div className="flex items-center gap-1 text-violet-400 text-xs font-bold"><DollarSign size={14} />{((netoTotal / (resumenEjecutivo.recaudable_hasta_hoy || 1)) * 100).toFixed(1)}% del recaudable</div>
-                  </div>
-                </>
-              )}
-
-              {!esINSM && (
-                <>
-                  <div className="p-5 bg-gradient-to-br from-red-700/40 to-red-900/30 border-2 border-red-500/50 rounded-xl shadow-lg">
-                    <p className="text-xs text-red-300 font-bold mb-2">PENDIENTE</p>
-                    <p className="text-2xl font-black text-red-200 mb-2">{formatoMoneda(resumenEjecutivo.pendiente_hasta_hoy)}</p>
-                    <div className="flex items-center gap-1 text-red-400 text-xs font-bold"><TrendingDown size={14} />{resumenEjecutivo.porcentaje_pendiente.toFixed(1)}%</div>
-                  </div>
-
-                  {resumenEjecutivo.extra_por_recargo > 0 && (
-                    <div className="p-5 bg-gradient-to-br from-emerald-700/40 to-emerald-900/30 border-2 border-emerald-500/50 rounded-xl shadow-lg animate-pulse">
-                      <p className="text-xs text-emerald-300 font-bold mb-2">EXTRA POR RECARGO</p>
-                      <p className="text-2xl font-black text-emerald-200 mb-2">+{formatoMoneda(resumenEjecutivo.extra_por_recargo)}</p>
-                      <div className="flex items-center gap-1 text-emerald-400 text-xs font-bold"><TrendingUp size={14} />Por mora y recargos</div>
+                  <div className="space-y-4">
+                    <div className="p-5 bg-gradient-to-br from-blue-600/30 to-blue-900/20 border border-blue-500/40 rounded-xl shadow-lg hover:shadow-xl transition-all">
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-sm text-blue-300 font-bold flex items-center gap-2"><Users size={18} />ESTUDIANTES ACTIVOS</p>
+                        <span className="text-2xl font-black text-blue-400">{resumenEjecutivo.total_estudiantes}</span>
+                      </div>
+                      <div className="h-2 bg-blue-900/50 rounded-full overflow-hidden"><div className="h-full bg-gradient-to-r from-blue-500 to-cyan-400" style={{ width: '100%' }} /></div>
                     </div>
+
+                    <div className="p-5 bg-gradient-to-br from-green-600/30 to-green-900/20 border border-green-500/40 rounded-xl shadow-lg hover:shadow-xl transition-all">
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-sm text-green-300 font-bold flex items-center gap-2"><CheckCircle size={18} />PAGADORES AL DÍA</p>
+                        <span className="text-2xl font-black text-green-400">{resumenEjecutivo.total_estudiantes - resumenEjecutivo.estudiantes_en_mora}</span>
+                      </div>
+                      <div className="h-2 bg-green-900/50 rounded-full overflow-hidden"><div className="h-full bg-gradient-to-r from-green-500 to-emerald-400" style={{ width: `${((resumenEjecutivo.total_estudiantes - resumenEjecutivo.estudiantes_en_mora) / resumenEjecutivo.total_estudiantes * 100)}%` }} /></div>
+                    </div>
+
+                    <div className="p-5 bg-gradient-to-br from-red-600/30 to-red-900/20 border border-red-500/40 rounded-xl shadow-lg hover:shadow-xl transition-all">
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-sm text-red-300 font-bold flex items-center gap-2"><AlertCircle size={18} />EN MORA</p>
+                        <span className="text-2xl font-black text-red-400">{resumenEjecutivo.estudiantes_en_mora}</span>
+                      </div>
+                      <div className="h-2 bg-red-900/50 rounded-full overflow-hidden"><div className="h-full bg-gradient-to-r from-red-500 to-orange-400" style={{ width: `${(resumenEjecutivo.estudiantes_en_mora / resumenEjecutivo.total_estudiantes * 100)}%` }} /></div>
+                      <p className="text-xs text-red-400 font-bold mt-2">{resumenEjecutivo.porcentaje_en_mora.toFixed(1)}% del total</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div className="p-5 bg-gradient-to-br from-blue-700/40 to-blue-900/30 border-2 border-blue-500/50 rounded-xl shadow-lg">
+                    <p className="text-xs text-blue-300 font-bold mb-2">RECAUDABLE ANUAL</p>
+                    <p className="text-2xl font-black text-blue-200 mb-2">{formatoMoneda(resumenEjecutivo.total_recaudable_año)}</p>
+                    <div className="flex items-center gap-1 text-blue-400 text-xs"><DollarSign size={14} />Meta: Dic 2026</div>
+                  </div>
+
+                  <div className="p-5 bg-gradient-to-br from-green-700/40 to-green-900/30 border-2 border-green-500/50 rounded-xl shadow-lg">
+                    <p className="text-xs text-green-300 font-bold mb-2">COBRADO ANUAL</p>
+                    <p className="text-2xl font-black text-green-200 mb-2">{formatoMoneda(resumenEjecutivo.recaudado_hasta_hoy)}</p>
+                    <div className="flex items-center gap-1 text-green-400 text-xs font-bold"><TrendingUp size={14} />{resumenEjecutivo.porcentaje_cobro.toFixed(1)}%</div>
+                  </div>
+
+                  {esINSM && (
+                    <>
+                      <div className="p-5 bg-gradient-to-br from-emerald-700/40 to-emerald-900/30 border-2 border-emerald-500/50 rounded-xl shadow-lg">
+                        <p className="text-xs text-emerald-300 font-bold mb-2">VENTAS INSUMOS</p>
+                        <p className="text-2xl font-black text-emerald-200 mb-2">{formatoMoneda(totalVentasInsumos)}</p>
+                        <div className="flex items-center gap-1 text-emerald-400 text-xs font-bold"><TrendingUp size={14} />+{(totalVentasInsumos / (resumenEjecutivo.recaudado_hasta_hoy || 1) * 100).toFixed(1)}%</div>
+                      </div>
+
+                      <div className="p-5 bg-gradient-to-br from-orange-700/40 to-orange-900/30 border-2 border-orange-500/50 rounded-xl shadow-lg">
+                        <p className="text-xs text-orange-300 font-bold mb-2">VENTAS KIOSCO</p>
+                        <p className="text-2xl font-black text-orange-200 mb-2">{formatoMoneda(totalVentasKiosco)}</p>
+                        <div className="flex items-center gap-1 text-orange-400 text-xs font-bold"><TrendingUp size={14} />+{(totalVentasKiosco / (resumenEjecutivo.recaudado_hasta_hoy || 1) * 100).toFixed(1)}%</div>
+                      </div>
+
+                      <div className="p-5 bg-gradient-to-br from-red-700/40 to-red-900/30 border-2 border-red-500/50 rounded-xl shadow-lg">
+                        <p className="text-xs text-red-300 font-bold mb-2">GASTOS</p>
+                        <p className="text-2xl font-black text-red-200 mb-2">{formatoMoneda(totalGastos)}</p>
+                        <div className="flex items-center gap-1 text-red-400 text-xs font-bold"><TrendingDown size={14} />-{(totalGastos / (resumenEjecutivo.recaudado_hasta_hoy || 1) * 100).toFixed(1)}%</div>
+                      </div>
+
+                      <div className="p-5 bg-gradient-to-br from-violet-700/40 to-violet-900/30 border-2 border-violet-500/50 rounded-xl shadow-lg">
+                        <p className="text-xs text-violet-300 font-bold mb-2">NETO TOTAL</p>
+                        <p className="text-2xl font-black text-violet-200 mb-2">{formatoMoneda(netoTotal)}</p>
+                        <div className="flex items-center gap-1 text-violet-400 text-xs font-bold"><DollarSign size={14} />{((netoTotal / (resumenEjecutivo.total_recaudable_año || 1)) * 100).toFixed(1)}% del recaudable</div>
+                      </div>
+                    </>
                   )}
 
-                  <div className="p-5 bg-gradient-to-br from-orange-700/40 to-orange-900/30 border-2 border-orange-500/50 rounded-xl shadow-lg">
-                    <p className="text-xs text-orange-300 font-bold mb-2">DEUDA PROMEDIO</p>
-                    <p className="text-2xl font-black text-orange-200 mb-2">{formatoMoneda(resumenEjecutivo.pendiente_hasta_hoy / resumenEjecutivo.estudiantes_en_mora)}</p>
-                    <div className="flex items-center gap-1 text-orange-400 text-xs"><AlertCircle size={14} />Por estudiante</div>
-                  </div>
-                </>
-              )}
-            </div>
+                  {!esINSM && (
+                    <>
+                      <div className="p-5 bg-gradient-to-br from-red-700/40 to-red-900/30 border-2 border-red-500/50 rounded-xl shadow-lg">
+                        <p className="text-xs text-red-300 font-bold mb-2">PENDIENTE ANUAL</p>
+                        <p className="text-2xl font-black text-red-200 mb-2">{formatoMoneda(resumenEjecutivo.deuda_actual)}</p>
+                        <div className="flex items-center gap-1 text-red-400 text-xs font-bold"><TrendingDown size={14} />{(100 - resumenEjecutivo.porcentaje_cobro).toFixed(1)}%</div>
+                      </div>
 
-            <div className="p-6 bg-gradient-to-r from-slate-800/80 via-slate-800/60 to-slate-800/40 border border-slate-700/50 rounded-2xl shadow-xl backdrop-blur">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-bold text-white flex items-center gap-2"><Activity size={20} className="text-cyan-400" />Gestión de Cobranza</h3>
-                <div className="text-right">
-                  <p className="text-xs text-slate-400">Eficiencia</p>
-                  <p className="text-3xl font-black text-transparent bg-gradient-to-r from-green-400 to-cyan-400 bg-clip-text">{resumenEjecutivo.porcentaje_cobro.toFixed(1)}%</p>
+                      {resumenEjecutivo.extra_por_recargo > 0 && (
+                        <div className="p-5 bg-gradient-to-br from-emerald-700/40 to-emerald-900/30 border-2 border-emerald-500/50 rounded-xl shadow-lg animate-pulse">
+                          <p className="text-xs text-emerald-300 font-bold mb-2">EXTRA POR RECARGO</p>
+                          <p className="text-2xl font-black text-emerald-200 mb-2">+{formatoMoneda(resumenEjecutivo.extra_por_recargo)}</p>
+                          <div className="flex items-center gap-1 text-emerald-400 text-xs font-bold"><TrendingUp size={14} />Por mora y recargos</div>
+                        </div>
+                      )}
+
+                      <div className="p-5 bg-gradient-to-br from-orange-700/40 to-orange-900/30 border-2 border-orange-500/50 rounded-xl shadow-lg">
+                        <p className="text-xs text-orange-300 font-bold mb-2">DEUDA PROMEDIO</p>
+                        <p className="text-2xl font-black text-orange-200 mb-2">{formatoMoneda(resumenEjecutivo.deuda_actual / (resumenEjecutivo.estudiantes_en_mora || 1))}</p>
+                        <div className="flex items-center gap-1 text-orange-400 text-xs"><AlertCircle size={14} />Por estudiante</div>
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                <div className="p-6 bg-gradient-to-r from-slate-800/80 via-slate-800/60 to-slate-800/40 border border-slate-700/50 rounded-2xl shadow-xl backdrop-blur">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-bold text-white flex items-center gap-2"><Activity size={20} className="text-cyan-400" />Gestión de Cobranza Anual</h3>
+                    <div className="text-right">
+                      <p className="text-xs text-slate-400">Eficiencia</p>
+                      <p className="text-3xl font-black text-transparent bg-gradient-to-r from-green-400 to-cyan-400 bg-clip-text">{resumenEjecutivo.porcentaje_cobro.toFixed(1)}%</p>
+                    </div>
+                  </div>
+                  <div className="relative h-8 bg-slate-700/50 rounded-full overflow-hidden border border-slate-600/50 shadow-inner">
+                    <div className="h-full bg-gradient-to-r from-green-500 via-emerald-400 to-cyan-400 transition-all duration-1000" style={{ width: `${Math.min(resumenEjecutivo.porcentaje_cobro, 100)}%` }} />
+                    <div className="absolute inset-0 flex items-center justify-end pr-4"><span className="text-sm font-bold text-white drop-shadow">{resumenEjecutivo.porcentaje_cobro.toFixed(1)}%</span></div>
+                  </div>
+                  <p className="text-xs text-slate-400 mt-3 flex items-center gap-2"><Calendar size={14} />Marzo - Diciembre 2026</p>
                 </div>
               </div>
-              <div className="relative h-8 bg-slate-700/50 rounded-full overflow-hidden border border-slate-600/50 shadow-inner">
-                <div className="h-full bg-gradient-to-r from-green-500 via-emerald-400 to-cyan-400 transition-all duration-1000" style={{ width: `${Math.min(resumenEjecutivo.porcentaje_cobro, 100)}%` }} />
-                <div className="absolute inset-0 flex items-center justify-end pr-4"><span className="text-sm font-bold text-white drop-shadow">{resumenEjecutivo.porcentaje_cobro.toFixed(1)}%</span></div>
+            ) : (
+              // VISTA MES ACTUAL
+              <div className="space-y-6">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <div className="p-6 bg-gradient-to-br from-slate-800/80 to-slate-900/40 border border-slate-700/60 rounded-2xl shadow-2xl backdrop-blur-xl hover:shadow-2xl transition-all">
+                    <h2 className="text-xl font-bold text-white mb-1 flex items-center gap-2"><PieChart size={24} className="text-amber-400" />Distribución Acumulada</h2>
+                    <p className="text-xs text-slate-400 mb-4">Hasta {resumenEjecutivo.mes_actual_nombre}</p>
+                    <div style={{ height: '300px' }}>{chartResumen ? <Pie data={chartResumen} options={{ maintainAspectRatio: false, responsive: true, plugins: { legend: { labels: { color: '#cbd5e1', font: { size: 14, weight: 'bold' } }, padding: 20 } }, tooltip: { titleFont: { size: 14 }, bodyFont: { size: 12 } } }} /> : null}</div>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div className="p-5 bg-gradient-to-br from-blue-600/30 to-blue-900/20 border border-blue-500/40 rounded-xl shadow-lg hover:shadow-xl transition-all">
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-sm text-blue-300 font-bold flex items-center gap-2"><Users size={18} />ESTUDIANTES ACTIVOS</p>
+                        <span className="text-2xl font-black text-blue-400">{resumenEjecutivo.total_estudiantes}</span>
+                      </div>
+                      <div className="h-2 bg-blue-900/50 rounded-full overflow-hidden"><div className="h-full bg-gradient-to-r from-blue-500 to-cyan-400" style={{ width: '100%' }} /></div>
+                    </div>
+
+                    <div className="p-5 bg-gradient-to-br from-green-600/30 to-green-900/20 border border-green-500/40 rounded-xl shadow-lg hover:shadow-xl transition-all">
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-sm text-green-300 font-bold flex items-center gap-2"><CheckCircle size={18} />PAGADORES AL DÍA</p>
+                        <span className="text-2xl font-black text-green-400">{resumenEjecutivo.total_estudiantes - resumenEjecutivo.estudiantes_mora_mes_actual}</span>
+                      </div>
+                      <div className="h-2 bg-green-900/50 rounded-full overflow-hidden"><div className="h-full bg-gradient-to-r from-green-500 to-emerald-400" style={{ width: `${((resumenEjecutivo.total_estudiantes - resumenEjecutivo.estudiantes_mora_mes_actual) / resumenEjecutivo.total_estudiantes * 100)}%` }} /></div>
+                    </div>
+
+                    <div className="p-5 bg-gradient-to-br from-red-600/30 to-red-900/20 border border-red-500/40 rounded-xl shadow-lg hover:shadow-xl transition-all">
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-sm text-red-300 font-bold flex items-center gap-2"><AlertCircle size={18} />EN MORA</p>
+                        <span className="text-2xl font-black text-red-400">{resumenEjecutivo.estudiantes_mora_mes_actual}</span>
+                      </div>
+                      <div className="h-2 bg-red-900/50 rounded-full overflow-hidden"><div className="h-full bg-gradient-to-r from-red-500 to-orange-400" style={{ width: `${(resumenEjecutivo.estudiantes_mora_mes_actual / resumenEjecutivo.total_estudiantes * 100)}%` }} /></div>
+                      <p className="text-xs text-red-400 font-bold mt-2">{resumenEjecutivo.porcentaje_mora_mes_actual.toFixed(1)}% del total</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div className="p-5 bg-gradient-to-br from-blue-700/40 to-blue-900/30 border-2 border-blue-500/50 rounded-xl shadow-lg">
+                    <p className="text-xs text-blue-300 font-bold mb-2">RECAUDABLE</p>
+                    <p className="text-2xl font-black text-blue-200 mb-2">{formatoMoneda(resumenEjecutivo.recaudable_mes_actual)}</p>
+                    <div className="flex items-center gap-1 text-blue-400 text-xs"><DollarSign size={14} />Hasta {resumenEjecutivo.mes_actual_nombre}</div>
+                  </div>
+
+                  <div className="p-5 bg-gradient-to-br from-green-700/40 to-green-900/30 border-2 border-green-500/50 rounded-xl shadow-lg">
+                    <p className="text-xs text-green-300 font-bold mb-2">COBRADO</p>
+                    <p className="text-2xl font-black text-green-200 mb-2">{formatoMoneda(resumenEjecutivo.recaudado_mes_actual)}</p>
+                    <div className="flex items-center gap-1 text-green-400 text-xs font-bold"><TrendingUp size={14} />{resumenEjecutivo.porcentaje_cobro_mes_actual.toFixed(1)}%</div>
+                  </div>
+
+                  <div className="p-5 bg-gradient-to-br from-red-700/40 to-red-900/30 border-2 border-red-500/50 rounded-xl shadow-lg">
+                    <p className="text-xs text-red-300 font-bold mb-2">PENDIENTE</p>
+                    <p className="text-2xl font-black text-red-200 mb-2">{formatoMoneda(resumenEjecutivo.pendiente_mes_actual)}</p>
+                    <div className="flex items-center gap-1 text-red-400 text-xs font-bold"><TrendingDown size={14} />{(100 - resumenEjecutivo.porcentaje_cobro_mes_actual).toFixed(1)}%</div>
+                  </div>
+
+                  <div className="p-5 bg-gradient-to-br from-amber-700/40 to-amber-900/30 border-2 border-amber-500/50 rounded-xl shadow-lg">
+                    <p className="text-xs text-amber-300 font-bold mb-2">DEUDA PROMEDIO</p>
+                    <p className="text-2xl font-black text-amber-200 mb-2">{formatoMoneda(resumenEjecutivo.pendiente_mes_actual / (resumenEjecutivo.estudiantes_mora_mes_actual || 1))}</p>
+                    <div className="flex items-center gap-1 text-amber-400 text-xs"><AlertCircle size={14} />Por estudiante</div>
+                  </div>
+                </div>
+
+                <div className="p-6 bg-gradient-to-r from-slate-800/80 via-slate-800/60 to-slate-800/40 border border-slate-700/50 rounded-2xl shadow-xl backdrop-blur">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-bold text-white flex items-center gap-2"><Activity size={20} className="text-amber-400" />Progreso Acumulado</h3>
+                    <div className="text-right">
+                      <p className="text-xs text-slate-400">Eficiencia</p>
+                      <p className="text-3xl font-black text-transparent bg-gradient-to-r from-amber-400 to-orange-400 bg-clip-text">{resumenEjecutivo.porcentaje_cobro_mes_actual.toFixed(1)}%</p>
+                    </div>
+                  </div>
+                  <div className="relative h-8 bg-slate-700/50 rounded-full overflow-hidden border border-slate-600/50 shadow-inner">
+                    <div className="h-full bg-gradient-to-r from-amber-500 via-orange-400 to-red-400 transition-all duration-1000" style={{ width: `${Math.min(resumenEjecutivo.porcentaje_cobro_mes_actual, 100)}%` }} />
+                    <div className="absolute inset-0 flex items-center justify-end pr-4"><span className="text-sm font-bold text-white drop-shadow">{resumenEjecutivo.porcentaje_cobro_mes_actual.toFixed(1)}%</span></div>
+                  </div>
+                  <p className="text-xs text-slate-400 mt-3 flex items-center gap-2"><Clock size={14} />Marzo - {resumenEjecutivo.mes_actual_nombre} 2026</p>
+                </div>
               </div>
-              <p className="text-xs text-slate-400 mt-3 flex items-center gap-2"><Clock size={14} />Marzo - Agosto 2026</p>
-            </div>
+            )}
           </div>
         ) : null
 
@@ -222,9 +344,6 @@ export const ReportesFinancierosModerno: React.FC = () => {
             {reporteMesAMes.map((mes, i) => {
               const carreraInfo = reportePorCarrera.find(c => c.carrera === mes.carrera)
               
-              // Buscar configuración por carrera_id
-              // El mes.carrera puede ser "Nivel 1 - Analista" o similar
-              // Extraer el número (1 o 3) del nombre de carrera
               let carreraId: number | null = null
               if (mes.carrera.includes('Nivel 1')) carreraId = 1
               else if (mes.carrera.includes('Nivel 3')) carreraId = 3
@@ -232,18 +351,15 @@ export const ReportesFinancierosModerno: React.FC = () => {
               else if (mes.carrera.includes('Higiene') || mes.carrera.includes('Seguridad')) carreraId = 3
               
               const config = carreraId ? obtenerConfigPorCarrera(carreraId) : null
-              console.log('[DESGLOSE]', mes.carrera, 'carreraId:', carreraId, 'monto_cuota:', config?.monto_cuota)
               const montoInscripcion = config?.monto_inscripcion || 10000
               const montoCuota = config?.monto_cuota || 10000
               const montoSeguro = config?.monto_seguro || 15000
               
-              // Calcular meses transcurridos desde Marzo (mes 3) hasta el mes actual
               const today = new Date()
-              const mesActual = today.getMonth() + 1 // 1-12
+              const mesActual = today.getMonth() + 1
               const anioActual = today.getFullYear()
-              const mesesTranscurridos = mesActual >= 3 ? mesActual - 3 + 1 : 0 // +1 para incluir marzo
+              const mesesTranscurridos = mesActual >= 3 ? mesActual - 3 + 1 : 0
               
-              // Variables dinámicas para fechas
               const mesesNombreArray = ['', 'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
               const mesActualNombre = mesesNombreArray[mesActual]
               const periodoActual = `Marzo - ${mesActualNombre} ${anioActual}`
@@ -252,7 +368,6 @@ export const ReportesFinancierosModerno: React.FC = () => {
               <div key={i} className="p-6 bg-gradient-to-br from-slate-800/80 to-slate-900/40 border border-slate-700/60 rounded-2xl shadow-2xl backdrop-blur-xl hover:shadow-2xl transition-all">
                 <h3 className="text-2xl font-bold text-white mb-1 pb-4 border-b border-slate-700/50 flex items-center gap-3"><Target size={28} className="text-cyan-400" />{mes.carrera}</h3>
                 
-                {/* Info de Estudiantes */}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6 p-4 bg-gradient-to-r from-slate-900/80 to-slate-800/50 rounded-lg border border-slate-700/50">
                   <div>
                     <p className="text-xs text-slate-400 font-bold mb-1">👥 Total de Estudiantes</p>
@@ -265,7 +380,6 @@ export const ReportesFinancierosModerno: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Desglose de Conceptos con Fechas */}
                 <p className="text-sm font-bold text-white mb-3 text-slate-200">Desglose de Facturación ({periodoActual} | {carreraInfo?.total_estudiantes || 0} estudiantes)</p>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 p-4 bg-gradient-to-r from-slate-900/50 to-slate-800/30 rounded-xl border border-slate-700/30">
                   <div className="border-l-4 border-blue-500 pl-4">
@@ -300,7 +414,6 @@ export const ReportesFinancierosModerno: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Comparativa de Recaudación */}
                 <p className="text-sm font-bold text-white mb-3 text-slate-200">Facturado vs Recaudado ({periodoActual})</p>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="p-5 bg-gradient-to-br from-blue-600/30 to-blue-900/20 border-2 border-blue-500/40 rounded-xl">
@@ -452,5 +565,3 @@ export const ReportesFinancierosModerno: React.FC = () => {
 }
 
 export default ReportesFinancierosModerno
-
-

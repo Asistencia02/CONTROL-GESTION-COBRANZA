@@ -1,19 +1,27 @@
-﻿import { useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { supabase } from '@renderer/lib/supabase'
 import { useVentasInsumos } from '@renderer/hooks/useVentasInsumos'
 
 export interface ResumenEjecutivo {
+  // ANUAL (TODO sin filtro de vencimiento)
   total_recaudable_año: number
-  recaudable_hasta_hoy: number
   recaudado_hasta_hoy: number
   deuda_actual: number
-  pendiente_hasta_hoy: number
   porcentaje_cobro: number
-  porcentaje_pendiente: number
   total_estudiantes: number
   estudiantes_en_mora: number
   porcentaje_en_mora: number
   extra_por_recargo: number
+  
+  // HASTA MES ACTUAL (solo conceptos vencidos - actualiza mes a mes)
+  recaudable_mes_actual: number
+  recaudado_mes_actual: number
+  pendiente_mes_actual: number
+  porcentaje_cobro_mes_actual: number
+  estudiantes_mora_mes_actual: number
+  porcentaje_mora_mes_actual: number
+  
+  mes_actual_nombre: string
   fecha_reporte: string
 }
 
@@ -91,6 +99,9 @@ export const useReportesFinancieros = (institucionId: number) => {
       // Mes se vence el día 10 - si es antes del día 10, aún no vence
       const mesVencidoActual = diaActual >= 10 ? mesActual : mesActual - 1
       const anioVencidoActual = mesVencidoActual < mesActual ? anioActual : anioActual
+
+      const mesesNombre = ['', 'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
+      const mesActualNombre = mesesNombre[mesActual]
 
       // ========== OBTENER DATOS BASE ==========
       // Estudiantes activos
@@ -219,7 +230,7 @@ export const useReportesFinancieros = (institucionId: number) => {
       })
       console.log('[MORA] Conceptos vencidos para mora:', conceptosVencidosMoraLocal.length, 'de', conceptosVencidos.length, '| diaActual:', diaActual, 'mesVencidoActual:', mesVencidoActual)
 
-      // ========== CALCULAR RESUMEN EJECUTIVO ==========
+      // ========== CALCULAR RESUMEN EJECUTIVO - PARTE ANUAL ==========
       let totalRecaudable = 0
       let totalRecaudado = 0
       let estudiantesEnMora = 0
@@ -256,23 +267,84 @@ export const useReportesFinancieros = (institucionId: number) => {
       const porcentajeCobro = totalRecaudable > 0 ? (totalRecaudado / totalRecaudable) * 100 : 0
       const pendiente = Math.max(0, totalRecaudable - totalRecaudado)
 
-      const resumenEj: ResumenEjecutivo = {
+      // ========== CALCULAR RESUMEN EJECUTIVO - PARTE MES ACTUAL ==========
+      // SOLO conceptos vencidos ANTES del mes actual (no incluir mes actual todavía)
+      const conceptosAntesdeMesActual = conceptosFiltrados.filter(c => {
+        if (c.mes && c.año) {
+          if (c.año < anioActual) return true
+          if (c.año === anioActual && c.mes < mesActual) return true
+        } else {
+          // Inscripciones sin mes siempre contar
+          return c.tipo?.toUpperCase() === 'INSCRIPCION'
+        }
+        return false
+      })
+
+      let totalRecaudableMesActual = 0
+      let estudiantesEnMoraMesActual = 0
+      const conceptoPorEstudianteMesActual = new Map<number, number>()
+
+      // Calcular deuda por estudiante - SOLO CONCEPTOS ANTES DE MES ACTUAL
+      estudiantesActivos.forEach(est => {
+        let deudaEst = 0
+        conceptosAntesdeMesActual.forEach(concepto => {
+          if (concepto.carrera_id !== est.carrera_id) return
+          const tienePago = pagosValidos.some(p => p.estudiante_id === est.id && p.concepto_id === concepto.id && p.monto_pagado >= concepto.monto)
+          if (!tienePago) {
+            deudaEst += concepto.monto
+          }
+        })
+        if (deudaEst > 0) {
+          conceptoPorEstudianteMesActual.set(est.id, deudaEst)
+          estudiantesEnMoraMesActual++
+        }
+      })
+
+      // Recaudable mes actual (hasta antes de vencer el mes)
+      totalRecaudableMesActual = 0
+      estudiantesActivos.forEach(est => {
+        const conceptosDelEstudiante = conceptosAntesdeMesActual.filter(c => c.carrera_id === est.carrera_id)
+        conceptosDelEstudiante.forEach(c => {
+          totalRecaudableMesActual += c.monto
+        })
+      })
+      
+      // Pagos para conceptos antes de mes actual
+      const pagosValidosMesActual = pagosValidos.filter(p => {
+        const concepto = conceptosFiltrados.find(c => c.id === p.concepto_id)
+        if (!concepto) return false
+        if (concepto.mes && concepto.año) {
+          if (concepto.año < anioActual) return true
+          if (concepto.año === anioActual && concepto.mes < mesActual) return true
+        } else {
+          return concepto.tipo?.toUpperCase() === 'INSCRIPCION'
+        }
+        return false
+      })
+      const totalRecaudadoMesActual = pagosValidosMesActual.reduce((sum, p) => sum + p.monto_pagado, 0)
+      const porcentajeCobroMesActual = totalRecaudableMesActual > 0 ? (totalRecaudadoMesActual / totalRecaudableMesActual) * 100 : 0
+      const pendienteMesActual = Math.max(0, totalRecaudableMesActual - totalRecaudadoMesActual)
+
+      setResumenEjecutivo({
         total_recaudable_año: totalRecaudable,
-        recaudable_hasta_hoy: totalRecaudable,
         recaudado_hasta_hoy: totalRecaudado,
         deuda_actual: pendiente,
-        pendiente_hasta_hoy: pendiente,
         porcentaje_cobro: parseFloat(porcentajeCobro.toFixed(1)),
-        porcentaje_pendiente: parseFloat((100 - porcentajeCobro).toFixed(1)),
         total_estudiantes: estudiantesActivos.length,
         estudiantes_en_mora: estudiantesEnMora,
         porcentaje_en_mora: parseFloat(((estudiantesEnMora / (estudiantesActivos.length || 1)) * 100).toFixed(1)),
         extra_por_recargo: Math.max(0, totalRecaudado - totalRecaudable),
+        recaudable_mes_actual: totalRecaudableMesActual,
+        recaudado_mes_actual: totalRecaudadoMesActual,
+        pendiente_mes_actual: pendienteMesActual,
+        porcentaje_cobro_mes_actual: parseFloat(porcentajeCobroMesActual.toFixed(1)),
+        estudiantes_mora_mes_actual: estudiantesEnMoraMesActual,
+        porcentaje_mora_mes_actual: parseFloat(((estudiantesEnMoraMesActual / (estudiantesActivos.length || 1)) * 100).toFixed(1)),
+        mes_actual_nombre: mesActualNombre,
         fecha_reporte: new Date().toISOString(),
-      }
-
-      setResumenEjecutivo(resumenEj)
-      console.log('[REPORTES] Resumen: Recaudable:', totalRecaudable, '| Recaudado:', totalRecaudado, '| En mora:', estudiantesEnMora)
+      })
+      console.log('[REPORTES] ANUAL - Recaudable:', totalRecaudable, '| Recaudado:', totalRecaudado, '| En mora:', estudiantesEnMora)
+      console.log('[REPORTES] HASTA', mesActualNombre, '- Recaudable:', totalRecaudableMesActual, '| Recaudado:', totalRecaudadoMesActual, '| En mora:', estudiantesEnMoraMesActual)
 
       // ========== REPORTES POR CARRERA ==========
       const carreras = new Map<number, any>()
