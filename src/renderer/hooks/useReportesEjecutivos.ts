@@ -474,7 +474,7 @@ export const useReportesEjecutivos = () => {
         costoPorEstudiante: parseFloat(costoPorEstudiante.toFixed(2)),
         ingresoPorEstudiante: parseFloat(ingresoPorEstudiante.toFixed(2)),
         totalEstudiantes,
-        estudiantesMora,
+        estudiantesMora: estudiantesEnMora,
         porCarrera,
         topMorosos: morosos.slice(0, 20),
         gastosPorCategoria,
