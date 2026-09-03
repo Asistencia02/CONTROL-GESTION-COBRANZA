@@ -59,10 +59,10 @@ export const crearOActualizarConceptos = async (
     }
 
     // 3. SEGURO - solo si cambió o es nueva
+    // ✅ v2.FIX: Tomar monto_seguro DIRECTO, sin dividir por 10
     const seguroCambio = !configAnterior || configAnterior.monto_seguro !== montoSeguro
     if (montoSeguro > 0 && seguroCambio) {
       console.log(`[CONCEPTOS] Seguro cambió: ${configAnterior?.monto_seguro || 'nueva'} → ${montoSeguro}`)
-      const montoSeguroMensual = Math.round((montoSeguro / 10) * 100) / 100
       const mesesNombres = {
         3: 'Marzo',
         4: 'Abril',
@@ -81,7 +81,7 @@ export const crearOActualizarConceptos = async (
           p_carrera_id: carreraId,
           p_nombre: `Seguro - ${mesesNombres[mes as keyof typeof mesesNombres]}`,
           p_tipo: 'SEGURO',
-          p_monto: montoSeguroMensual,
+          p_monto: montoSeguro,
           p_mes: mes,
           p_año: anioActual,
         })
@@ -133,4 +133,3 @@ export const crearOActualizarConceptos = async (
     return { success: false, created: 0, updated: 0, total: 0, message: `Error: ${mensaje}` }
   }
 }
-
