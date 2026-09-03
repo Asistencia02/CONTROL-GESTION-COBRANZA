@@ -155,7 +155,8 @@ export const useReportesFinancieros = (institucionId: number) => {
         (!c.mes || !c.año)
       )
 
-      // CUOTAS + SEGURO (ambos con mes/año - SOLO meses académicos 3-8, hasta el mes actual inclusive)
+      // CUOTAS + SEGURO (ambos con mes/año - SOLO meses académicos 3-8)
+      // IMPORTANTE: Si día < 10, NO incluir mes actual
       const conceptosVencidos = (conceptos || []).filter(c => {
         // Incluir INSCRIPCION sin mes/año
         if (c.tipo?.toUpperCase() === 'INSCRIPCION' && (!c.mes || !c.año)) {
@@ -167,7 +168,12 @@ export const useReportesFinancieros = (institucionId: number) => {
           if (c.mes < PRIMER_MES_ACADEMICO || c.mes > ULTIMO_MES_ACADEMICO) return false
           
           if (c.año < anioActual) return true
-          if (c.año === anioActual && c.mes <= mesActual) return true
+          if (c.año === anioActual) {
+            // Si está en mes actual Y día < 10, NO incluir mes actual
+            if (c.mes === mesActual && diaActual < PRIMER_DIA_VENCIMIENTO) return false
+            if (c.mes < mesActual) return true
+            if (c.mes === mesActual && diaActual >= PRIMER_DIA_VENCIMIENTO) return true
+          }
         }
         return false
       })
