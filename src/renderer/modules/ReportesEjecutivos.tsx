@@ -292,26 +292,26 @@ export const ReportesEjecutivos: React.FC = () => {
                 <tbody className="text-xs">
                   <tr className="border-b border-slate-700/30 hover:bg-slate-900/50">
                     <td className="px-2 py-2 font-bold text-slate-300">ISIPP</td>
-                    <td className="px-2 py-2 text-right text-green-300">{formatoMoneda(isipp.recaudoAnual).split('.')[0]}</td>
-                    <td className="px-2 py-2 text-right text-red-300">{formatoMoneda(isipp.adeudadoAnual).split('.')[0]}</td>
-                    <td className="px-2 py-2 text-right text-orange-300">{formatoMoneda(isipp.gastosAnual).split('.')[0]}</td>
-                    <td className="px-2 py-2 text-right text-purple-300">{formatoMoneda(isipp.netoAnual).split('.')[0]}</td>
+                    <td className="px-2 py-2 text-right text-green-300">{formatoMoneda(isipp.recaudoAnual)}</td>
+                    <td className="px-2 py-2 text-right text-red-300">{formatoMoneda(isipp.adeudadoAnual)}</td>
+                    <td className="px-2 py-2 text-right text-orange-300">{formatoMoneda(isipp.gastosAnual)}</td>
+                    <td className="px-2 py-2 text-right text-purple-300">{formatoMoneda(isipp.netoAnual)}</td>
                     <td className="px-2 py-2 text-right text-cyan-300 font-bold">{isipp.eficiencia.toFixed(0)}%</td>
                   </tr>
                   <tr className="border-b border-slate-700/30 hover:bg-slate-900/50">
                     <td className="px-2 py-2 font-bold text-slate-300">Milagros</td>
-                    <td className="px-2 py-2 text-right text-green-300">{formatoMoneda(milagros.recaudoAnual).split('.')[0]}</td>
-                    <td className="px-2 py-2 text-right text-red-300">{formatoMoneda(milagros.adeudadoAnual).split('.')[0]}</td>
-                    <td className="px-2 py-2 text-right text-orange-300">{formatoMoneda(milagros.gastosAnual).split('.')[0]}</td>
-                    <td className="px-2 py-2 text-right text-purple-300">{formatoMoneda(milagros.netoAnual).split('.')[0]}</td>
+                    <td className="px-2 py-2 text-right text-green-300">{formatoMoneda(milagros.recaudoAnual)}</td>
+                    <td className="px-2 py-2 text-right text-red-300">{formatoMoneda(milagros.adeudadoAnual)}</td>
+                    <td className="px-2 py-2 text-right text-orange-300">{formatoMoneda(milagros.gastosAnual)}</td>
+                    <td className="px-2 py-2 text-right text-purple-300">{formatoMoneda(milagros.netoAnual)}</td>
                     <td className="px-2 py-2 text-right text-cyan-300 font-bold">{milagros.eficiencia.toFixed(0)}%</td>
                   </tr>
                   <tr className="bg-slate-800/50 font-bold text-xs">
                     <td className="px-2 py-2 text-slate-200">TOTAL</td>
-                    <td className="px-2 py-2 text-right text-green-400">{formatoMoneda(consolidado.recaudoTotal).split('.')[0]}</td>
-                    <td className="px-2 py-2 text-right text-red-400">{formatoMoneda(consolidado.adeudadoTotal).split('.')[0]}</td>
-                    <td className="px-2 py-2 text-right text-orange-400">{formatoMoneda(consolidado.gastosTotal).split('.')[0]}</td>
-                    <td className="px-2 py-2 text-right text-purple-400">{formatoMoneda(consolidado.netoTotal).split('.')[0]}</td>
+                    <td className="px-2 py-2 text-right text-green-400">{formatoMoneda(consolidado.recaudoTotal)}</td>
+                    <td className="px-2 py-2 text-right text-red-400">{formatoMoneda(consolidado.adeudadoTotal)}</td>
+                    <td className="px-2 py-2 text-right text-orange-400">{formatoMoneda(consolidado.gastosTotal)}</td>
+                    <td className="px-2 py-2 text-right text-purple-400">{formatoMoneda(consolidado.netoTotal)}</td>
                     <td className="px-2 py-2 text-right text-cyan-400">{((consolidado.recaudoTotal / (consolidado.recaudoTotal + consolidado.adeudadoTotal)) * 100).toFixed(0)}%</td>
                   </tr>
                 </tbody>
