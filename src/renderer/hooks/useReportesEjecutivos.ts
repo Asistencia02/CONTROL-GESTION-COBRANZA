@@ -2,6 +2,11 @@ import { useEffect, useState } from 'react'
 import { supabase } from '@renderer/lib/supabase'
 import { useVentasInsumos } from '@renderer/hooks/useVentasInsumos'
 
+// ========== CONSTANTES ==========
+const PRIMER_MES_ACADEMICO = 3  // Marzo
+const ULTIMO_MES_ACADEMICO = 8  // Agosto
+const PRIMER_DIA_VENCIMIENTO = 10
+
 // ========== INTERFACES ==========
 export interface MetricaInstitucion {
   recaudoAnual: number
@@ -19,6 +24,7 @@ export interface MetricaInstitucion {
   ingresoPorEstudiante: number
   totalEstudiantes: number
   estudiantesMora: number
+  estudiantesAlDia: number
   ventasInsumos?: number
   ventasKiosco?: number
 }
@@ -80,7 +86,9 @@ export interface Consolidado {
   saludFinanciera: number
   totalEstudiantes: number
   totalMorosos: number
+  totalAlDia: number
   porcentajeMora: number
+  porcentajeAlDia: number
 }
 
 export interface ReportesEjecutivosData {
@@ -113,9 +121,6 @@ export interface ReportesEjecutivosData {
   error: string | null
 }
 
-// ========== CONSTANTES ==========
-const PRIMER_MES_ACADEMICO = 3  // Marzo - No contar enero ni febrero
-
 // ========== HOOK PRINCIPAL ==========
 export const useReportesEjecutivos = () => {
   const { obtenerTotalVentasPeriodo } = useVentasInsumos()
@@ -129,7 +134,9 @@ export const useReportesEjecutivos = () => {
       saludFinanciera: 0,
       totalEstudiantes: 0,
       totalMorosos: 0,
+      totalAlDia: 0,
       porcentajeMora: 0,
+      porcentajeAlDia: 0,
     },
     isipp: {
       recaudoAnual: 0,
@@ -147,6 +154,7 @@ export const useReportesEjecutivos = () => {
       ingresoPorEstudiante: 0,
       totalEstudiantes: 0,
       estudiantesMora: 0,
+      estudiantesAlDia: 0,
       porCarrera: [],
       topMorosos: [],
       gastosPorCategoria: {},
@@ -167,6 +175,7 @@ export const useReportesEjecutivos = () => {
       ingresoPorEstudiante: 0,
       totalEstudiantes: 0,
       estudiantesMora: 0,
+      estudiantesAlDia: 0,
       ventasInsumos: 0,
       ventasKiosco: 0,
       porCarrera: [],
@@ -205,6 +214,7 @@ export const useReportesEjecutivos = () => {
     error: null,
   })
 
+  // ========== CALCULAR METRICAS ==========
   const calcularMetricasInstitucion = async (institucionId: number): Promise<MetricaInstitucion & { porCarrera: DesglosePorCarrera[], topMorosos: TopMoroso[], gastosPorCategoria: Record<string, number> }> => {
     try {
       const today = new Date()
@@ -212,10 +222,10 @@ export const useReportesEjecutivos = () => {
       const anioActual = today.getFullYear()
       const diaActual = today.getDate()
 
-      // ========== ESTUDIANTES ==========
+      // ========== 1. OBTENER ESTUDIANTES ACTIVOS ==========
       const { data: estudiantes, error: errEst } = await supabase
         .from('estudiantes')
-        .select('id, nombre, apellido, dni, carrera_id, estado, carreras(nombre)')
+        .select('id, nombre, apellido, dni, carrera_id, estado, carreras(id, nombre)')
         .eq('institucion_id', institucionId)
         .neq('estado', 'NO_VIENE_MAS')
 
@@ -223,41 +233,48 @@ export const useReportesEjecutivos = () => {
       const estudiantesActivos = estudiantes || []
       const totalEstudiantes = estudiantesActivos.length
 
-      // ========== CONCEPTOS ==========
-      const { data: conceptos, error: errConc } = await supabase
+      // ========== 2. OBTENER CONCEPTOS VENCIDOS ==========
+      // Inscripción (sin mes/año) O meses marzo-agosto de años anteriores O meses marzo-agosto del año actual antes de hoy
+      const { data: conceptosData, error: errConc } = await supabase
         .from('conceptos_pago')
         .select('id, nombre, tipo, monto, mes, año, carrera_id')
         .eq('institucion_id', institucionId)
         .eq('activo', true)
 
       if (errConc) throw errConc
+      const conceptos = conceptosData || []
 
-      const inscripciones = (conceptos || []).filter(c =>
-        c.tipo?.toUpperCase() === 'INSCRIPCION' && (!c.mes || !c.año)
-      )
-
-      const conceptosVencidos = (conceptos || []).filter(c => {
-        // INSCRIPCIONES sin mes/año (vencidas siempre)
-        if (!c.mes && !c.año && c.tipo?.toUpperCase() === 'INSCRIPCION') {
+      // Filtrar SOLO conceptos que están vencidos
+      const conceptosVencidos = conceptos.filter(c => {
+        // INSCRIPCIÓN sin mes/año = siempre vencida
+        if (c.tipo?.toUpperCase() === 'INSCRIPCION' && (!c.mes || !c.año)) {
           return true
         }
-        
-        // Conceptos con mes/año vencidos - excluir enero y febrero
+
+        // Concepto con mes/año definido
         if (c.mes && c.año) {
+          // Años anteriores = vencido
           if (c.año < anioActual) return true
+
+          // Año actual
           if (c.año === anioActual) {
-            if (c.mes < mesActual && c.mes >= PRIMER_MES_ACADEMICO) return true
-            if (c.mes === mesActual && diaActual > 10 && c.mes >= PRIMER_MES_ACADEMICO) return true
+            // Solo contar meses académicos (3-8)
+            if (c.mes < PRIMER_MES_ACADEMICO || c.mes > ULTIMO_MES_ACADEMICO) return false
+
+            // Meses anteriores al actual = vencido
+            if (c.mes < mesActual) return true
+
+            // Mes actual: vencido si pasó el día 10
+            if (c.mes === mesActual && diaActual > PRIMER_DIA_VENCIMIENTO) return true
           }
+
           return false
         }
-        
+
         return false
       })
 
-      const conceptosFiltrados = [...inscripciones, ...conceptosVencidos]
-
-      // ========== PAGOS ==========
+      // ========== 3. OBTENER TODOS LOS PAGOS ==========
       const { data: pagos, error: errPagos } = await supabase
         .from('pagos')
         .select('id, estudiante_id, concepto_id, monto_pagado, estado')
@@ -282,16 +299,56 @@ export const useReportesEjecutivos = () => {
         estado: p.pagos_multiples?.estado || 'PAGADO'
       }))
 
-      const pagosValidos = [...(pagos || []), ...pagosMultiplesFormato]
+      const todosLosPagos = [...(pagos || []), ...pagosMultiplesFormato]
 
-      // Crear map de pagos: ULTIMO PAGO por concepto-estudiante (igual a useDeudas.ts)
+      // Map de pagos: suma de pagos por concepto-estudiante
       const pagosMap = new Map<string, number>()
-      pagosValidos.forEach(p => {
+      todosLosPagos.forEach(p => {
         const key = `${p.estudiante_id}-${p.concepto_id}`
-        pagosMap.set(key, p.monto_pagado)  // Sobrescribe con el ultimo pago
+        const actual = pagosMap.get(key) || 0
+        pagosMap.set(key, actual + p.monto_pagado)
       })
 
-      // ========== GASTOS ==========
+      // ========== 4. CALCULAR DEUDAS POR ESTUDIANTE ==========
+      const deudaPorEstudiante = new Map<number, number>()
+      let totalRecaudable = 0
+      let totalRecaudado = 0
+      let estudiantesEnMora = 0
+      let estudiantesAlDia = 0
+
+      estudiantesActivos.forEach(est => {
+        let deudaEst = 0
+        let tieneDeuda = false
+
+        conceptosVencidos.forEach(concepto => {
+          // Solo contar conceptos de la carrera del estudiante
+          if (concepto.carrera_id !== est.carrera_id) return
+
+          const montoPago = pagosMap.get(`${est.id}-${concepto.id}`) || 0
+          const deudaConcepto = Math.max(0, concepto.monto - montoPago)
+          
+          deudaEst += deudaConcepto
+          totalRecaudable += concepto.monto
+
+          if (deudaConcepto > 0) {
+            tieneDeuda = true
+          }
+        })
+
+        deudaPorEstudiante.set(est.id, deudaEst)
+        
+        // Determinar si está en mora o al día
+        if (tieneDeuda) {
+          estudiantesEnMora++
+        } else {
+          estudiantesAlDia++
+        }
+      })
+
+      // Total recaudado: suma de todos los pagos
+      totalRecaudado = todosLosPagos.reduce((sum, p) => sum + p.monto_pagado, 0)
+
+      // ========== 5. OBTENER GASTOS ==========
       const { data: gastosData, error: errGastos } = await supabase
         .from('gastos')
         .select('*')
@@ -313,41 +370,7 @@ export const useReportesEjecutivos = () => {
         gastosPorCategoria[g.categoria] = (gastosPorCategoria[g.categoria] || 0) + g.monto
       })
 
-      // ========== CALCULAR METRICAS ANUAL ==========
-      let totalRecaudable = 0
-      let totalRecaudado = 0
-      let estudiantesEnMora = 0
-
-      // Calcular deuda: AL DIA = pago TODOS los conceptos vencidos
-      const deudaPorEstudiante = new Map<number, number>()
-      estudiantesActivos.forEach(est => {
-        let deudaEst = 0
-        let tieneDeuda = false
-        conceptosVencidos.forEach(concepto => {
-          if (concepto.carrera_id !== est.carrera_id) return
-          const montoPago = pagosMap.get(`${est.id}-${concepto.id}`) || 0
-          const deudaConcepto = Math.max(0, concepto.monto - montoPago)
-          deudaEst += deudaConcepto
-          if (deudaConcepto > 0) tieneDeuda = true
-        })
-        deudaPorEstudiante.set(est.id, deudaEst)
-        if (tieneDeuda) {
-          estudiantesEnMora++
-        }
-      })
-
-      // Calcular totalRecaudable: cada estudiante tiene conceptos por su carrera
-      estudiantesActivos.forEach(est => {
-        conceptosFiltrados.forEach(c => {
-          if (c.carrera_id === est.carrera_id) {
-            totalRecaudable += c.monto
-          }
-        })
-      })
-
-      // Calcular totalRecaudado: suma de todos los pagos registrados
-      totalRecaudado = pagosValidos.reduce((sum, p) => sum + p.monto_pagado, 0)
-
+      // ========== 6. CALCULAR METRICAS ANUALES ==========
       const adeudadoAnual = Math.max(0, totalRecaudable - totalRecaudado)
       const netoAnual = totalRecaudado - gastosAnual
       const eficiencia = totalRecaudable > 0 ? (totalRecaudado / totalRecaudable) * 100 : 0
@@ -356,59 +379,57 @@ export const useReportesEjecutivos = () => {
       const costoPorEstudiante = totalEstudiantes > 0 ? gastosAnual / totalEstudiantes : 0
       const ingresoPorEstudiante = totalEstudiantes > 0 ? totalRecaudado / totalEstudiantes : 0
 
-      // ========== CALCULAR MES ACTUAL ==========
-      const conceptosAntesdeMesActual = conceptosFiltrados.filter(c => {
-        if (c.tipo?.toUpperCase() === 'INSCRIPCION' && (!c.mes || !c.año)) return false
-        if (c.mes && c.año) {
-          if (c.año < anioActual) return true
-          if (c.año === anioActual && c.mes < mesActual && c.mes >= PRIMER_MES_ACADEMICO) return true
-        }
+      // ========== 7. CALCULAR MES ACTUAL ==========
+      const conceptosAntesdeMesActual = conceptosVencidos.filter(c => {
+        if (!c.mes || !c.año) return false
+        if (c.año < anioActual) return true
+        if (c.año === anioActual && c.mes < mesActual) return true
         return false
       })
 
       let totalRecaudableMesActual = 0
       estudiantesActivos.forEach(est => {
-        const conceptosDelEstudiante = conceptosAntesdeMesActual.filter(c => c.carrera_id === est.carrera_id)
-        conceptosDelEstudiante.forEach(c => {
-          totalRecaudableMesActual += c.monto
+        conceptosAntesdeMesActual.forEach(c => {
+          if (c.carrera_id === est.carrera_id) {
+            totalRecaudableMesActual += c.monto
+          }
         })
       })
 
-      const pagosValidosMesActual = pagosValidos.filter(p => {
-        const concepto = conceptosFiltrados.find(c => c.id === p.concepto_id)
+      const pagosValidosMesActual = todosLosPagos.filter(p => {
+        const concepto = conceptosVencidos.find(c => c.id === p.concepto_id)
         if (!concepto) return false
-        if (concepto.mes && concepto.año) {
-          if (concepto.año < anioActual) return true
-          if (concepto.año === anioActual && concepto.mes < mesActual && concepto.mes >= PRIMER_MES_ACADEMICO) return true
-        } else {
-          return concepto.tipo?.toUpperCase() === 'INSCRIPCION'
-        }
+        if (!concepto.mes || !concepto.año) return false
+        if (concepto.año < anioActual) return true
+        if (concepto.año === anioActual && concepto.mes < mesActual) return true
         return false
       })
+
       const recaudoMesActual = pagosValidosMesActual.reduce((sum, p) => sum + p.monto_pagado, 0)
       const adeudadoMesActual = Math.max(0, totalRecaudableMesActual - recaudoMesActual)
       const netoMesActual = recaudoMesActual - gastosMesActual
 
-      // ========== POR CARRERA ==========
-      const carreras = new Map<number, any>()
+      // ========== 8. DESGLOSE POR CARRERA ==========
+      const carrerasMap = new Map<number, any>()
       estudiantesActivos.forEach(est => {
-        if (!carreras.has(est.carrera_id)) {
-          carreras.set(est.carrera_id, {
+        if (!carrerasMap.has(est.carrera_id)) {
+          carrerasMap.set(est.carrera_id, {
             carrera_id: est.carrera_id,
             carrera: (est as any).carreras?.nombre || 'Sin carrera',
             estudiantes: [],
           })
         }
-        carreras.get(est.carrera_id).estudiantes.push(est.id)
+        carrerasMap.get(est.carrera_id).estudiantes.push(est.id)
       })
 
-      const porCarrera: DesglosePorCarrera[] = Array.from(carreras.values()).map(carr => {
+      const porCarrera: DesglosePorCarrera[] = Array.from(carrerasMap.values()).map(carr => {
         const estCarrera = carr.estudiantes
         let recaudadoCarrera = 0
         let enMoraCarrera = 0
         let deudaCarrera = 0
+        let recaudableCarrera = 0
 
-        pagosValidos.forEach(pago => {
+        todosLosPagos.forEach(pago => {
           if (estCarrera.includes(pago.estudiante_id)) {
             recaudadoCarrera += pago.monto_pagado
           }
@@ -417,24 +438,26 @@ export const useReportesEjecutivos = () => {
         estCarrera.forEach(estId => {
           let deudaEst = 0
           let tieneDeuda = false
+          
           conceptosVencidos.forEach(c => {
             if (c.carrera_id !== carr.carrera_id) return
-            const est = estudiantesActivos.find(e => e.id === estId)
-            if (!est || est.carrera_id !== carr.carrera_id) return
+            
             const montoPago = pagosMap.get(`${estId}-${c.id}`) || 0
             const deudaConcepto = Math.max(0, c.monto - montoPago)
+            
             deudaEst += deudaConcepto
-            if (deudaConcepto > 0) tieneDeuda = true
+            recaudableCarrera += c.monto
+            
+            if (deudaConcepto > 0) {
+              tieneDeuda = true
+            }
           })
+
           if (tieneDeuda) {
             enMoraCarrera++
             deudaCarrera += deudaEst
           }
         })
-
-        const recaudableCarrera = conceptosFiltrados
-          .filter(c => c.carrera_id === carr.carrera_id)
-          .reduce((sum, c) => sum + (c.monto * estCarrera.length), 0)
 
         const eficienciaCarrera = recaudableCarrera > 0 ? (recaudadoCarrera / recaudableCarrera) * 100 : 0
         const moraCarrera = estCarrera.length > 0 ? (enMoraCarrera / estCarrera.length) * 100 : 0
@@ -451,12 +474,11 @@ export const useReportesEjecutivos = () => {
         }
       })
 
-      // ========== TOP MOROSOS ==========
+      // ========== 9. TOP MOROSOS ==========
       const morosos: TopMoroso[] = []
       estudiantesActivos.forEach(est => {
         const deudaEst = deudaPorEstudiante.get(est.id) || 0
         if (deudaEst > 0) {
-          // Calcular meses en mora
           let mesesEnMora = 1
           conceptosVencidos.forEach(c => {
             if (c.carrera_id === est.carrera_id) {
@@ -499,6 +521,7 @@ export const useReportesEjecutivos = () => {
         ingresoPorEstudiante: parseFloat(ingresoPorEstudiante.toFixed(2)),
         totalEstudiantes,
         estudiantesMora: estudiantesEnMora,
+        estudiantesAlDia,
         porCarrera,
         topMorosos: morosos.slice(0, 20),
         gastosPorCategoria,
@@ -512,7 +535,6 @@ export const useReportesEjecutivos = () => {
   const generarAlertas = (isipp: any, milagros: any, consolidado: any): Alerta[] => {
     const alertas: Alerta[] = []
 
-    // Alertas CRITICAS
     if (isipp.mora > 65) {
       alertas.push({
         id: 'mora-isipp',
@@ -557,8 +579,7 @@ export const useReportesEjecutivos = () => {
       })
     }
 
-    // Alertas ALTAS
-    if ((isipp.gastosAnual / isipp.recaudoAnual) * 100 > 30) {
+    if (isipp.recaudoAnual > 0 && (isipp.gastosAnual / isipp.recaudoAnual) * 100 > 30) {
       alertas.push({
         id: 'gastos-isipp',
         tipo: 'ALTA',
@@ -569,7 +590,7 @@ export const useReportesEjecutivos = () => {
       })
     }
 
-    if ((milagros.gastosAnual / milagros.recaudoAnual) * 100 > 30) {
+    if (milagros.recaudoAnual > 0 && (milagros.gastosAnual / milagros.recaudoAnual) * 100 > 30) {
       alertas.push({
         id: 'gastos-milagros',
         tipo: 'ALTA',
@@ -580,7 +601,6 @@ export const useReportesEjecutivos = () => {
       })
     }
 
-    // Alertas BUENAS
     if (consolidado.netoTotal > 500000) {
       alertas.push({
         id: 'neto-excelente',
@@ -608,19 +628,13 @@ export const useReportesEjecutivos = () => {
   }
 
   const calcularFlujoCaja = (isipp: any, milagros: any): FlujoCajaMes[] => {
-    const hoy = new Date()
-    const anioActual = hoy.getFullYear()
     const mesesNombre = ['', 'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
-
     const flujoCaja: FlujoCajaMes[] = []
     let acumulado = 0
 
-    // Proyectar marzo a diciembre
     for (let mes = 3; mes <= 12; mes++) {
-      // Promedio mensual
-      const recaudoPromedio = ((isipp.recaudoAnual + milagros.recaudoAnual) / 10) * 1.1 // 10% de margen de error
+      const recaudoPromedio = ((isipp.recaudoAnual + milagros.recaudoAnual) / 10) * 1.1
       const gastosPromedio = ((isipp.gastosAnual + milagros.gastosAnual) / 10)
-
       const neto = recaudoPromedio - gastosPromedio
       acumulado += neto
 
@@ -641,10 +655,7 @@ export const useReportesEjecutivos = () => {
     try {
       setData(prev => ({ ...prev, loading: true, error: null }))
 
-      // Calcular ISIPP
       const isippData = await calcularMetricasInstitucion(1)
-
-      // Calcular Milagros
       const milagrosData = await calcularMetricasInstitucion(2)
 
       // EXTRAS Milagros: Ventas
@@ -661,7 +672,6 @@ export const useReportesEjecutivos = () => {
 
       const ventasKioscoTotal = (cajaGrandeData || []).reduce((sum: number, c: any) => sum + c.monto, 0)
 
-      // Ajustar recaudos Milagros con ventas
       const milagrosAjustado = {
         ...milagrosData,
         recaudoAnual: milagrosData.recaudoAnual + ventasInsumosTotal + ventasKioscoTotal,
@@ -670,7 +680,6 @@ export const useReportesEjecutivos = () => {
         ventasKiosco: ventasKioscoTotal,
       }
 
-      // CONSOLIDADO
       const consolidado: Consolidado = {
         recaudoTotal: isippData.recaudoAnual + milagrosAjustado.recaudoAnual,
         adeudadoTotal: isippData.adeudadoAnual + milagrosData.adeudadoAnual,
@@ -680,38 +689,39 @@ export const useReportesEjecutivos = () => {
         saludFinanciera: calculateHealthScore(isippData, milagrosAjustado),
         totalEstudiantes: isippData.totalEstudiantes + milagrosData.totalEstudiantes,
         totalMorosos: isippData.estudiantesMora + milagrosData.estudiantesMora,
+        totalAlDia: isippData.estudiantesAlDia + milagrosData.estudiantesAlDia,
         porcentajeMora: ((isippData.estudiantesMora + milagrosData.estudiantesMora) / (isippData.totalEstudiantes + milagrosData.totalEstudiantes)) * 100,
+        porcentajeAlDia: ((isippData.estudiantesAlDia + milagrosData.estudiantesAlDia) / (isippData.totalEstudiantes + milagrosData.totalEstudiantes)) * 100,
       }
 
-      // COMPARATIVA
       const comparativa = {
         eficienciaDif: milagrosAjustado.eficiencia - isippData.eficiencia,
         moraDif: isippData.mora - milagrosAjustado.mora,
-        netoPerStudenteDif: ((milagrosAjustado.netoAnual / milagrosData.totalEstudiantes) - (isippData.netoAnual / isippData.totalEstudiantes)) / (isippData.netoAnual / isippData.totalEstudiantes) * 100,
+        netoPerStudenteDif: isippData.totalEstudiantes > 0 && milagrosData.totalEstudiantes > 0
+          ? ((milagrosAjustado.netoAnual / milagrosData.totalEstudiantes) - (isippData.netoAnual / isippData.totalEstudiantes)) / (isippData.netoAnual / isippData.totalEstudiantes) * 100
+          : 0,
         institucionMejor: milagrosAjustado.eficiencia > isippData.eficiencia ? 'Milagros' : 'ISIPP',
         recomendaciones: generateRecommendations(isippData, milagrosAjustado),
       }
 
-      // FLUJO CAJA
       const flujoCaja = calcularFlujoCaja(isippData, milagrosAjustado)
 
-      // RENTABILIDAD
       const rentabilidad = {
         isipp: {
-          margenBruto: (isippData.recaudoAnual / (isippData.recaudoAnual + isippData.adeudadoAnual)) * 100,
+          margenBruto: (isippData.recaudoAnual + isippData.adeudadoAnual) > 0 ? (isippData.recaudoAnual / (isippData.recaudoAnual + isippData.adeudadoAnual)) * 100 : 0,
           margenNeto: isippData.margenNeto,
           costoPorEstudiante: isippData.costoPorEstudiante,
           ingresoPorEstudiante: isippData.ingresoPorEstudiante,
-          gastoPct: (isippData.gastosAnual / isippData.recaudoAnual) * 100,
-          roiEstimado: (isippData.netoAnual / isippData.gastosAnual) * 100,
+          gastoPct: isippData.recaudoAnual > 0 ? (isippData.gastosAnual / isippData.recaudoAnual) * 100 : 0,
+          roiEstimado: isippData.gastosAnual > 0 ? (isippData.netoAnual / isippData.gastosAnual) * 100 : 0,
         },
         milagros: {
-          margenBruto: (milagrosAjustado.recaudoAnual / (milagrosAjustado.recaudoAnual + milagrosData.adeudadoAnual)) * 100,
-          margenNeto: (milagrosAjustado.netoAnual / milagrosAjustado.recaudoAnual) * 100,
+          margenBruto: (milagrosAjustado.recaudoAnual + milagrosData.adeudadoAnual) > 0 ? (milagrosAjustado.recaudoAnual / (milagrosAjustado.recaudoAnual + milagrosData.adeudadoAnual)) * 100 : 0,
+          margenNeto: (milagrosAjustado.recaudoAnual > 0) ? (milagrosAjustado.netoAnual / milagrosAjustado.recaudoAnual) * 100 : 0,
           costoPorEstudiante: milagrosData.costoPorEstudiante,
           ingresoPorEstudiante: milagrosData.ingresoPorEstudiante,
-          gastoPct: (milagrosData.gastosAnual / milagrosAjustado.recaudoAnual) * 100,
-          roiEstimado: (milagrosAjustado.netoAnual / milagrosData.gastosAnual) * 100,
+          gastoPct: milagrosAjustado.recaudoAnual > 0 ? (milagrosData.gastosAnual / milagrosAjustado.recaudoAnual) * 100 : 0,
+          roiEstimado: milagrosData.gastosAnual > 0 ? (milagrosAjustado.netoAnual / milagrosData.gastosAnual) * 100 : 0,
         },
         oportunidades: [
           `${comparativa.institucionMejor} es mas eficiente (+${Math.abs(comparativa.eficienciaDif).toFixed(1)}%)`,
@@ -720,7 +730,6 @@ export const useReportesEjecutivos = () => {
         ],
       }
 
-      // ALERTAS
       const alertas = generarAlertas(isippData, milagrosAjustado, consolidado)
 
       setData({
@@ -757,8 +766,8 @@ const calculateHealthScore = (isipp: any, milagros: any): number => {
   const scoreEficienciaMilagros = Math.min(milagros.eficiencia, 100) / 100 * 20
   const scoreMoraISIPP = (100 - isipp.mora) / 100 * 15
   const scoreMoraMilagros = (100 - milagros.mora) / 100 * 15
-  const scoreGastosISIPP = Math.max(0, (30 - (isipp.gastosAnual / isipp.recaudoAnual) * 100) / 30) * 15
-  const scoreGastosMilagros = Math.max(0, (30 - (milagros.gastosAnual / milagros.recaudoAnual) * 100) / 30) * 15
+  const scoreGastosISIPP = isipp.recaudoAnual > 0 ? Math.max(0, (30 - (isipp.gastosAnual / isipp.recaudoAnual) * 100) / 30) * 15 : 0
+  const scoreGastosMilagros = milagros.recaudoAnual > 0 ? Math.max(0, (30 - (milagros.gastosAnual / milagros.recaudoAnual) * 100) / 30) * 15 : 0
   const scoreNetoISIPP = Math.min((isipp.margenNeto / 30) * 100, 100) / 100 * 15
   const scoreNetoMilagros = Math.min((milagros.margenNeto / 30) * 100, 100) / 100 * 15
 
@@ -774,7 +783,7 @@ const generateRecommendations = (isipp: any, milagros: any): string[] => {
     recs.push(`Milagros supera en eficiencia: aplicar modelo de cobranza`)
   }
 
-  if ((isipp.gastosAnual / isipp.recaudoAnual) > (milagros.gastosAnual / milagros.recaudoAnual)) {
+  if (isipp.recaudoAnual > 0 && milagros.recaudoAnual > 0 && (isipp.gastosAnual / isipp.recaudoAnual) > (milagros.gastosAnual / milagros.recaudoAnual)) {
     recs.push(`ISIPP: reducir gastos 10% = +${new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(isipp.gastosAnual * 0.1)} neto`)
   }
 
