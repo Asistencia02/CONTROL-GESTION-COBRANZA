@@ -1,13 +1,13 @@
 import React, { useState } from 'react'
 import { useReportesEjecutivos } from '@renderer/hooks/useReportesEjecutivos'
 import { formatoMoneda } from '@renderer/lib/helpers'
-import { BarChart3, TrendingUp, AlertCircle, Users, RefreshCw, Target, Zap, DollarSign, Gauge, Activity, Calendar, PieChart, TrendingDown, ChevronDown, ChevronUp, TrendingUpIcon } from 'lucide-react'
+import { BarChart3, TrendingUp, AlertCircle, Users, RefreshCw, Target, Zap, DollarSign, Gauge, Activity, Calendar, PieChart, TrendingDown, ChevronDown, ChevronUp } from 'lucide-react'
 import { Chart as ChartJS, ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, LineElement, PointElement, Title, Filler } from 'chart.js'
 import { Bar, Pie, Line } from 'react-chartjs-2'
 
 ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, LineElement, PointElement, Title, Filler)
 
-// ========== KPI CARD MEJORADA ==========
+// ========== KPI CARD ==========
 interface KPICardProps {
   title: string
   value: string
@@ -19,18 +19,20 @@ interface KPICardProps {
 }
 
 const KPICard: React.FC<KPICardProps> = ({ title, value, subtitle, icon, bgColor, textColor, size = 'md' }) => (
-  <div className={`p-4 rounded-lg shadow-lg border border-slate-700/50 hover:shadow-xl transition-all ${bgColor} ${size === 'sm' ? 'col-span-1' : ''}`}>
+  <div className={`p-4 rounded-lg shadow-lg border border-slate-700/50 hover:shadow-xl transition-all ${bgColor}`}>
     <div className="flex items-start justify-between mb-2">
       <div className="p-2 bg-black/40 rounded-lg text-lg">{icon}</div>
     </div>
-    <p className={`${size === 'sm' ? 'text-xs' : 'text-xs'} text-slate-400 font-bold mb-1`}>{title}</p>
+    <p className="text-xs text-slate-400 font-bold mb-1">{title}</p>
     <p className={`${size === 'sm' ? 'text-lg' : 'text-2xl'} font-black ${textColor} leading-tight mb-1 break-words`}>{value}</p>
-    {subtitle && <p className={`${size === 'sm' ? 'text-xs' : 'text-xs'} text-slate-400 truncate`}>{subtitle}</p>}
+    {subtitle && <p className="text-xs text-slate-400 truncate">{subtitle}</p>}
   </div>
 )
 
-// ========== ALERTAS COMPACTAS ==========
-const AlertasCompactas: React.FC<{ alertas: any[] }> = ({ alertas }) => {
+// ========== ALERTAS COLAPSABLES ==========
+const AlertasColapsables: React.FC<{ alertas: any[] }> = ({ alertas }) => {
+  const [expandido, setExpandido] = useState(true)
+
   if (alertas.length === 0) return null
 
   const getAlertBg = (tipo: string) => {
@@ -53,19 +55,32 @@ const AlertasCompactas: React.FC<{ alertas: any[] }> = ({ alertas }) => {
     return map[tipo as keyof typeof map] || '●'
   }
 
-  const alertasTop = alertas.slice(0, 3)
-
   return (
-    <div className="mb-6 space-y-2">
-      {alertasTop.map((alerta) => (
-        <div key={alerta.id} className={`p-3 rounded-lg ${getAlertBg(alerta.tipo)} flex items-start gap-2`}>
-          <span className="text-sm flex-shrink-0 mt-0.5">{getIcon(alerta.tipo)}</span>
-          <div className="flex-1 min-w-0">
-            <p className="text-xs font-bold text-slate-200">{alerta.titulo}</p>
-            <p className="text-xs text-slate-400 line-clamp-1">{alerta.descripcion}</p>
-          </div>
+    <div className="mb-6">
+      <button
+        onClick={() => setExpandido(!expandido)}
+        className="w-full flex items-center justify-between p-3 bg-slate-800/50 hover:bg-slate-800/70 border border-slate-700/50 rounded-lg transition-all font-bold text-slate-200"
+      >
+        <div className="flex items-center gap-2">
+          <AlertCircle size={18} className="text-yellow-400" />
+          <span>🔔 Alertas ({alertas.length})</span>
         </div>
-      ))}
+        {expandido ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+      </button>
+
+      {expandido && (
+        <div className="mt-2 space-y-2">
+          {alertas.slice(0, 5).map((alerta) => (
+            <div key={alerta.id} className={`p-3 rounded-lg ${getAlertBg(alerta.tipo)} flex items-start gap-2`}>
+              <span className="text-sm flex-shrink-0 mt-0.5">{getIcon(alerta.tipo)}</span>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-bold text-slate-200">{alerta.titulo}</p>
+                <p className="text-xs text-slate-400 line-clamp-2">{alerta.descripcion}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -74,6 +89,8 @@ const AlertasCompactas: React.FC<{ alertas: any[] }> = ({ alertas }) => {
 export const ReportesEjecutivos: React.FC = () => {
   const { consolidado, isipp, milagros, comparativa, flujoCaja, rentabilidad, alertas, loading, error, refrescar } = useReportesEjecutivos()
   const [tabActiva, setTabActiva] = useState('global')
+  const [expandidosISIPP, setExpandidosISIPP] = useState<Record<string, boolean>>({})
+  const [expandidosMilagros, setExpandidosMilagros] = useState<Record<string, boolean>>({})
 
   if (loading) {
     return (
@@ -163,7 +180,7 @@ export const ReportesEjecutivos: React.FC = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 p-4 md:p-6">
       {/* HEADER */}
-      <div className="flex justify-between items-start mb-6">
+      <div className="flex justify-between items-start mb-4">
         <div>
           <h1 className="text-4xl md:text-5xl font-black text-transparent bg-gradient-to-r from-cyan-400 via-purple-400 to-cyan-400 bg-clip-text mb-1">
             📊 PANEL EJECUTIVO
@@ -175,63 +192,11 @@ export const ReportesEjecutivos: React.FC = () => {
         </button>
       </div>
 
-      {/* ALERTAS COMPACTAS */}
-      <AlertasCompactas alertas={alertas} />
-
-      {/* KPI CARDS - 3x2 GRID */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-6">
-        <KPICard
-          title="💰 Recaudado Total"
-          value={formatoMoneda(consolidado.recaudoTotal)}
-          subtitle="Año en curso"
-          icon={<DollarSign className="text-green-400" size={20} />}
-          bgColor="bg-gradient-to-br from-green-600/25 to-green-900/15 border border-green-500/30"
-          textColor="text-green-300"
-        />
-        <KPICard
-          title="📌 Adeudado Total"
-          value={formatoMoneda(consolidado.adeudadoTotal)}
-          subtitle={`${consolidado.porcentajeMora.toFixed(1)}% estudiantes`}
-          icon={<AlertCircle className="text-red-400" size={20} />}
-          bgColor="bg-gradient-to-br from-red-600/25 to-red-900/15 border border-red-500/30"
-          textColor="text-red-300"
-        />
-        <KPICard
-          title="💸 Gastos Totales"
-          value={formatoMoneda(consolidado.gastosTotal)}
-          subtitle="Invertido en operaciones"
-          icon={<TrendingDown className="text-orange-400" size={20} />}
-          bgColor="bg-gradient-to-br from-orange-600/25 to-orange-900/15 border border-orange-500/30"
-          textColor="text-orange-300"
-        />
-        <KPICard
-          title="🟣 Neto Disponible"
-          value={formatoMoneda(consolidado.netoTotal)}
-          subtitle="Recaudado - Gastos"
-          icon={<DollarSign className="text-purple-400" size={20} />}
-          bgColor="bg-gradient-to-br from-purple-600/25 to-purple-900/15 border border-purple-500/30"
-          textColor="text-purple-300"
-        />
-        <KPICard
-          title="💵 Para Mejoras"
-          value={formatoMoneda(consolidado.dineroParaMejoras)}
-          subtitle="80% del neto"
-          icon={<Zap className="text-yellow-400" size={20} />}
-          bgColor="bg-gradient-to-br from-yellow-600/25 to-yellow-900/15 border border-yellow-500/30"
-          textColor="text-yellow-300"
-        />
-        <KPICard
-          title="📊 Salud Financiera"
-          value={`${consolidado.saludFinanciera}/100`}
-          subtitle={consolidado.saludFinanciera > 75 ? '✅ Excelente' : consolidado.saludFinanciera > 60 ? '⚠️ Buena' : '🔴 Alerta'}
-          icon={<Activity className="text-cyan-400" size={20} />}
-          bgColor="bg-gradient-to-br from-cyan-600/25 to-cyan-900/15 border border-cyan-500/30"
-          textColor="text-cyan-300"
-        />
-      </div>
+      {/* ALERTAS COLAPSABLES */}
+      <AlertasColapsables alertas={alertas} />
 
       {/* TABS */}
-      <div className="mb-6 flex gap-1 overflow-x-auto pb-2 border-b border-slate-700/50">
+      <div className="mb-4 flex gap-1 overflow-x-auto pb-2 border-b border-slate-700/50">
         {[
           { id: 'global', label: 'Global', icon: Gauge },
           { id: 'isipp', label: 'ISIPP', icon: Activity },
@@ -261,6 +226,59 @@ export const ReportesEjecutivos: React.FC = () => {
         {/* TAB: GLOBAL */}
         {tabActiva === 'global' && (
           <>
+            {/* KPI CARDS DENTRO DE GLOBAL */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              <KPICard
+                title="💰 Recaudado Total"
+                value={formatoMoneda(consolidado.recaudoTotal)}
+                subtitle="Año en curso"
+                icon={<DollarSign className="text-green-400" size={20} />}
+                bgColor="bg-gradient-to-br from-green-600/25 to-green-900/15 border border-green-500/30"
+                textColor="text-green-300"
+              />
+              <KPICard
+                title="📌 Adeudado Total"
+                value={formatoMoneda(consolidado.adeudadoTotal)}
+                subtitle={`${consolidado.porcentajeMora.toFixed(1)}% estudiantes`}
+                icon={<AlertCircle className="text-red-400" size={20} />}
+                bgColor="bg-gradient-to-br from-red-600/25 to-red-900/15 border border-red-500/30"
+                textColor="text-red-300"
+              />
+              <KPICard
+                title="💸 Gastos Totales"
+                value={formatoMoneda(consolidado.gastosTotal)}
+                subtitle="Invertido en operaciones"
+                icon={<TrendingDown className="text-orange-400" size={20} />}
+                bgColor="bg-gradient-to-br from-orange-600/25 to-orange-900/15 border border-orange-500/30"
+                textColor="text-orange-300"
+              />
+              <KPICard
+                title="🟣 Neto Disponible"
+                value={formatoMoneda(consolidado.netoTotal)}
+                subtitle="Recaudado - Gastos"
+                icon={<DollarSign className="text-purple-400" size={20} />}
+                bgColor="bg-gradient-to-br from-purple-600/25 to-purple-900/15 border border-purple-500/30"
+                textColor="text-purple-300"
+              />
+              <KPICard
+                title="💵 Para Mejoras"
+                value={formatoMoneda(consolidado.dineroParaMejoras)}
+                subtitle="80% del neto"
+                icon={<Zap className="text-yellow-400" size={20} />}
+                bgColor="bg-gradient-to-br from-yellow-600/25 to-yellow-900/15 border border-yellow-500/30"
+                textColor="text-yellow-300"
+              />
+              <KPICard
+                title="📊 Salud Financiera"
+                value={`${consolidado.saludFinanciera}/100`}
+                subtitle={consolidado.saludFinanciera > 75 ? '✅ Excelente' : consolidado.saludFinanciera > 60 ? '⚠️ Buena' : '🔴 Alerta'}
+                icon={<Activity className="text-cyan-400" size={20} />}
+                bgColor="bg-gradient-to-br from-cyan-600/25 to-cyan-900/15 border border-cyan-500/30"
+                textColor="text-cyan-300"
+              />
+            </div>
+
+            {/* GRÁFICOS */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               <div className="p-4 bg-gradient-to-br from-slate-800/80 to-slate-900/40 border border-slate-700/50 rounded-lg shadow-lg">
                 <h3 className="text-sm font-bold text-white mb-3 flex items-center gap-2">
@@ -403,7 +421,7 @@ export const ReportesEjecutivos: React.FC = () => {
           </>
         )}
 
-        {/* TAB: ISIPP */}
+        {/* TAB: ISIPP CON SEPARACIÓN POR CARRERAS */}
         {tabActiva === 'isipp' && (
           <div className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
@@ -437,6 +455,40 @@ export const ReportesEjecutivos: React.FC = () => {
               </div>
             </div>
 
+            {/* CARRERAS DESPLEGABLES */}
+            <div className="space-y-3">
+              <h4 className="text-sm font-bold text-white">📚 Detalle por Carreras</h4>
+              {isipp.porCarrera && isipp.porCarrera.length > 0 ? (
+                isipp.porCarrera.map((carrera, idx) => (
+                  <div key={idx} className="bg-slate-800/60 border border-slate-700/50 rounded-lg overflow-hidden">
+                    <button
+                      onClick={() => setExpandidosISIPP({ ...expandidosISIPP, [idx]: !expandidosISIPP[idx] })}
+                      className="w-full flex items-center justify-between p-3 hover:bg-slate-700/50 transition-all"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-slate-200">{carrera.carrera}</span>
+                        <span className="text-xs text-slate-400">({carrera.estudiantes} estudiantes)</span>
+                      </div>
+                      {expandidosISIPP[idx] ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+                    </button>
+                    {expandidosISIPP[idx] && (
+                      <div className="p-3 border-t border-slate-700/50 bg-slate-900/30 text-xs space-y-2">
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                          <div><p className="text-slate-400">Recaudable</p><p className="text-green-300 font-bold">{formatoMoneda(carrera.recaudable)}</p></div>
+                          <div><p className="text-slate-400">Recaudado</p><p className="text-blue-300 font-bold">{formatoMoneda(carrera.recaudado)}</p></div>
+                          <div><p className="text-slate-400">Deuda</p><p className="text-red-300 font-bold">{formatoMoneda(carrera.deuda)}</p></div>
+                          <div><p className="text-slate-400">Eficiencia</p><p className="text-cyan-300 font-bold">{carrera.eficiencia.toFixed(1)}%</p></div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))
+              ) : (
+                <p className="text-slate-400 text-xs">Sin carreras</p>
+              )}
+            </div>
+
+            {/* TOP MOROSOS */}
             <div className="p-4 bg-slate-800/60 border border-slate-700/50 rounded-lg">
               <h4 className="text-sm font-bold text-white mb-3">📍 Top 5 Morosos</h4>
               {isipp.topMorosos && isipp.topMorosos.length > 0 ? (
@@ -461,7 +513,7 @@ export const ReportesEjecutivos: React.FC = () => {
           </div>
         )}
 
-        {/* TAB: MILAGROS */}
+        {/* TAB: MILAGROS CON SEPARACIÓN POR CARRERAS */}
         {tabActiva === 'milagros' && (
           <div className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
@@ -496,6 +548,40 @@ export const ReportesEjecutivos: React.FC = () => {
               </div>
             </div>
 
+            {/* CARRERAS DESPLEGABLES */}
+            <div className="space-y-3">
+              <h4 className="text-sm font-bold text-white">📚 Detalle por Carreras</h4>
+              {milagros.porCarrera && milagros.porCarrera.length > 0 ? (
+                milagros.porCarrera.map((carrera, idx) => (
+                  <div key={idx} className="bg-slate-800/60 border border-slate-700/50 rounded-lg overflow-hidden">
+                    <button
+                      onClick={() => setExpandidosMilagros({ ...expandidosMilagros, [idx]: !expandidosMilagros[idx] })}
+                      className="w-full flex items-center justify-between p-3 hover:bg-slate-700/50 transition-all"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-slate-200">{carrera.carrera}</span>
+                        <span className="text-xs text-slate-400">({carrera.estudiantes} estudiantes)</span>
+                      </div>
+                      {expandidosMilagros[idx] ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+                    </button>
+                    {expandidosMilagros[idx] && (
+                      <div className="p-3 border-t border-slate-700/50 bg-slate-900/30 text-xs space-y-2">
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                          <div><p className="text-slate-400">Recaudable</p><p className="text-green-300 font-bold">{formatoMoneda(carrera.recaudable)}</p></div>
+                          <div><p className="text-slate-400">Recaudado</p><p className="text-blue-300 font-bold">{formatoMoneda(carrera.recaudado)}</p></div>
+                          <div><p className="text-slate-400">Deuda</p><p className="text-red-300 font-bold">{formatoMoneda(carrera.deuda)}</p></div>
+                          <div><p className="text-slate-400">Eficiencia</p><p className="text-cyan-300 font-bold">{carrera.eficiencia.toFixed(1)}%</p></div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))
+              ) : (
+                <p className="text-slate-400 text-xs">Sin carreras</p>
+              )}
+            </div>
+
+            {/* TOP MOROSOS */}
             <div className="p-4 bg-slate-800/60 border border-slate-700/50 rounded-lg">
               <h4 className="text-sm font-bold text-white mb-3">📍 Top 5 Morosos</h4>
               {milagros.topMorosos && milagros.topMorosos.length > 0 ? (
@@ -633,68 +719,28 @@ export const ReportesEjecutivos: React.FC = () => {
           <div className="space-y-4">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               <div className="p-4 bg-slate-800/60 border border-slate-700/50 rounded-lg">
-                <h4 className="text-sm font-bold text-white mb-4 flex items-center gap-2"><Target size={18} /> ISIPP - Análisis de Rentabilidad</h4>
+                <h4 className="text-sm font-bold text-white mb-4 flex items-center gap-2"><Target size={18} /> ISIPP</h4>
                 <div className="space-y-2 text-sm">
-                  <div className="flex justify-between p-2 bg-slate-900/50 rounded">
-                    <span className="text-slate-400">Margen Bruto</span>
-                    <span className={`font-bold ${rentabilidad.isipp.margenBruto > 70 ? 'text-green-300' : 'text-yellow-300'}`}>{rentabilidad.isipp.margenBruto.toFixed(1)}%</span>
-                  </div>
-                  <div className="flex justify-between p-2 bg-slate-900/50 rounded">
-                    <span className="text-slate-400">Margen Neto</span>
-                    <span className={`font-bold ${rentabilidad.isipp.margenNeto > 20 ? 'text-green-300' : 'text-yellow-300'}`}>{rentabilidad.isipp.margenNeto.toFixed(1)}%</span>
-                  </div>
-                  <div className="flex justify-between p-2 bg-slate-900/50 rounded">
-                    <span className="text-slate-400">Gastos %</span>
-                    <span className={`font-bold ${rentabilidad.isipp.gastoPct < 30 ? 'text-green-300' : 'text-red-300'}`}>{rentabilidad.isipp.gastoPct.toFixed(1)}%</span>
-                  </div>
-                  <div className="flex justify-between p-2 bg-slate-900/50 rounded">
-                    <span className="text-slate-400">ROI Estimado</span>
-                    <span className={`font-bold ${rentabilidad.isipp.roiEstimado > 100 ? 'text-green-300' : 'text-yellow-300'}`}>{rentabilidad.isipp.roiEstimado.toFixed(1)}%</span>
-                  </div>
-                  <div className="flex justify-between p-2 bg-slate-900/50 rounded">
-                    <span className="text-slate-400">Costo/Estudiante</span>
-                    <span className="font-bold text-blue-300">{formatoMoneda(rentabilidad.isipp.costoPorEstudiante)}</span>
-                  </div>
-                  <div className="flex justify-between p-2 bg-slate-900/50 rounded">
-                    <span className="text-slate-400">Ingreso/Estudiante</span>
-                    <span className="font-bold text-green-300">{formatoMoneda(rentabilidad.isipp.ingresoPorEstudiante)}</span>
-                  </div>
+                  <div className="flex justify-between p-2 bg-slate-900/50 rounded"><span className="text-slate-400">Margen Bruto</span><span className={`font-bold ${rentabilidad.isipp.margenBruto > 70 ? 'text-green-300' : 'text-yellow-300'}`}>{rentabilidad.isipp.margenBruto.toFixed(1)}%</span></div>
+                  <div className="flex justify-between p-2 bg-slate-900/50 rounded"><span className="text-slate-400">Margen Neto</span><span className={`font-bold ${rentabilidad.isipp.margenNeto > 20 ? 'text-green-300' : 'text-yellow-300'}`}>{rentabilidad.isipp.margenNeto.toFixed(1)}%</span></div>
+                  <div className="flex justify-between p-2 bg-slate-900/50 rounded"><span className="text-slate-400">Gastos %</span><span className={`font-bold ${rentabilidad.isipp.gastoPct < 30 ? 'text-green-300' : 'text-red-300'}`}>{rentabilidad.isipp.gastoPct.toFixed(1)}%</span></div>
+                  <div className="flex justify-between p-2 bg-slate-900/50 rounded"><span className="text-slate-400">ROI Estimado</span><span className={`font-bold ${rentabilidad.isipp.roiEstimado > 100 ? 'text-green-300' : 'text-yellow-300'}`}>{rentabilidad.isipp.roiEstimado.toFixed(1)}%</span></div>
                 </div>
               </div>
 
               <div className="p-4 bg-slate-800/60 border border-slate-700/50 rounded-lg">
-                <h4 className="text-sm font-bold text-white mb-4 flex items-center gap-2"><Target size={18} /> Milagros - Análisis de Rentabilidad</h4>
+                <h4 className="text-sm font-bold text-white mb-4 flex items-center gap-2"><Target size={18} /> Milagros</h4>
                 <div className="space-y-2 text-sm">
-                  <div className="flex justify-between p-2 bg-slate-900/50 rounded">
-                    <span className="text-slate-400">Margen Bruto</span>
-                    <span className={`font-bold ${rentabilidad.milagros.margenBruto > 70 ? 'text-green-300' : 'text-yellow-300'}`}>{rentabilidad.milagros.margenBruto.toFixed(1)}%</span>
-                  </div>
-                  <div className="flex justify-between p-2 bg-slate-900/50 rounded">
-                    <span className="text-slate-400">Margen Neto</span>
-                    <span className={`font-bold ${rentabilidad.milagros.margenNeto > 20 ? 'text-green-300' : 'text-yellow-300'}`}>{rentabilidad.milagros.margenNeto.toFixed(1)}%</span>
-                  </div>
-                  <div className="flex justify-between p-2 bg-slate-900/50 rounded">
-                    <span className="text-slate-400">Gastos %</span>
-                    <span className={`font-bold ${rentabilidad.milagros.gastoPct < 30 ? 'text-green-300' : 'text-red-300'}`}>{rentabilidad.milagros.gastoPct.toFixed(1)}%</span>
-                  </div>
-                  <div className="flex justify-between p-2 bg-slate-900/50 rounded">
-                    <span className="text-slate-400">ROI Estimado</span>
-                    <span className={`font-bold ${rentabilidad.milagros.roiEstimado > 100 ? 'text-green-300' : 'text-yellow-300'}`}>{rentabilidad.milagros.roiEstimado.toFixed(1)}%</span>
-                  </div>
-                  <div className="flex justify-between p-2 bg-slate-900/50 rounded">
-                    <span className="text-slate-400">Costo/Estudiante</span>
-                    <span className="font-bold text-blue-300">{formatoMoneda(rentabilidad.milagros.costoPorEstudiante)}</span>
-                  </div>
-                  <div className="flex justify-between p-2 bg-slate-900/50 rounded">
-                    <span className="text-slate-400">Ingreso/Estudiante</span>
-                    <span className="font-bold text-green-300">{formatoMoneda(rentabilidad.milagros.ingresoPorEstudiante)}</span>
-                  </div>
+                  <div className="flex justify-between p-2 bg-slate-900/50 rounded"><span className="text-slate-400">Margen Bruto</span><span className={`font-bold ${rentabilidad.milagros.margenBruto > 70 ? 'text-green-300' : 'text-yellow-300'}`}>{rentabilidad.milagros.margenBruto.toFixed(1)}%</span></div>
+                  <div className="flex justify-between p-2 bg-slate-900/50 rounded"><span className="text-slate-400">Margen Neto</span><span className={`font-bold ${rentabilidad.milagros.margenNeto > 20 ? 'text-green-300' : 'text-yellow-300'}`}>{rentabilidad.milagros.margenNeto.toFixed(1)}%</span></div>
+                  <div className="flex justify-between p-2 bg-slate-900/50 rounded"><span className="text-slate-400">Gastos %</span><span className={`font-bold ${rentabilidad.milagros.gastoPct < 30 ? 'text-green-300' : 'text-red-300'}`}>{rentabilidad.milagros.gastoPct.toFixed(1)}%</span></div>
+                  <div className="flex justify-between p-2 bg-slate-900/50 rounded"><span className="text-slate-400">ROI Estimado</span><span className={`font-bold ${rentabilidad.milagros.roiEstimado > 100 ? 'text-green-300' : 'text-yellow-300'}`}>{rentabilidad.milagros.roiEstimado.toFixed(1)}%</span></div>
                 </div>
               </div>
             </div>
 
             <div className="p-4 bg-slate-800/60 border border-slate-700/50 rounded-lg">
-              <h4 className="text-sm font-bold text-white mb-3">🎯 Oportunidades de Mejora</h4>
+              <h4 className="text-sm font-bold text-white mb-3">🎯 Oportunidades</h4>
               <div className="space-y-2">
                 {rentabilidad.oportunidades.map((oportunidad, idx) => (
                   <div key={idx} className="p-3 bg-slate-900/50 rounded border-l-4 border-cyan-500 text-xs text-slate-300">
@@ -711,67 +757,43 @@ export const ReportesEjecutivos: React.FC = () => {
           <div className="space-y-4">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               <div className="p-4 bg-slate-800/60 border border-slate-700/50 rounded-lg">
-                <h4 className="text-sm font-bold text-white mb-4">📊 Indicadores Clave</h4>
+                <h4 className="text-sm font-bold text-white mb-4">📊 Indicadores</h4>
                 <div className="space-y-3 text-sm">
-                  <div className="p-3 bg-slate-900/50 rounded">
-                    <p className="text-slate-400 text-xs mb-1">Recaudación Total</p>
-                    <p className="text-green-300 font-bold text-lg">{formatoMoneda(consolidado.recaudoTotal)}</p>
-                    <p className="text-slate-500 text-xs mt-1">Dinero efectivo en caja</p>
-                  </div>
-                  <div className="p-3 bg-slate-900/50 rounded">
-                    <p className="text-slate-400 text-xs mb-1">Deuda Pendiente</p>
-                    <p className="text-red-300 font-bold text-lg">{formatoMoneda(consolidado.adeudadoTotal)}</p>
-                    <p className="text-slate-500 text-xs mt-1">Por cobrar de estudiantes</p>
-                  </div>
-                  <div className="p-3 bg-slate-900/50 rounded">
-                    <p className="text-slate-400 text-xs mb-1">Dinero para Mejoras</p>
-                    <p className="text-purple-300 font-bold text-lg">{formatoMoneda(consolidado.dineroParaMejoras)}</p>
-                    <p className="text-slate-500 text-xs mt-1">80% del neto disponible</p>
-                  </div>
+                  <div className="p-3 bg-slate-900/50 rounded"><p className="text-slate-400 text-xs mb-1">Recaudación Total</p><p className="text-green-300 font-bold text-lg">{formatoMoneda(consolidado.recaudoTotal)}</p></div>
+                  <div className="p-3 bg-slate-900/50 rounded"><p className="text-slate-400 text-xs mb-1">Deuda Pendiente</p><p className="text-red-300 font-bold text-lg">{formatoMoneda(consolidado.adeudadoTotal)}</p></div>
+                  <div className="p-3 bg-slate-900/50 rounded"><p className="text-slate-400 text-xs mb-1">Para Mejoras</p><p className="text-purple-300 font-bold text-lg">{formatoMoneda(consolidado.dineroParaMejoras)}</p></div>
                 </div>
               </div>
 
               <div className="p-4 bg-slate-800/60 border border-slate-700/50 rounded-lg">
-                <h4 className="text-sm font-bold text-white mb-4">⚡ Métricas de Desempeño</h4>
+                <h4 className="text-sm font-bold text-white mb-4">⚡ Desempeño</h4>
                 <div className="space-y-3 text-sm">
-                  <div className="p-3 bg-slate-900/50 rounded">
-                    <p className="text-slate-400 text-xs mb-1">Estudiantes Total</p>
-                    <p className="text-blue-300 font-bold text-lg">{consolidado.totalEstudiantes}</p>
-                    <p className="text-slate-500 text-xs mt-1">ISIPP: {isipp.totalEstudiantes} | Milagros: {milagros.totalEstudiantes}</p>
-                  </div>
-                  <div className="p-3 bg-slate-900/50 rounded">
-                    <p className="text-slate-400 text-xs mb-1">En Mora General</p>
-                    <p className={`font-bold text-lg ${consolidado.porcentajeMora > 50 ? 'text-red-300' : 'text-yellow-300'}`}>{consolidado.porcentajeMora.toFixed(1)}%</p>
-                    <p className="text-slate-500 text-xs mt-1">{consolidado.totalMorosos} de {consolidado.totalEstudiantes} estudiantes</p>
-                  </div>
-                  <div className="p-3 bg-slate-900/50 rounded">
-                    <p className="text-slate-400 text-xs mb-1">Eficiencia Global</p>
-                    <p className="text-cyan-300 font-bold text-lg">{((consolidado.recaudoTotal / (consolidado.recaudoTotal + consolidado.adeudadoTotal)) * 100).toFixed(1)}%</p>
-                    <p className="text-slate-500 text-xs mt-1">Promedio de cobranza</p>
-                  </div>
+                  <div className="p-3 bg-slate-900/50 rounded"><p className="text-slate-400 text-xs mb-1">Total Estudiantes</p><p className="text-blue-300 font-bold text-lg">{consolidado.totalEstudiantes}</p></div>
+                  <div className="p-3 bg-slate-900/50 rounded"><p className="text-slate-400 text-xs mb-1">En Mora</p><p className={`font-bold text-lg ${consolidado.porcentajeMora > 50 ? 'text-red-300' : 'text-yellow-300'}`}>{consolidado.porcentajeMora.toFixed(1)}%</p></div>
+                  <div className="p-3 bg-slate-900/50 rounded"><p className="text-slate-400 text-xs mb-1">Eficiencia Global</p><p className="text-cyan-300 font-bold text-lg">{((consolidado.recaudoTotal / (consolidado.recaudoTotal + consolidado.adeudadoTotal)) * 100).toFixed(1)}%</p></div>
                 </div>
               </div>
             </div>
 
             <div className="p-4 bg-slate-800/60 border border-slate-700/50 rounded-lg">
-              <h4 className="text-sm font-bold text-white mb-3">🎯 Acciones Recomendadas</h4>
+              <h4 className="text-sm font-bold text-white mb-3">🎯 Acciones</h4>
               <div className="space-y-2">
                 {consolidado.porcentajeMora > 50 && (
                   <div className="p-3 bg-red-900/30 rounded border-l-4 border-red-500 text-xs text-slate-300">
                     <p className="font-semibold text-red-200">🔴 URGENTE: Contactar morosos</p>
-                    <p>Se detectó {consolidado.porcentajeMora.toFixed(1)}% de estudiantes en mora. Se recomienda campaña inmediata de cobranza.</p>
+                    <p>Se detectó {consolidado.porcentajeMora.toFixed(1)}% en mora.</p>
                   </div>
                 )}
                 {consolidado.gastosTotal > consolidado.recaudoTotal * 0.3 && (
                   <div className="p-3 bg-orange-900/30 rounded border-l-4 border-orange-500 text-xs text-slate-300">
                     <p className="font-semibold text-orange-200">⚠️ REVISAR: Gastos altos</p>
-                    <p>Gastos representan {((consolidado.gastosTotal / consolidado.recaudoTotal) * 100).toFixed(1)}% del recaudado. Considerar optimizaciones.</p>
+                    <p>Gastos representan {((consolidado.gastosTotal / consolidado.recaudoTotal) * 100).toFixed(1)}%.</p>
                   </div>
                 )}
                 {consolidado.netoTotal > 0 && (
                   <div className="p-3 bg-green-900/30 rounded border-l-4 border-green-500 text-xs text-slate-300">
                     <p className="font-semibold text-green-200">✅ POSITIVO: Neto disponible</p>
-                    <p>Hay {formatoMoneda(consolidado.dineroParaMejoras)} disponibles para reinversión en mejoras.</p>
+                    <p>Hay {formatoMoneda(consolidado.dineroParaMejoras)} para reinversión.</p>
                   </div>
                 )}
               </div>
