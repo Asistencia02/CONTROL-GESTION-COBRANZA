@@ -180,15 +180,16 @@ export const useReportesFinancieros = (institucionId: number) => {
 
       const conceptosFiltrados = [...inscripciones, ...conceptosVencidos]
 
-      console.log('[REPORTES] Conceptos - Inscripciones:', inscripciones.length, '| Vencidos:', conceptosVencidos.length)
+      console.log('[REPORTES] Conceptos - Inscripciones:', inscripciones.length, '| Vencidos (sin inscripción):', conceptosVencidos.filter(c => c.tipo?.toUpperCase() !== 'INSCRIPCION').length)
       if (inscripciones.length > 0) console.log('[REPORTES] Inscripción carrera_id:', inscripciones[0].carrera_id)
-      if (conceptosVencidos.length > 0) console.log('[REPORTES] Vencidos carrera_ids:', conceptosVencidos.slice(0, 3).map((c: any) => c.carrera_id))
-      const desglose = conceptosVencidos.reduce((acc, c) => {
+      const conceptosVencidosSinInsc = conceptosVencidos.filter(c => c.tipo?.toUpperCase() !== 'INSCRIPCION')
+      if (conceptosVencidosSinInsc.length > 0) console.log('[REPORTES] Vencidos (cuota+seguro) carrera_ids:', conceptosVencidosSinInsc.slice(0, 3).map((c: any) => c.carrera_id))
+      const desglose = conceptosVencidosSinInsc.reduce((acc, c) => {
         const tipo = c.tipo?.toUpperCase() || 'OTRO'
         acc[tipo] = (acc[tipo] || 0) + 1
         return acc
       }, {} as Record<string, number>)
-      console.log('[REPORTES] Desglose vencidos:', desglose)
+      console.log('[REPORTES] Desglose vencidos (sin inscripción):', desglose)
 
       // ========== PAGOS - BUSCAR EN AMBAS TABLAS ==========
       // 1. Pagos individuales
