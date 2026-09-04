@@ -221,8 +221,8 @@ export const ReportesEjecutivos: React.FC = () => {
       const topMorosos: any[] = []
 
       estudiantesActivos.forEach(est => {
-        let deudaEst = 0
-        let tieneDeuda = false
+        let conceptosPagados = 0
+        let deudaTotal = 0
 
         const conceptosDelEst = conceptosVencidos.filter(c => c.carrera_id === est.carrera_id)
         if (conceptosDelEst.length === 0) return
@@ -243,18 +243,18 @@ export const ReportesEjecutivos: React.FC = () => {
           .filter(p => p.estudiante_id === est.id)
           .reduce((sum, p) => sum + p.monto_pagado, 0)
 
-        if (tieneDeuda) {
+        if (conceptosPagados === conceptosDelEst.length) {
+          estudiantesAlDia++
+        } else {
           estudiantesEnMora++
-          if (deudaEst > 0) {
+          if (deudaTotal > 0) {
             topMorosos.push({
               dni: est.dni,
               nombre: `${est.nombre} ${est.apellido}`,
               carrera: (est as any).carreras?.nombre || '',
-              deuda: deudaEst,
+              deuda: deudaTotal,
             })
           }
-        } else {
-          estudiantesAlDia++
         }
       })
 
