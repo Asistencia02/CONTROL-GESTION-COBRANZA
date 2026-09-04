@@ -229,18 +229,17 @@ export const ReportesEjecutivos: React.FC = () => {
 
         conceptosDelEst.forEach(c => {
           const montoPago = pagosMap.get(`${est.id}-${c.id}`) || 0
-          const deudaConcepto = Math.max(0, c.monto - montoPago)
-
-          deudaEst += deudaConcepto
           totalRecaudable += c.monto
 
-          if (deudaConcepto > 0) {
-            tieneDeuda = true
+          if (montoPago >= c.monto) {
+            conceptosPagados++
+          } else {
+            deudaTotal += (c.monto - montoPago)
           }
         })
 
         totalRecaudado += todosPagos
-          .filter(p => p.estudiante_id === est.id)
+          .filter(p => p.estudiante_id === est.id && conceptosDelEst.some(c => c.id === p.concepto_id))
           .reduce((sum, p) => sum + p.monto_pagado, 0)
 
         if (conceptosPagados === conceptosDelEst.length) {
@@ -297,29 +296,29 @@ export const ReportesEjecutivos: React.FC = () => {
         let deuda = 0
 
         carr.estudiantes.forEach((estId: number) => {
-          let deudaEst = 0
-          let tieneDeuda = false
+          let conceptosPagadosCarrera = 0
+          let deudaTotalCarrera = 0
 
           conceptosVencidos
             .filter(c => c.carrera_id === carr.carrera_id)
             .forEach(c => {
               const montoPago = pagosMap.get(`${estId}-${c.id}`) || 0
-              const deudaConcepto = Math.max(0, c.monto - montoPago)
-
-              deudaEst += deudaConcepto
               recaudable += c.monto
 
-              if (deudaConcepto > 0) {
-                tieneDeuda = true
+              if (montoPago >= c.monto) {
+                conceptosPagadosCarrera++
+              } else {
+                deudaTotalCarrera += (c.monto - montoPago)
               }
             })
 
-          if (tieneDeuda) {
+          const conceptosCarrera = conceptosVencidos.filter(c => c.carrera_id === carr.carrera_id)
+          if (conceptosPagadosCarrera < conceptosCarrera.length) {
             enMora++
-            deuda += deudaEst
+            deuda += deudaTotalCarrera
           }
 
-          recaudado += todosPagos.filter(p => p.estudiante_id === estId).reduce((s, p) => s + p.monto_pagado, 0)
+          recaudado += todosPagos.filter(p => p.estudiante_id === estId && conceptosCarrera.some(c => c.id === p.concepto_id)).reduce((s, p) => s + p.monto_pagado, 0)
         })
 
         const eficienciaCarrera = recaudable > 0 ? (recaudado / recaudable) * 100 : 0
