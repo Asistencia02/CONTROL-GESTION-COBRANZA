@@ -347,7 +347,7 @@ export const ReportesEjecutivos: React.FC = () => {
         costoPorEstudiante: parseFloat(costoPorEstudiante.toFixed(2)),
         ingresoPorEstudiante: parseFloat(ingresoPorEstudiante.toFixed(2)),
         totalEstudiantes,
-        estudiantesMora,
+        estudiantesMora: estudiantesEnMora,
         estudiantesAlDia,
         porCarrera,
         topMorosos: topMorosos.slice(0, 10),
