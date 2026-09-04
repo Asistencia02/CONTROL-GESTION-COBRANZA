@@ -224,9 +224,10 @@ export const ReportesEjecutivos: React.FC = () => {
         let deudaEst = 0
         let tieneDeuda = false
 
-        conceptosVencidos.forEach(c => {
-          if (c.carrera_id !== est.carrera_id) return
+        const conceptosDelEst = conceptosVencidos.filter(c => c.carrera_id === est.carrera_id)
+        if (conceptosDelEst.length === 0) return
 
+        conceptosDelEst.forEach(c => {
           const montoPago = pagosMap.get(`${est.id}-${c.id}`) || 0
           const deudaConcepto = Math.max(0, c.monto - montoPago)
 
