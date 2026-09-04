@@ -174,6 +174,7 @@ export const ReportesEjecutivos: React.FC = () => {
       const { mesVencido, anioVencido } = fechas
 
       console.log(`[PANEL] Institución ${institucionId}: Procesando...`)
+      console.log(`[PANEL] Criterio de vencimiento: Conceptos con mes <= ${mesVencido} del año ${anioVencido}`)
 
       // ===== 1. OBTENER ESTUDIANTES =====
       const { data: estudiantes, error: errEst } = await supabase
@@ -198,7 +199,7 @@ export const ReportesEjecutivos: React.FC = () => {
         carrerasMap.set(c.id, c.nombre)
       })
 
-      // ===== 3. OBTENER CONCEPTOS VENCIDOS =====
+      // ===== 3. OBTENER TODOS LOS CONCEPTOS ACTIVOS =====
       const { data: todosConceptos, error: errCon } = await supabase
         .from('conceptos_pago')
         .select('id, tipo, monto, mes, año, carrera_id')
@@ -207,20 +208,29 @@ export const ReportesEjecutivos: React.FC = () => {
 
       if (errCon) throw errCon
 
-      // Filtrar vencidos
+      console.log(`[PANEL] Total conceptos activos en BD: ${(todosConceptos || []).length}`)
+
+      // ===== FILTRAR CONCEPTOS VENCIDOS =====
+      // REGLA: incluir INSCRIPCIÓN (siempre) + CUOTAS/SEGUROS con mes <= mesVencido
       const conceptosArr = (todosConceptos || []).filter(c => {
-        if (c.tipo?.toUpperCase() === 'INSCRIPCION' && (!c.mes || !c.año)) return true
-        if (c.mes && c.año) {
-          if (c.año < anioVencido) return true
-          if (c.año === anioVencido && c.mes <= mesVencido) return true
+        const tipo = c.tipo?.toUpperCase() || ''
+        
+        // INSCRIPCIONES: SIEMPRE INCLUIR (no tienen fecha explícita)
+        if (tipo === 'INSCRIPCION') return true
+        
+        // CUOTAS Y SEGUROS: incluir solo si mes/año cumplen criterio
+        if ((tipo === 'CUOTA' || tipo === 'SEGURO') && c.mes && c.año) {
+          if (c.año < anioVencido) return true                              // Años anteriores
+          if (c.año === anioVencido && c.mes <= mesVencido) return true     // Año actual, mes <= vencido
         }
+        
         return false
       })
 
-      console.log(`[PANEL] ${conceptosArr.length} conceptos vencidos`)
+      console.log(`[PANEL] ${conceptosArr.length} conceptos vencidos (INSCRIPCION + CUOTA/SEGURO hasta mes ${mesVencido})`)
+      console.log(`[PANEL] Desglose: ${conceptosArr.filter(c => c.tipo?.toUpperCase() === 'INSCRIPCION').length} INSCRIPCION + ${conceptosArr.filter(c => c.tipo?.toUpperCase() === 'CUOTA' || c.tipo?.toUpperCase() === 'SEGURO').length} CUOTA/SEGURO`)
 
-      // ===== 4. OBTENER PAGOS - MÉTODO SIMPLIFICADO =====
-      // Query única a pagos_multiples_detalle que incluye TODOS los pagos
+      // ===== 4. OBTENER PAGOS =====
       const { data: todosPagosDetalle, error: errPagos } = await supabase
         .from('pagos_multiples_detalle')
         .select('concepto_id, monto_pagado, pagos_multiples(estudiante_id, institucion_id)')
@@ -338,7 +348,8 @@ export const ReportesEjecutivos: React.FC = () => {
 
       topMorosos.sort((a, b) => b.deuda - a.deuda)
 
-      console.log(`[PANEL] Al día: ${estudiantesAlDiaCount}, En mora: ${estudiantesMoraCount}`)
+      console.log(`[PANEL] ✅ RESULTADOS: Al día=${estudiantesAlDiaCount}, En mora=${estudiantesMoraCount}`)
+      console.log(`[PANEL] 💰 Recaudable: ${formatoMoneda(recaudableTotalInst)}, Recaudado: ${formatoMoneda(recaudoTotalInst)}, Deuda: ${formatoMoneda(deudaTotalInst)}`)
 
       // ===== 6. OBTENER GASTOS =====
       const { data: gastosData } = await supabase
@@ -368,7 +379,7 @@ export const ReportesEjecutivos: React.FC = () => {
             moraCarrera: parseFloat(moraCarrera.toFixed(1)),
           }
         })
-        .sort((a, b) => b.estudiantes - a.estudiantes) // Ordenar por cantidad de estudiantes
+        .sort((a, b) => b.estudiantes - a.estudiantes)
 
       // ===== 8. CALCULAR MÉTRICAS FINALES =====
       const eficienciaInst = recaudableTotalInst > 0 ? (recaudoTotalInst / recaudableTotalInst) * 100 : 0
@@ -390,7 +401,7 @@ export const ReportesEjecutivos: React.FC = () => {
         topMorosos: topMorosos.slice(0, 10),
       }
 
-      console.log(`[PANEL] Institución ${institucionId} finalizada:`, resultado)
+      console.log(`[PANEL] ✅ Institución ${institucionId} COMPLETADA`, resultado)
       return resultado
     } catch (err) {
       console.error(`[PANEL] Error institución ${institucionId}:`, err)
