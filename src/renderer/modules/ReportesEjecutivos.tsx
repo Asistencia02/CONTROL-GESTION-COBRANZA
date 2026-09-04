@@ -1,38 +1,10 @@
 import React, { useState, useEffect } from 'react'
 import { supabase } from '@renderer/lib/supabase'
 import { formatoMoneda } from '@renderer/lib/helpers'
-import { BarChart3, TrendingUp, AlertCircle, Users, RefreshCw, DollarSign, Gauge, Activity, ChevronDown, ChevronUp } from 'lucide-react'
-import { Chart as ChartJS, ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, LineElement, PointElement, Title, Filler } from 'chart.js'
-import { Bar, Pie, Line } from 'react-chartjs-2'
-
-ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, LineElement, PointElement, Title, Filler)
-
-// ========== KPI CARD ==========
-interface KPICardProps {
-  title: string
-  value: string
-  subtitle?: string
-  icon: React.ReactNode
-  bgColor: string
-  textColor: string
-  size?: 'sm' | 'md'
-}
-
-const KPICard: React.FC<KPICardProps> = ({ title, value, subtitle, icon, bgColor, textColor, size = 'md' }) => (
-  <div className={`p-4 rounded-lg shadow-lg border border-slate-700/50 hover:shadow-xl transition-all ${bgColor}`}>
-    <div className="flex items-start justify-between mb-2">
-      <div className="p-2 bg-black/40 rounded-lg text-lg">{icon}</div>
-    </div>
-    <p className="text-xs text-slate-400 font-bold mb-1">{title}</p>
-    <p className={`${size === 'sm' ? 'text-lg' : 'text-2xl'} font-black ${textColor} leading-tight mb-1 break-words`}>{value}</p>
-    {subtitle && <p className="text-xs text-slate-400 truncate">{subtitle}</p>}
-  </div>
-)
+import { BarChart3, RefreshCw, Users, DollarSign, AlertCircle, TrendingUp, ChevronDown, ChevronUp } from 'lucide-react'
 
 // ========== TIPOS ==========
-interface DatosCarrera {
-  carreraId: number
-  carrera: string
+interface KPIData {
   estudiantes: number
   estudiantesAlDia: number
   estudiantesEnMora: number
@@ -40,22 +12,68 @@ interface DatosCarrera {
   recaudado: number
   deuda: number
   eficiencia: number
-  moraCarrera: number
+  moraPercentage: number
 }
 
-interface DatosInstitucion {
-  totalEstudiantes: number
-  estudiantesAlDia: number
-  estudiantesMora: number
+interface CarreraData {
+  id: number
+  nombre: string
+  estudiantes: number
+  alDia: number
+  enMora: number
   recaudable: number
   recaudado: number
   deuda: number
-  eficiencia: number
-  mora: number
-  gastosAnual: number
-  netoAnual: number
-  porCarrera: DatosCarrera[]
-  topMorosos: Array<{ dni: string; nombre: string; carrera: string; deuda: number }>
+}
+
+interface MorosoData {
+  dni: string
+  nombre: string
+  carrera: string
+  deuda: number
+}
+
+// ========== CONSTANTES ==========
+const PRIMER_MES_ACADEMICO = 3  // Marzo
+const ULTIMO_MES_ACADEMICO = 8  // Agosto
+const PRIMER_DIA_VENCIMIENTO = 10
+
+// ========== KPI CARD COMPONENT ==========
+const KPICard: React.FC<{
+  label: string
+  value: string | number
+  icon: React.ReactNode
+  color: 'blue' | 'green' | 'orange' | 'red' | 'purple'
+  subtext?: string
+}> = ({ label, value, icon, color, subtext }) => {
+  const colorMap = {
+    blue: 'bg-blue-950/50 border-blue-700/30',
+    green: 'bg-green-950/50 border-green-700/30',
+    orange: 'bg-orange-950/50 border-orange-700/30',
+    red: 'bg-red-950/50 border-red-700/30',
+    purple: 'bg-purple-950/50 border-purple-700/30',
+  }
+
+  const textColorMap = {
+    blue: 'text-blue-400',
+    green: 'text-green-400',
+    orange: 'text-orange-400',
+    red: 'text-red-400',
+    purple: 'text-purple-400',
+  }
+
+  return (
+    <div className={`${colorMap[color]} border p-4 rounded-lg`}>
+      <div className="flex items-start justify-between">
+        <div>
+          <p className="text-slate-400 text-xs font-semibold mb-2">{label}</p>
+          <p className={`text-2xl font-black ${textColorMap[color]}`}>{value}</p>
+          {subtext && <p className="text-slate-500 text-xs mt-1">{subtext}</p>}
+        </div>
+        <div className={`${textColorMap[color]}`}>{icon}</div>
+      </div>
+    </div>
+  )
 }
 
 // ========== MAIN COMPONENT ==========
@@ -63,59 +81,330 @@ export const ReportesEjecutivos: React.FC = () => {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [tabActiva, setTabActiva] = useState('global')
-  const [expandidosISIPP, setExpandidosISIPP] = useState<Record<string, boolean>>({})
-  const [expandidosMilagros, setExpandidosMilagros] = useState<Record<string, boolean>>({})
-  const [fechaVencidos, setFechaVencidos] = useState<string>('')
+  const [fechaVencidos, setFechaVencidos] = useState('')
+  const [expandedCarreras, setExpandedCarreras] = useState<Record<string, boolean>>({})
 
-  // DATA STATES
-  const [consolidado, setConsolidado] = useState({
-    totalEstudiantes: 0,
+  // DATA
+  const [global, setGlobal] = useState<KPIData>({
+    estudiantes: 0,
     estudiantesAlDia: 0,
-    estudiantesMora: 0,
-    recaudoTotal: 0,
-    adeudadoTotal: 0,
-    gastosTotal: 0,
-    netoTotal: 0,
-  })
-
-  const [isipp, setISIPP] = useState<DatosInstitucion>({
-    totalEstudiantes: 0,
-    estudiantesAlDia: 0,
-    estudiantesMora: 0,
+    estudiantesEnMora: 0,
     recaudable: 0,
     recaudado: 0,
     deuda: 0,
     eficiencia: 0,
-    mora: 0,
-    gastosAnual: 0,
-    netoAnual: 0,
-    porCarrera: [],
-    topMorosos: [],
+    moraPercentage: 0,
   })
 
-  const [milagros, setMilagros] = useState<DatosInstitucion>({
-    totalEstudiantes: 0,
-    estudiantesAlDia: 0,
-    estudiantesMora: 0,
-    recaudable: 0,
-    recaudado: 0,
-    deuda: 0,
-    eficiencia: 0,
-    mora: 0,
-    gastosAnual: 0,
-    netoAnual: 0,
-    porCarrera: [],
-    topMorosos: [],
+  const [isipp, setISIPP] = useState<{
+    kpi: KPIData
+    carreras: CarreraData[]
+    morosos: MorosoData[]
+  }>({
+    kpi: { ...global },
+    carreras: [],
+    morosos: [],
   })
 
-  // ========== CALCULAR FECHA DE VENCIDOS ==========
+  const [milagros, setMilagros] = useState<{
+    kpi: KPIData
+    carreras: CarreraData[]
+    morosos: MorosoData[]
+  }>({
+    kpi: { ...global },
+    carreras: [],
+    morosos: [],
+  })
+
+  // ========== PROCESAR INSTITUCIÓN (LÓGICA EXACTA DE useReportesFinancieros) ==========
+  const procesarInstitucion = async (institucionId: number) => {
+    try {
+      console.log(`[EXEC] ========== Procesando institución ${institucionId} ==========`)
+
+      const today = new Date()
+      const diaActual = today.getDate()
+      const mesActual = today.getMonth() + 1
+      const anioActual = today.getFullYear()
+      
+      // Día de vencimiento: 10 - si es antes del día 10, el mes aún no vence
+      const mesVencidoActual = diaActual >= PRIMER_DIA_VENCIMIENTO ? mesActual : mesActual - 1
+      const anioVencidoActual = mesVencidoActual < mesActual ? anioActual : anioActual
+
+      // 1. OBTENER ESTUDIANTES (excluir NO_VIENE_MAS)
+      const { data: estudiantes, error: errEst } = await supabase
+        .from('estudiantes')
+        .select('id, dni, nombre, apellido, carrera_id, estado, carreras(nombre)')
+        .eq('institucion_id', institucionId)
+        .neq('estado', 'NO_VIENE_MAS')
+
+      if (errEst) throw errEst
+      if (!estudiantes) throw new Error('No se pudieron cargar estudiantes')
+
+      const estudiantesActivos = estudiantes
+      const totalEstudiantes = estudiantesActivos.length
+
+      console.log(`[EXEC] ${totalEstudiantes} estudiantes`)
+
+      if (totalEstudiantes === 0) {
+        return {
+          kpi: {
+            estudiantes: 0,
+            estudiantesAlDia: 0,
+            estudiantesEnMora: 0,
+            recaudable: 0,
+            recaudado: 0,
+            deuda: 0,
+            eficiencia: 0,
+            moraPercentage: 0,
+          },
+          carreras: [],
+          morosos: [],
+        }
+      }
+
+      // 2. OBTENER CONCEPTOS
+      const { data: conceptos, error: errConc } = await supabase
+        .from('conceptos_pago')
+        .select('id, nombre, tipo, monto, mes, año, carrera_id')
+        .eq('institucion_id', institucionId)
+        .eq('activo', true)
+
+      if (errConc) throw errConc
+
+      // SEPARAR INSCRIPCIONES (sin mes/año) de CUOTAS+SEGUROS (con mes/año)
+      const inscripciones = (conceptos || []).filter(c => 
+        c.tipo?.toUpperCase() === 'INSCRIPCION' && 
+        (!c.mes || !c.año)
+      )
+
+      console.log(`[EXEC] Inscripciones: ${inscripciones.length}`)
+
+      // CUOTAS + SEGURO - SOLO MESES ACADÉMICOS (3-8) y VENCIDOS
+      // Si día < 10, NO incluir mes actual
+      const conceptosVencidos = (conceptos || []).filter(c => {
+        // Incluir INSCRIPCIÓN sin mes/año
+        if (c.tipo?.toUpperCase() === 'INSCRIPCION' && (!c.mes || !c.año)) {
+          return true
+        }
+        
+        // Para CUOTA y SEGURO, aplicar filtro de mes/año
+        if (c.mes && c.año) {
+          // Excluir enero y febrero - solo contar marzo a agosto
+          if (c.mes < PRIMER_MES_ACADEMICO || c.mes > ULTIMO_MES_ACADEMICO) return false
+          
+          if (c.año < anioActual) return true
+          if (c.año === anioActual) {
+            // Si está en mes actual Y día < 10, NO incluir mes actual
+            if (c.mes === mesActual && diaActual < PRIMER_DIA_VENCIMIENTO) return false
+            if (c.mes < mesActual) return true
+            if (c.mes === mesActual && diaActual >= PRIMER_DIA_VENCIMIENTO) return true
+          }
+        }
+        return false
+      })
+
+      const conceptosFiltrados = [...inscripciones, ...conceptosVencidos]
+      console.log(`[EXEC] Conceptos vencidos: ${conceptosVencidos.length}`)
+
+      // 3. OBTENER PAGOS DE AMBAS TABLAS CON PAGINACIÓN
+      let todosPagos: any[] = []
+      let pagina = 0
+      let tieneRangoMas = true
+
+      while (tieneRangoMas) {
+        const desde = pagina * 1000
+        const hasta = desde + 999
+        
+        const { data: pagosBloques, error: errorPagos } = await supabase
+          .from('pagos')
+          .select('id, estudiante_id, concepto_id, monto_pagado, estado')
+          .eq('institucion_id', institucionId)
+          .neq('estado', 'ANULADO')
+          .range(desde, hasta)
+
+        if (errorPagos) throw errorPagos
+        
+        if (!pagosBloques || pagosBloques.length === 0) {
+          tieneRangoMas = false
+        } else {
+          todosPagos = [...todosPagos, ...pagosBloques]
+          pagina++
+        }
+      }
+
+      console.log(`[EXEC] Pagos individuales: ${todosPagos.length}`)
+
+      // 4. OBTENER PAGOS MÚLTIPLES
+      const { data: pagosMultiples, error: errPagosMultiples } = await supabase
+        .from('pagos_multiples_detalle')
+        .select(`
+          id,
+          concepto_id,
+          monto_pagado,
+          pagos_multiples!inner(
+            estudiante_id,
+            estado,
+            institucion_id
+          )
+        `)
+        .eq('pagos_multiples.institucion_id', institucionId)
+        .neq('pagos_multiples.estado', 'ANULADO')
+
+      if (errPagosMultiples) throw errPagosMultiples
+
+      // Convertir pagos múltiples al mismo formato
+      const pagosMultiplesFormato = (pagosMultiples || []).map((p: any) => ({
+        id: p.id,
+        estudiante_id: p.pagos_multiples?.estudiante_id,
+        concepto_id: p.concepto_id,
+        monto_pagado: p.monto_pagado,
+        estado: p.pagos_multiples?.estado || 'PAGADO'
+      }))
+
+      // Combinar ambas tablas
+      const pagosValidos = [...todosPagos, ...pagosMultiplesFormato]
+      console.log(`[EXEC] Pagos totales: ${pagosValidos.length} (${todosPagos.length} individuales + ${pagosMultiplesFormato.length} múltiples)`)
+
+      // 5. CALCULAR CONCEPTOS VENCIDOS ANTES DEL DÍA 10 DEL MES ACTUAL (para mora)
+      const conceptosVencidosMora = conceptosVencidos.filter(c => {
+        if (c.mes && c.año) {
+          if (c.mes < PRIMER_MES_ACADEMICO || c.mes > ULTIMO_MES_ACADEMICO) return false
+          if (c.año < anioVencidoActual) return true
+          if (c.año === anioVencidoActual && c.mes <= mesVencidoActual) return true
+        }
+        return false
+      })
+
+      console.log(`[EXEC] Conceptos vencidos para mora: ${conceptosVencidosMora.length}`)
+
+      // 6. CALCULAR RESUMEN - LÓGICA EXACTA DE useReportesFinancieros
+      let totalRecaudable = 0
+      let totalRecaudado = 0
+      let estudiantesEnMora = 0
+      const morosos: MorosoData[] = []
+      const carreras = new Map<number, CarreraData>()
+
+      // Inicializar carreras
+      estudiantesActivos.forEach(est => {
+        if (!carreras.has(est.carrera_id)) {
+          carreras.set(est.carrera_id, {
+            id: est.carrera_id,
+            nombre: (est as any).carreras?.nombre || `Carrera ${est.carrera_id}`,
+            estudiantes: 0,
+            alDia: 0,
+            enMora: 0,
+            recaudable: 0,
+            recaudado: 0,
+            deuda: 0,
+          })
+        }
+        carreras.get(est.carrera_id)!.estudiantes++
+      })
+
+      // PROCESAR CADA ESTUDIANTE - CALCULAR DEUDA CON CONCEPTOS VENCIDOS
+      estudiantesActivos.forEach(est => {
+        // Conceptos vencidos de esta carrera
+        const conceptosDelEstudiante = conceptosVencidos.filter(c => c.carrera_id === est.carrera_id)
+        
+        if (conceptosDelEstudiante.length === 0) return
+
+        let deudaEst = 0
+        let recaudadoEst = 0
+
+        // Para cada concepto vencido, verificar si está pagado
+        conceptosDelEstudiante.forEach(concepto => {
+          const montoPago = pagosValidos
+            .filter(p => p.estudiante_id === est.id && p.concepto_id === concepto.id)
+            .reduce((sum, p) => sum + (p.monto_pagado || 0), 0)
+
+          const montoOriginal = concepto.monto
+          recaudadoEst += montoPago
+
+          // Si no pagó el monto completo, está en deuda
+          if (montoPago < montoOriginal) {
+            deudaEst += montoOriginal - montoPago
+          }
+        })
+
+        // Actualizar totales
+        totalRecaudable += conceptosDelEstudiante.reduce((sum, c) => sum + c.monto, 0)
+        totalRecaudado += recaudadoEst
+
+        // Si está en deuda
+        if (deudaEst > 0) {
+          estudiantesEnMora++
+          morosos.push({
+            dni: est.dni || '',
+            nombre: `${est.nombre || ''} ${est.apellido || ''}`,
+            carrera: (est as any).carreras?.nombre || 'Sin carrera',
+            deuda: deudaEst,
+          })
+
+          // Actualizar carrera
+          const carr = carreras.get(est.carrera_id)
+          if (carr) {
+            carr.enMora++
+            carr.recaudable += conceptosDelEstudiante.reduce((sum, c) => sum + c.monto, 0)
+            carr.recaudado += recaudadoEst
+            carr.deuda += deudaEst
+          }
+        } else {
+          // Al día
+          const carr = carreras.get(est.carrera_id)
+          if (carr) {
+            carr.alDia++
+            carr.recaudable += conceptosDelEstudiante.reduce((sum, c) => sum + c.monto, 0)
+            carr.recaudado += recaudadoEst
+          }
+        }
+      })
+
+      morosos.sort((a, b) => b.deuda - a.deuda)
+
+      // CALCULAR MÉTRICAS
+      const eficiencia = totalRecaudable > 0 ? (totalRecaudado / totalRecaudable) * 100 : 0
+      const moraPercentage = totalEstudiantes > 0 ? (estudiantesEnMora / totalEstudiantes) * 100 : 0
+      const estudiantesAlDia = totalEstudiantes - estudiantesEnMora
+
+      const resultado = {
+        kpi: {
+          estudiantes: totalEstudiantes,
+          estudiantesAlDia: estudiantesAlDia,
+          estudiantesEnMora: estudiantesEnMora,
+          recaudable: totalRecaudable,
+          recaudado: totalRecaudado,
+          deuda: Math.max(0, totalRecaudable - totalRecaudado),
+          eficiencia: parseFloat(eficiencia.toFixed(1)),
+          moraPercentage: parseFloat(moraPercentage.toFixed(1)),
+        },
+        carreras: Array.from(carreras.values()).sort((a, b) => b.estudiantes - a.estudiantes),
+        morosos: morosos.slice(0, 10),
+      }
+
+      console.log(`[EXEC] ✅ Institución ${institucionId}:`, {
+        estudiantes: totalEstudiantes,
+        alDia: estudiantesAlDia,
+        enMora: estudiantesEnMora,
+        recaudable: formatoMoneda(totalRecaudable),
+        recaudado: formatoMoneda(totalRecaudado),
+        deuda: formatoMoneda(Math.max(0, totalRecaudable - totalRecaudado)),
+        eficiencia: `${eficiencia.toFixed(1)}%`,
+      })
+
+      return resultado
+    } catch (err) {
+      console.error(`[EXEC] ERROR institución ${institucionId}:`, err)
+      throw err
+    }
+  }
+
+  // ========== CALCULAR FECHA VENCIDOS ==========
   const calcularFechaVencidos = () => {
     const today = new Date()
     const diaActual = today.getDate()
     const mesActual = today.getMonth() + 1
     const anioActual = today.getFullYear()
 
-    // Regla: si día <= 10, vencido = mes_anterior; si día > 10, vencido = mes_actual
     let mesVencido = diaActual <= 10 ? mesActual - 1 : mesActual
     let anioVencido = anioActual
 
@@ -125,292 +414,70 @@ export const ReportesEjecutivos: React.FC = () => {
     }
 
     const meses = ['', 'ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN', 'JUL', 'AGO', 'SEP', 'OCT', 'NOV', 'DIC']
-    const fechaStr = `Hoy: ${diaActual}/${mesActual}/${anioActual} → Vencidos desde: ${meses[mesVencido]}/${anioVencido}`
+    const fechaStr = `Vencidos desde: ${meses[mesVencido]}/${anioVencido}`
     setFechaVencidos(fechaStr)
-
-    return { diaActual, mesActual, anioActual, mesVencido, anioVencido }
   }
 
-  // ========== CARGAR REPORTES ==========
-  const cargarReportes = async () => {
+  // ========== CARGAR DATOS ==========
+  const cargarDatos = async () => {
     try {
       setLoading(true)
       setError(null)
 
-      const fechas = calcularFechaVencidos()
+      calcularFechaVencidos()
 
-      const [isippData, milagrosData] = await Promise.all([
-        procesarInstitucion(1, fechas),
-        procesarInstitucion(2, fechas),
+      console.log('[EXEC] ==================== INICIANDO CARGA ====================')
+
+      const [isippRes, milagrosRes] = await Promise.all([
+        procesarInstitucion(1),
+        procesarInstitucion(2),
       ])
 
-      setISIPP(isippData)
-      setMilagros(milagrosData)
+      setISIPP(isippRes)
+      setMilagros(milagrosRes)
 
-      // CONSOLIDAR
-      setConsolidado({
-        totalEstudiantes: isippData.totalEstudiantes + milagrosData.totalEstudiantes,
-        estudiantesAlDia: isippData.estudiantesAlDia + milagrosData.estudiantesAlDia,
-        estudiantesMora: isippData.estudiantesMora + milagrosData.estudiantesMora,
-        recaudoTotal: isippData.recaudado + milagrosData.recaudado,
-        adeudadoTotal: isippData.deuda + milagrosData.deuda,
-        gastosTotal: isippData.gastosAnual + milagrosData.gastosAnual,
-        netoTotal: (isippData.recaudado - isippData.gastosAnual) + (milagrosData.recaudado - milagrosData.gastosAnual),
+      // CONSOLIDAR GLOBAL
+      const globalData = {
+        estudiantes: isippRes.kpi.estudiantes + milagrosRes.kpi.estudiantes,
+        estudiantesAlDia: isippRes.kpi.estudiantesAlDia + milagrosRes.kpi.estudiantesAlDia,
+        estudiantesEnMora: isippRes.kpi.estudiantesEnMora + milagrosRes.kpi.estudiantesEnMora,
+        recaudable: isippRes.kpi.recaudable + milagrosRes.kpi.recaudable,
+        recaudado: isippRes.kpi.recaudado + milagrosRes.kpi.recaudado,
+        deuda: isippRes.kpi.deuda + milagrosRes.kpi.deuda,
+        eficiencia:
+          isippRes.kpi.recaudable + milagrosRes.kpi.recaudable > 0
+            ? ((isippRes.kpi.recaudado + milagrosRes.kpi.recaudado) /
+                (isippRes.kpi.recaudable + milagrosRes.kpi.recaudable)) *
+              100
+            : 0,
+        moraPercentage:
+          isippRes.kpi.estudiantes + milagrosRes.kpi.estudiantes > 0
+            ? ((isippRes.kpi.estudiantesEnMora + milagrosRes.kpi.estudiantesEnMora) /
+                (isippRes.kpi.estudiantes + milagrosRes.kpi.estudiantes)) *
+              100
+            : 0,
+      }
+
+      setGlobal(globalData)
+
+      console.log('[EXEC] ✅ CARGA COMPLETADA:', {
+        total: globalData.estudiantes,
+        alDia: globalData.estudiantesAlDia,
+        enMora: globalData.estudiantesEnMora,
+        recaudable: formatoMoneda(globalData.recaudable),
+        recaudado: formatoMoneda(globalData.recaudado),
+        deuda: formatoMoneda(globalData.deuda),
       })
     } catch (err) {
-      console.error('[PANEL] Error:', err)
+      console.error('[EXEC] ERROR FATAL:', err)
       setError(err instanceof Error ? err.message : 'Error desconocido')
     } finally {
       setLoading(false)
     }
   }
 
-  // ========== PROCESAR INSTITUCIÓN ==========
-  const procesarInstitucion = async (
-    institucionId: number,
-    fechas: { diaActual: number; mesActual: number; anioActual: number; mesVencido: number; anioVencido: number }
-  ): Promise<DatosInstitucion> => {
-    try {
-      const { mesVencido, anioVencido } = fechas
-
-      console.log(`[PANEL] Institución ${institucionId}: Procesando...`)
-      console.log(`[PANEL] Criterio de vencimiento: Conceptos con mes <= ${mesVencido} del año ${anioVencido}`)
-
-      // ===== 1. OBTENER ESTUDIANTES =====
-      const { data: estudiantes, error: errEst } = await supabase
-        .from('estudiantes')
-        .select('id, dni, nombre, apellido, carrera_id, estado')
-        .eq('institucion_id', institucionId)
-        .eq('estado', 'ACTIVO')
-
-      if (errEst) throw errEst
-      const estudiantesActivos = estudiantes || []
-      const totalEstudiantes = estudiantesActivos.length
-      console.log(`[PANEL] ${totalEstudiantes} estudiantes activos`)
-
-      // ===== 2. OBTENER MAPA DE CARRERAS =====
-      const { data: carrerasData } = await supabase
-        .from('carreras')
-        .select('id, nombre')
-        .eq('institucion_id', institucionId)
-
-      const carrerasMap = new Map<number, string>()
-      ;(carrerasData || []).forEach(c => {
-        carrerasMap.set(c.id, c.nombre)
-      })
-
-      // ===== 3. OBTENER TODOS LOS CONCEPTOS ACTIVOS =====
-      const { data: todosConceptos, error: errCon } = await supabase
-        .from('conceptos_pago')
-        .select('id, tipo, monto, mes, año, carrera_id')
-        .eq('institucion_id', institucionId)
-        .eq('activo', true)
-
-      if (errCon) throw errCon
-
-      console.log(`[PANEL] Total conceptos activos en BD: ${(todosConceptos || []).length}`)
-
-      // ===== FILTRAR CONCEPTOS VENCIDOS =====
-      // REGLA: incluir INSCRIPCIÓN (siempre) + CUOTAS/SEGUROS con mes <= mesVencido
-      const conceptosArr = (todosConceptos || []).filter(c => {
-        const tipo = c.tipo?.toUpperCase() || ''
-        
-        // INSCRIPCIONES: SIEMPRE INCLUIR (no tienen fecha explícita)
-        if (tipo === 'INSCRIPCION') return true
-        
-        // CUOTAS Y SEGUROS: incluir solo si mes/año cumplen criterio
-        if ((tipo === 'CUOTA' || tipo === 'SEGURO') && c.mes && c.año) {
-          if (c.año < anioVencido) return true                              // Años anteriores
-          if (c.año === anioVencido && c.mes <= mesVencido) return true     // Año actual, mes <= vencido
-        }
-        
-        return false
-      })
-
-      console.log(`[PANEL] ${conceptosArr.length} conceptos vencidos (INSCRIPCION + CUOTA/SEGURO hasta mes ${mesVencido})`)
-      console.log(`[PANEL] Desglose: ${conceptosArr.filter(c => c.tipo?.toUpperCase() === 'INSCRIPCION').length} INSCRIPCION + ${conceptosArr.filter(c => c.tipo?.toUpperCase() === 'CUOTA' || c.tipo?.toUpperCase() === 'SEGURO').length} CUOTA/SEGURO`)
-
-      // ===== 4. OBTENER PAGOS =====
-      const { data: todosPagosDetalle, error: errPagos } = await supabase
-        .from('pagos_multiples_detalle')
-        .select('concepto_id, monto_pagado, pagos_multiples(estudiante_id, institucion_id)')
-        .eq('pagos_multiples.institucion_id', institucionId)
-        .neq('pagos_multiples.estado', 'ANULADO')
-
-      if (errPagos) throw errPagos
-
-      // CREAR MAPA: clave = "estudiante_id-concepto_id" → valor = monto_pagado
-      const pagosMap = new Map<string, number>()
-      ;(todosPagosDetalle || []).forEach((p: any) => {
-        const estId = p.pagos_multiples?.estudiante_id
-        if (!estId) return
-        
-        const key = `${estId}-${p.concepto_id}`
-        const montoActual = pagosMap.get(key) || 0
-        pagosMap.set(key, montoActual + (p.monto_pagado || 0))
-      })
-
-      console.log(`[PANEL] ${pagosMap.size} pares estudiante-concepto con pagos`)
-
-      // ===== 5. PROCESAR CADA ESTUDIANTE =====
-      let recaudoTotalInst = 0
-      let recaudableTotalInst = 0
-      let deudaTotalInst = 0
-      let estudiantesAlDiaCount = 0
-      let estudiantesMoraCount = 0
-      const topMorosos: Array<{ dni: string; nombre: string; carrera: string; deuda: number }> = []
-
-      // Mapa de carreras para acumular datos
-      const dataCarreras = new Map<number, {
-        estudiantes: number
-        estudiantesAlDia: number
-        estudiantesEnMora: number
-        recaudable: number
-        recaudado: number
-        deuda: number
-      }>()
-
-      // Inicializar carreras
-      estudiantesActivos.forEach(est => {
-        if (!dataCarreras.has(est.carrera_id)) {
-          dataCarreras.set(est.carrera_id, {
-            estudiantes: 0,
-            estudiantesAlDia: 0,
-            estudiantesEnMora: 0,
-            recaudable: 0,
-            recaudado: 0,
-            deuda: 0,
-          })
-        }
-        dataCarreras.get(est.carrera_id)!.estudiantes++
-      })
-
-      // PROCESAR CADA ESTUDIANTE
-      estudiantesActivos.forEach(est => {
-        // Conceptos vencidos de esta carrera
-        const conceptosEstudiante = conceptosArr.filter(c => c.carrera_id === est.carrera_id)
-
-        if (conceptosEstudiante.length === 0) return
-
-        let recaudoEstudiante = 0
-        let recaudableEstudiante = 0
-        let deudaEstudiante = 0
-        let conceptosPagados = 0
-
-        // CALCULAR por cada concepto
-        conceptosEstudiante.forEach(concepto => {
-          recaudableEstudiante += concepto.monto
-          
-          // Buscar pago para este estudiante-concepto
-          const montoPagado = pagosMap.get(`${est.id}-${concepto.id}`) || 0
-          recaudoEstudiante += montoPagado
-
-          // Si pagó >= monto, está pagado
-          if (montoPagado >= concepto.monto) {
-            conceptosPagados++
-          } else {
-            deudaEstudiante += concepto.monto - montoPagado
-          }
-        })
-
-        // ACTUALIZAR TOTALES INSTITUCIÓN
-        recaudoTotalInst += recaudoEstudiante
-        recaudableTotalInst += recaudableEstudiante
-        deudaTotalInst += deudaEstudiante
-
-        // DETERMINAR ESTADO
-        const alDia = conceptosPagados === conceptosEstudiante.length
-        if (alDia) {
-          estudiantesAlDiaCount++
-        } else {
-          estudiantesMoraCount++
-          if (deudaEstudiante > 0) {
-            topMorosos.push({
-              dni: est.dni || '',
-              nombre: `${est.nombre} ${est.apellido}`,
-              carrera: carrerasMap.get(est.carrera_id) || 'Sin carrera',
-              deuda: deudaEstudiante,
-            })
-          }
-        }
-
-        // ACTUALIZAR CARRERA
-        const carrData = dataCarreras.get(est.carrera_id)!
-        carrData.recaudable += recaudableEstudiante
-        carrData.recaudado += recaudoEstudiante
-        carrData.deuda += deudaEstudiante
-        if (alDia) {
-          carrData.estudiantesAlDia++
-        } else {
-          carrData.estudiantesEnMora++
-        }
-      })
-
-      topMorosos.sort((a, b) => b.deuda - a.deuda)
-
-      console.log(`[PANEL] ✅ RESULTADOS: Al día=${estudiantesAlDiaCount}, En mora=${estudiantesMoraCount}`)
-      console.log(`[PANEL] 💰 Recaudable: ${formatoMoneda(recaudableTotalInst)}, Recaudado: ${formatoMoneda(recaudoTotalInst)}, Deuda: ${formatoMoneda(deudaTotalInst)}`)
-
-      // ===== 6. OBTENER GASTOS =====
-      const { data: gastosData } = await supabase
-        .from('gastos')
-        .select('monto')
-        .eq('institucion_id', institucionId)
-
-      const gastosAnual = (gastosData || []).reduce((sum, g) => sum + (g.monto || 0), 0)
-
-      // ===== 7. CONSTRUIR DATOS POR CARRERA =====
-      const porCarrera: DatosCarrera[] = Array.from(dataCarreras.entries())
-        .map(([carreraId, data]) => {
-          const carreraNombre = carrerasMap.get(carreraId) || `Carrera ${carreraId}`
-          const eficiencia = data.recaudable > 0 ? (data.recaudado / data.recaudable) * 100 : 0
-          const moraCarrera = data.estudiantes > 0 ? (data.estudiantesEnMora / data.estudiantes) * 100 : 0
-
-          return {
-            carreraId,
-            carrera: carreraNombre,
-            estudiantes: data.estudiantes,
-            estudiantesAlDia: data.estudiantesAlDia,
-            estudiantesEnMora: data.estudiantesEnMora,
-            recaudable: data.recaudable,
-            recaudado: data.recaudado,
-            deuda: data.deuda,
-            eficiencia: parseFloat(eficiencia.toFixed(1)),
-            moraCarrera: parseFloat(moraCarrera.toFixed(1)),
-          }
-        })
-        .sort((a, b) => b.estudiantes - a.estudiantes)
-
-      // ===== 8. CALCULAR MÉTRICAS FINALES =====
-      const eficienciaInst = recaudableTotalInst > 0 ? (recaudoTotalInst / recaudableTotalInst) * 100 : 0
-      const moraInst = totalEstudiantes > 0 ? (estudiantesMoraCount / totalEstudiantes) * 100 : 0
-      const netoAnual = recaudoTotalInst - gastosAnual
-
-      const resultado: DatosInstitucion = {
-        totalEstudiantes,
-        estudiantesAlDia: estudiantesAlDiaCount,
-        estudiantesMora: estudiantesMoraCount,
-        recaudable: recaudableTotalInst,
-        recaudado: recaudoTotalInst,
-        deuda: deudaTotalInst,
-        eficiencia: parseFloat(eficienciaInst.toFixed(1)),
-        mora: parseFloat(moraInst.toFixed(1)),
-        gastosAnual,
-        netoAnual,
-        porCarrera,
-        topMorosos: topMorosos.slice(0, 10),
-      }
-
-      console.log(`[PANEL] ✅ Institución ${institucionId} COMPLETADA`, resultado)
-      return resultado
-    } catch (err) {
-      console.error(`[PANEL] Error institución ${institucionId}:`, err)
-      throw err
-    }
-  }
-
   useEffect(() => {
-    cargarReportes()
+    cargarDatos()
   }, [])
 
   if (loading) {
@@ -418,8 +485,7 @@ export const ReportesEjecutivos: React.FC = () => {
       <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex items-center justify-center">
         <div className="text-center">
           <BarChart3 size={48} className="text-cyan-400 animate-spin mx-auto mb-3" />
-          <p className="text-slate-400 text-sm font-bold">⏳ Cargando reportes ejecutivos...</p>
-          <p className="text-slate-500 text-xs mt-2">Procesando datos de ambas instituciones...</p>
+          <p className="text-slate-400 text-sm font-bold">⏳ Cargando reportes...</p>
         </div>
       </div>
     )
@@ -431,7 +497,10 @@ export const ReportesEjecutivos: React.FC = () => {
         <div className="bg-red-500/20 border border-red-500/50 rounded-lg p-4 max-w-sm">
           <p className="text-red-400 font-bold text-sm mb-2">❌ Error:</p>
           <p className="text-red-300 text-xs mb-3">{error}</p>
-          <button onClick={cargarReportes} className="w-full px-3 py-2 bg-red-600 hover:bg-red-700 text-white rounded text-xs font-bold">
+          <button
+            onClick={cargarDatos}
+            className="w-full px-3 py-2 bg-red-600 hover:bg-red-700 text-white rounded text-xs font-bold"
+          >
             Reintentar
           </button>
         </div>
@@ -439,141 +508,135 @@ export const ReportesEjecutivos: React.FC = () => {
     )
   }
 
-  const porcentajeMora = consolidado.totalEstudiantes > 0
-    ? ((consolidado.estudiantesMora / consolidado.totalEstudiantes) * 100).toFixed(1)
-    : '0'
-
-  const porcentajeAlDia = consolidado.totalEstudiantes > 0
-    ? ((consolidado.estudiantesAlDia / consolidado.totalEstudiantes) * 100).toFixed(1)
-    : '0'
-
-  const eficienciaGlobal = consolidado.recaudoTotal > 0
-    ? ((consolidado.recaudoTotal / (consolidado.recaudoTotal + consolidado.adeudadoTotal)) * 100).toFixed(1)
-    : '0'
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 p-4 md:p-6">
       {/* HEADER */}
-      <div className="flex justify-between items-start mb-4">
+      <div className="flex justify-between items-start mb-6">
         <div>
-          <h1 className="text-4xl md:text-5xl font-black text-transparent bg-gradient-to-r from-cyan-400 via-purple-400 to-cyan-400 bg-clip-text mb-1">
-            📊 PANEL EJECUTIVO
+          <h1 className="text-4xl font-black text-transparent bg-gradient-to-r from-cyan-400 to-blue-400 bg-clip-text mb-1">
+            📊 REPORTES EJECUTIVOS
           </h1>
-          <p className="text-slate-400 text-xs md:text-sm">Consolidado financiero de ambas instituciones</p>
-          {fechaVencidos && <p className="text-slate-500 text-xs mt-1">📅 {fechaVencidos}</p>}
+          <p className="text-slate-400 text-sm">{fechaVencidos}</p>
         </div>
-        <button onClick={cargarReportes} className="p-2 hover:bg-slate-700/50 rounded-lg transition-all" title="Actualizar">
+        <button
+          onClick={cargarDatos}
+          className="p-2 hover:bg-slate-700/50 rounded-lg transition-all"
+          title="Actualizar"
+        >
           <RefreshCw size={20} className="text-cyan-400" />
         </button>
       </div>
 
       {/* TABS */}
-      <div className="mb-4 flex gap-1 overflow-x-auto pb-2 border-b border-slate-700/50">
+      <div className="flex gap-2 mb-6 border-b border-slate-700/50 pb-2">
         {[
-          { id: 'global', label: 'Global', icon: Gauge },
-          { id: 'isipp', label: 'ISIPP', icon: Activity },
-          { id: 'milagros', label: 'Milagros', icon: Activity },
-        ].map(({ id, label, icon: Icon }) => (
+          { id: 'global', label: '🌍 Global' },
+          { id: 'isipp', label: '🏫 ISIPP' },
+          { id: 'milagros', label: '📚 Milagros' },
+        ].map(({ id, label }) => (
           <button
             key={id}
             onClick={() => setTabActiva(id)}
-            className={`px-3 py-2 rounded-lg text-xs font-bold flex items-center gap-1 whitespace-nowrap transition-all ${
+            className={`px-4 py-2 rounded text-sm font-bold transition-all ${
               tabActiva === id
-                ? 'bg-gradient-to-r from-cyan-600 to-cyan-700 text-white shadow-lg'
+                ? 'bg-cyan-600 text-white shadow-lg'
                 : 'bg-slate-700/30 text-slate-400 hover:bg-slate-600/50'
             }`}
           >
-            <Icon size={16} />
             {label}
           </button>
         ))}
       </div>
 
-      {/* TAB: GLOBAL */}
+      {/* GLOBAL TAB */}
       {tabActiva === 'global' && (
         <div className="space-y-4">
-          {/* KPI ESTUDIANTES DESTACADO */}
-          <div className="bg-gradient-to-br from-blue-600/30 to-blue-900/20 border-2 border-blue-500/50 rounded-lg p-4 shadow-lg">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-slate-300 text-sm font-semibold mb-1">✅ ESTUDIANTES ACTIVOS EN EL SISTEMA</p>
-                <p className="text-5xl font-black text-blue-300">{consolidado.totalEstudiantes}</p>
-                <p className="text-slate-400 text-xs mt-1">Sincronizados desde Google Sheets v2.26</p>
-              </div>
-              <Users className="text-blue-400" size={48} />
-            </div>
-          </div>
-
-          {/* KPIs FINANCIEROS */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
             <KPICard
-              title="💰 RECAUDADO"
-              value={formatoMoneda(consolidado.recaudoTotal)}
-              subtitle="Total del año"
-              icon={<DollarSign className="text-green-400" size={20} />}
-              bgColor="bg-gradient-to-br from-green-600/25 to-green-900/15 border border-green-500/30"
-              textColor="text-green-300"
+              label="👥 ESTUDIANTES"
+              value={global.estudiantes}
+              icon={<Users size={24} />}
+              color="blue"
+              subtext={`${global.estudiantesAlDia} al día`}
             />
             <KPICard
-              title="📌 ADEUDADO"
-              value={formatoMoneda(consolidado.adeudadoTotal)}
-              subtitle={`${porcentajeMora}% en mora`}
-              icon={<AlertCircle className="text-red-400" size={20} />}
-              bgColor="bg-gradient-to-br from-red-600/25 to-red-900/15 border border-red-500/30"
-              textColor="text-red-300"
+              label="✅ AL DÍA"
+              value={global.estudiantesAlDia}
+              icon={<TrendingUp size={24} />}
+              color="green"
+              subtext={`${global.moraPercentage.toFixed(1)}% en mora`}
             />
             <KPICard
-              title="✅ AL DÍA"
-              value={consolidado.estudiantesAlDia.toString()}
-              subtitle={`${porcentajeAlDia}% de estudiantes`}
-              icon={<TrendingUp className="text-purple-400" size={20} />}
-              bgColor="bg-gradient-to-br from-purple-600/25 to-purple-900/15 border border-purple-500/30"
-              textColor="text-purple-300"
+              label="⚠️ EN MORA"
+              value={global.estudiantesEnMora}
+              icon={<AlertCircle size={24} />}
+              color="red"
+            />
+            <KPICard
+              label="📊 EFICIENCIA"
+              value={`${global.eficiencia.toFixed(1)}%`}
+              icon={<BarChart3 size={24} />}
+              color="purple"
             />
           </div>
 
-          {/* TABLA COMPARATIVA INSTITUCIONES */}
-          <div className="p-4 bg-gradient-to-br from-slate-800/80 to-slate-900/40 border border-slate-700/50 rounded-lg shadow-lg overflow-x-auto">
-            <h3 className="text-sm font-bold text-white mb-3">📋 Comparativa Instituciones</h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <KPICard
+              label="💰 RECAUDABLE"
+              value={formatoMoneda(global.recaudable)}
+              icon={<DollarSign size={24} />}
+              color="orange"
+            />
+            <KPICard
+              label="✅ RECAUDADO"
+              value={formatoMoneda(global.recaudado)}
+              icon={<DollarSign size={24} />}
+              color="green"
+            />
+            <KPICard
+              label="📌 DEUDA"
+              value={formatoMoneda(global.deuda)}
+              icon={<DollarSign size={24} />}
+              color="red"
+            />
+          </div>
+
+          {/* COMPARATIVA */}
+          <div className="bg-slate-800/50 border border-slate-700/50 rounded-lg p-4 overflow-x-auto">
+            <h3 className="text-sm font-bold text-white mb-3">📋 Comparativa por Institución</h3>
             <table className="w-full text-xs">
               <thead>
-                <tr className="border-b border-slate-700/50 bg-slate-900/50">
-                  <th className="px-3 py-2 text-left font-bold text-slate-300">Institución</th>
-                  <th className="px-3 py-2 text-right text-yellow-400">Estudiantes</th>
-                  <th className="px-3 py-2 text-right text-green-400">Recaudado</th>
+                <tr className="border-b border-slate-700/50">
+                  <th className="px-3 py-2 text-left text-slate-300">Institución</th>
+                  <th className="px-3 py-2 text-right text-blue-400">Estudiantes</th>
+                  <th className="px-3 py-2 text-right text-green-400">Al Día</th>
+                  <th className="px-3 py-2 text-right text-red-400">En Mora</th>
                   <th className="px-3 py-2 text-right text-orange-400">Recaudable</th>
+                  <th className="px-3 py-2 text-right text-green-400">Recaudado</th>
                   <th className="px-3 py-2 text-right text-red-400">Deuda</th>
-                  <th className="px-3 py-2 text-right text-blue-400">Al Día</th>
                   <th className="px-3 py-2 text-right text-purple-400">Eficiencia</th>
                 </tr>
               </thead>
               <tbody>
                 <tr className="border-b border-slate-700/30 hover:bg-slate-900/50">
-                  <td className="px-3 py-2 font-bold text-cyan-300">ISIPP</td>
-                  <td className="px-3 py-2 text-right text-yellow-300">{isipp.totalEstudiantes}</td>
-                  <td className="px-3 py-2 text-right text-green-300 font-semibold">{formatoMoneda(isipp.recaudado)}</td>
-                  <td className="px-3 py-2 text-right text-orange-300">{formatoMoneda(isipp.recaudable)}</td>
-                  <td className="px-3 py-2 text-right text-red-300">{formatoMoneda(isipp.deuda)}</td>
-                  <td className="px-3 py-2 text-right text-blue-300">{isipp.estudiantesAlDia}</td>
-                  <td className="px-3 py-2 text-right text-purple-300 font-bold">{isipp.eficiencia.toFixed(1)}%</td>
+                  <td className="px-3 py-2 font-bold text-cyan-400">ISIPP</td>
+                  <td className="px-3 py-2 text-right text-blue-300">{isipp.kpi.estudiantes}</td>
+                  <td className="px-3 py-2 text-right text-green-300">{isipp.kpi.estudiantesAlDia}</td>
+                  <td className="px-3 py-2 text-right text-red-300">{isipp.kpi.estudiantesEnMora}</td>
+                  <td className="px-3 py-2 text-right text-orange-300">{formatoMoneda(isipp.kpi.recaudable)}</td>
+                  <td className="px-3 py-2 text-right text-green-300 font-bold">{formatoMoneda(isipp.kpi.recaudado)}</td>
+                  <td className="px-3 py-2 text-right text-red-300">{formatoMoneda(isipp.kpi.deuda)}</td>
+                  <td className="px-3 py-2 text-right text-purple-300 font-bold">{isipp.kpi.eficiencia.toFixed(1)}%</td>
                 </tr>
                 <tr className="border-b border-slate-700/30 hover:bg-slate-900/50">
-                  <td className="px-3 py-2 font-bold text-orange-300">MILAGROS</td>
-                  <td className="px-3 py-2 text-right text-yellow-300">{milagros.totalEstudiantes}</td>
-                  <td className="px-3 py-2 text-right text-green-300 font-semibold">{formatoMoneda(milagros.recaudado)}</td>
-                  <td className="px-3 py-2 text-right text-orange-300">{formatoMoneda(milagros.recaudable)}</td>
-                  <td className="px-3 py-2 text-right text-red-300">{formatoMoneda(milagros.deuda)}</td>
-                  <td className="px-3 py-2 text-right text-blue-300">{milagros.estudiantesAlDia}</td>
-                  <td className="px-3 py-2 text-right text-purple-300 font-bold">{milagros.eficiencia.toFixed(1)}%</td>
-                </tr>
-                <tr className="border-t-2 border-cyan-500/50 bg-slate-900/70 hover:bg-slate-900/50">
-                  <td className="px-3 py-2 font-bold text-cyan-300">TOTAL</td>
-                  <td className="px-3 py-2 text-right text-yellow-300 font-bold">{consolidado.totalEstudiantes}</td>
-                  <td className="px-3 py-2 text-right text-green-300 font-bold text-base">{formatoMoneda(consolidado.recaudoTotal)}</td>
-                  <td className="px-3 py-2 text-right text-orange-300 font-bold text-base">{formatoMoneda(consolidado.recaudoTotal + consolidado.adeudadoTotal)}</td>
-                  <td className="px-3 py-2 text-right text-red-300 font-bold text-base">{formatoMoneda(consolidado.adeudadoTotal)}</td>
-                  <td className="px-3 py-2 text-right text-blue-300 font-bold">{consolidado.estudiantesAlDia}</td>
-                  <td className="px-3 py-2 text-right text-purple-300 font-bold text-base">{eficienciaGlobal}%</td>
+                  <td className="px-3 py-2 font-bold text-orange-400">MILAGROS</td>
+                  <td className="px-3 py-2 text-right text-blue-300">{milagros.kpi.estudiantes}</td>
+                  <td className="px-3 py-2 text-right text-green-300">{milagros.kpi.estudiantesAlDia}</td>
+                  <td className="px-3 py-2 text-right text-red-300">{milagros.kpi.estudiantesEnMora}</td>
+                  <td className="px-3 py-2 text-right text-orange-300">{formatoMoneda(milagros.kpi.recaudable)}</td>
+                  <td className="px-3 py-2 text-right text-green-300 font-bold">{formatoMoneda(milagros.kpi.recaudado)}</td>
+                  <td className="px-3 py-2 text-right text-red-300">{formatoMoneda(milagros.kpi.deuda)}</td>
+                  <td className="px-3 py-2 text-right text-purple-300 font-bold">{milagros.kpi.eficiencia.toFixed(1)}%</td>
                 </tr>
               </tbody>
             </table>
@@ -581,133 +644,187 @@ export const ReportesEjecutivos: React.FC = () => {
         </div>
       )}
 
-      {/* TAB: ISIPP */}
+      {/* ISIPP TAB */}
       {tabActiva === 'isipp' && (
         <div className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            <KPICard title="👥 Estudiantes" value={isipp.totalEstudiantes.toString()} subtitle={`${isipp.estudiantesAlDia} al día`} icon={<Users size={18} className="text-blue-400" />} bgColor="bg-blue-900/30 border border-blue-700/50" textColor="text-blue-300" size="sm" />
-            <KPICard title="💰 Recaudado" value={formatoMoneda(isipp.recaudado)} icon={<DollarSign size={18} className="text-green-400" />} bgColor="bg-green-900/30 border border-green-700/50" textColor="text-green-300" size="sm" />
-            <KPICard title="💾 Recaudable" value={formatoMoneda(isipp.recaudable)} icon={<DollarSign size={18} className="text-orange-400" />} bgColor="bg-orange-900/30 border border-orange-700/50" textColor="text-orange-300" size="sm" />
-            <KPICard title="📌 Deuda" value={formatoMoneda(isipp.deuda)} icon={<AlertCircle size={18} className="text-red-400" />} bgColor="bg-red-900/30 border border-red-700/50" textColor="text-red-300" size="sm" />
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+            <KPICard
+              label="👥 Estudiantes"
+              value={isipp.kpi.estudiantes}
+              icon={<Users size={20} />}
+              color="blue"
+            />
+            <KPICard
+              label="✅ Al Día"
+              value={isipp.kpi.estudiantesAlDia}
+              icon={<TrendingUp size={20} />}
+              color="green"
+            />
+            <KPICard
+              label="⚠️ En Mora"
+              value={isipp.kpi.estudiantesEnMora}
+              icon={<AlertCircle size={20} />}
+              color="red"
+            />
+            <KPICard
+              label="📊 Eficiencia"
+              value={`${isipp.kpi.eficiencia.toFixed(1)}%`}
+              icon={<BarChart3 size={20} />}
+              color="purple"
+            />
           </div>
 
           {/* CARRERAS */}
-          <div className="space-y-3">
-            <h4 className="text-sm font-bold text-white">📚 Detalle por Carreras</h4>
-            {isipp.porCarrera.length > 0 ? (
-              isipp.porCarrera.map((carr, idx) => (
-                <div key={idx} className="bg-slate-800/60 border border-slate-700/50 rounded-lg overflow-hidden">
-                  <button
-                    onClick={() => setExpandidosISIPP({ ...expandidosISIPP, [idx]: !expandidosISIPP[idx] })}
-                    className="w-full flex items-center justify-between p-3 hover:bg-slate-700/50 transition-all"
-                  >
-                    <div className="flex items-center gap-2 flex-1">
-                      <span className="font-bold text-slate-200">{carr.carrera}</span>
-                      <span className="text-xs text-slate-400">({carr.estudiantes} est.) | {carr.estudiantesAlDia} ✅ | {carr.estudiantesEnMora} ⚠️</span>
+          <div className="space-y-2">
+            <h3 className="text-sm font-bold text-white">📚 Carreras</h3>
+            {isipp.carreras.map((carr, idx) => (
+              <div key={idx} className="bg-slate-800/50 border border-slate-700/50 rounded-lg">
+                <button
+                  onClick={() =>
+                    setExpandedCarreras({
+                      ...expandedCarreras,
+                      [`isipp-${idx}`]: !expandedCarreras[`isipp-${idx}`],
+                    })
+                  }
+                  className="w-full flex justify-between items-center p-3 hover:bg-slate-700/30 transition-all"
+                >
+                  <div>
+                    <p className="font-bold text-slate-200">{carr.nombre}</p>
+                    <p className="text-xs text-slate-400">
+                      {carr.estudiantes} est. | {carr.alDia} ✅ | {carr.enMora} ⚠️
+                    </p>
+                  </div>
+                  {expandedCarreras[`isipp-${idx}`] ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+                </button>
+                {expandedCarreras[`isipp-${idx}`] && (
+                  <div className="p-3 border-t border-slate-700/50 bg-slate-900/30 grid grid-cols-3 gap-3 text-xs">
+                    <div>
+                      <p className="text-slate-400">Recaudable</p>
+                      <p className="text-orange-300 font-bold">{formatoMoneda(carr.recaudable)}</p>
                     </div>
-                    {expandidosISIPP[idx] ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
-                  </button>
-                  {expandidosISIPP[idx] && (
-                    <div className="p-3 border-t border-slate-700/50 bg-slate-900/30 grid grid-cols-6 gap-2 text-xs">
-                      <div><p className="text-slate-400">Recaudable</p><p className="text-orange-300 font-bold">{formatoMoneda(carr.recaudable)}</p></div>
-                      <div><p className="text-slate-400">Recaudado</p><p className="text-green-300 font-bold">{formatoMoneda(carr.recaudado)}</p></div>
-                      <div><p className="text-slate-400">Deuda</p><p className="text-red-300 font-bold">{formatoMoneda(carr.deuda)}</p></div>
-                      <div><p className="text-slate-400">Al Día</p><p className="text-blue-300 font-bold">{carr.estudiantesAlDia}</p></div>
-                      <div><p className="text-slate-400">En Mora</p><p className="text-red-300 font-bold">{carr.estudiantesEnMora}</p></div>
-                      <div><p className="text-slate-400">Eficiencia</p><p className="text-cyan-300 font-bold">{carr.eficiencia.toFixed(1)}%</p></div>
+                    <div>
+                      <p className="text-slate-400">Recaudado</p>
+                      <p className="text-green-300 font-bold">{formatoMoneda(carr.recaudado)}</p>
                     </div>
-                  )}
-                </div>
-              ))
-            ) : (
-              <p className="text-slate-400 text-xs">Sin carreras con conceptos vencidos</p>
-            )}
+                    <div>
+                      <p className="text-slate-400">Deuda</p>
+                      <p className="text-red-300 font-bold">{formatoMoneda(carr.deuda)}</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
           </div>
 
           {/* TOP MOROSOS */}
-          <div className="p-4 bg-slate-800/60 border border-slate-700/50 rounded-lg">
-            <h4 className="text-sm font-bold text-white mb-3">📍 Top Morosos ({isipp.topMorosos.length})</h4>
-            {isipp.topMorosos.length > 0 ? (
+          {isipp.morosos.length > 0 && (
+            <div className="bg-slate-800/50 border border-slate-700/50 rounded-lg p-4">
+              <h3 className="text-sm font-bold text-white mb-3">📍 Top 10 Deudores</h3>
               <div className="space-y-2">
-                {isipp.topMorosos.slice(0, 10).map((moroso, idx) => (
+                {isipp.morosos.map((m, idx) => (
                   <div key={idx} className="flex justify-between text-xs p-2 bg-slate-900/50 rounded">
                     <div>
-                      <p className="text-slate-200 font-semibold">{idx + 1}. {moroso.nombre}</p>
-                      <p className="text-slate-500 text-xs">{moroso.carrera}</p>
+                      <p className="text-slate-200 font-semibold">#{idx + 1} {m.nombre}</p>
+                      <p className="text-slate-500">{m.carrera}</p>
                     </div>
-                    <p className="text-red-300 font-bold">{formatoMoneda(moroso.deuda)}</p>
+                    <p className="text-red-300 font-bold">{formatoMoneda(m.deuda)}</p>
                   </div>
                 ))}
               </div>
-            ) : (
-              <p className="text-slate-400 text-xs">✅ Sin morosos</p>
-            )}
-          </div>
+            </div>
+          )}
         </div>
       )}
 
-      {/* TAB: MILAGROS */}
+      {/* MILAGROS TAB */}
       {tabActiva === 'milagros' && (
         <div className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            <KPICard title="👥 Estudiantes" value={milagros.totalEstudiantes.toString()} subtitle={`${milagros.estudiantesAlDia} al día`} icon={<Users size={18} className="text-blue-400" />} bgColor="bg-blue-900/30 border border-blue-700/50" textColor="text-blue-300" size="sm" />
-            <KPICard title="💰 Recaudado" value={formatoMoneda(milagros.recaudado)} icon={<DollarSign size={18} className="text-green-400" />} bgColor="bg-green-900/30 border border-green-700/50" textColor="text-green-300" size="sm" />
-            <KPICard title="💾 Recaudable" value={formatoMoneda(milagros.recaudable)} icon={<DollarSign size={18} className="text-orange-400" />} bgColor="bg-orange-900/30 border border-orange-700/50" textColor="text-orange-300" size="sm" />
-            <KPICard title="📌 Deuda" value={formatoMoneda(milagros.deuda)} icon={<AlertCircle size={18} className="text-red-400" />} bgColor="bg-red-900/30 border border-red-700/50" textColor="text-red-300" size="sm" />
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+            <KPICard
+              label="👥 Estudiantes"
+              value={milagros.kpi.estudiantes}
+              icon={<Users size={20} />}
+              color="blue"
+            />
+            <KPICard
+              label="✅ Al Día"
+              value={milagros.kpi.estudiantesAlDia}
+              icon={<TrendingUp size={20} />}
+              color="green"
+            />
+            <KPICard
+              label="⚠️ En Mora"
+              value={milagros.kpi.estudiantesEnMora}
+              icon={<AlertCircle size={20} />}
+              color="red"
+            />
+            <KPICard
+              label="📊 Eficiencia"
+              value={`${milagros.kpi.eficiencia.toFixed(1)}%`}
+              icon={<BarChart3 size={20} />}
+              color="purple"
+            />
           </div>
 
           {/* CARRERAS */}
-          <div className="space-y-3">
-            <h4 className="text-sm font-bold text-white">📚 Detalle por Carreras</h4>
-            {milagros.porCarrera.length > 0 ? (
-              milagros.porCarrera.map((carr, idx) => (
-                <div key={idx} className="bg-slate-800/60 border border-slate-700/50 rounded-lg overflow-hidden">
-                  <button
-                    onClick={() => setExpandidosMilagros({ ...expandidosMilagros, [idx]: !expandidosMilagros[idx] })}
-                    className="w-full flex items-center justify-between p-3 hover:bg-slate-700/50 transition-all"
-                  >
-                    <div className="flex items-center gap-2 flex-1">
-                      <span className="font-bold text-slate-200">{carr.carrera}</span>
-                      <span className="text-xs text-slate-400">({carr.estudiantes} est.) | {carr.estudiantesAlDia} ✅ | {carr.estudiantesEnMora} ⚠️</span>
+          <div className="space-y-2">
+            <h3 className="text-sm font-bold text-white">📚 Carreras</h3>
+            {milagros.carreras.map((carr, idx) => (
+              <div key={idx} className="bg-slate-800/50 border border-slate-700/50 rounded-lg">
+                <button
+                  onClick={() =>
+                    setExpandedCarreras({
+                      ...expandedCarreras,
+                      [`milagros-${idx}`]: !expandedCarreras[`milagros-${idx}`],
+                    })
+                  }
+                  className="w-full flex justify-between items-center p-3 hover:bg-slate-700/30 transition-all"
+                >
+                  <div>
+                    <p className="font-bold text-slate-200">{carr.nombre}</p>
+                    <p className="text-xs text-slate-400">
+                      {carr.estudiantes} est. | {carr.alDia} ✅ | {carr.enMora} ⚠️
+                    </p>
+                  </div>
+                  {expandedCarreras[`milagros-${idx}`] ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+                </button>
+                {expandedCarreras[`milagros-${idx}`] && (
+                  <div className="p-3 border-t border-slate-700/50 bg-slate-900/30 grid grid-cols-3 gap-3 text-xs">
+                    <div>
+                      <p className="text-slate-400">Recaudable</p>
+                      <p className="text-orange-300 font-bold">{formatoMoneda(carr.recaudable)}</p>
                     </div>
-                    {expandidosMilagros[idx] ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
-                  </button>
-                  {expandidosMilagros[idx] && (
-                    <div className="p-3 border-t border-slate-700/50 bg-slate-900/30 grid grid-cols-6 gap-2 text-xs">
-                      <div><p className="text-slate-400">Recaudable</p><p className="text-orange-300 font-bold">{formatoMoneda(carr.recaudable)}</p></div>
-                      <div><p className="text-slate-400">Recaudado</p><p className="text-green-300 font-bold">{formatoMoneda(carr.recaudado)}</p></div>
-                      <div><p className="text-slate-400">Deuda</p><p className="text-red-300 font-bold">{formatoMoneda(carr.deuda)}</p></div>
-                      <div><p className="text-slate-400">Al Día</p><p className="text-blue-300 font-bold">{carr.estudiantesAlDia}</p></div>
-                      <div><p className="text-slate-400">En Mora</p><p className="text-red-300 font-bold">{carr.estudiantesEnMora}</p></div>
-                      <div><p className="text-slate-400">Eficiencia</p><p className="text-cyan-300 font-bold">{carr.eficiencia.toFixed(1)}%</p></div>
+                    <div>
+                      <p className="text-slate-400">Recaudado</p>
+                      <p className="text-green-300 font-bold">{formatoMoneda(carr.recaudado)}</p>
                     </div>
-                  )}
-                </div>
-              ))
-            ) : (
-              <p className="text-slate-400 text-xs">Sin carreras con conceptos vencidos</p>
-            )}
+                    <div>
+                      <p className="text-slate-400">Deuda</p>
+                      <p className="text-red-300 font-bold">{formatoMoneda(carr.deuda)}</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
           </div>
 
           {/* TOP MOROSOS */}
-          <div className="p-4 bg-slate-800/60 border border-slate-700/50 rounded-lg">
-            <h4 className="text-sm font-bold text-white mb-3">📍 Top Morosos ({milagros.topMorosos.length})</h4>
-            {milagros.topMorosos.length > 0 ? (
+          {milagros.morosos.length > 0 && (
+            <div className="bg-slate-800/50 border border-slate-700/50 rounded-lg p-4">
+              <h3 className="text-sm font-bold text-white mb-3">📍 Top 10 Deudores</h3>
               <div className="space-y-2">
-                {milagros.topMorosos.slice(0, 10).map((moroso, idx) => (
+                {milagros.morosos.map((m, idx) => (
                   <div key={idx} className="flex justify-between text-xs p-2 bg-slate-900/50 rounded">
                     <div>
-                      <p className="text-slate-200 font-semibold">{idx + 1}. {moroso.nombre}</p>
-                      <p className="text-slate-500 text-xs">{moroso.carrera}</p>
+                      <p className="text-slate-200 font-semibold">#{idx + 1} {m.nombre}</p>
+                      <p className="text-slate-500">{m.carrera}</p>
                     </div>
-                    <p className="text-red-300 font-bold">{formatoMoneda(moroso.deuda)}</p>
+                    <p className="text-red-300 font-bold">{formatoMoneda(m.deuda)}</p>
                   </div>
                 ))}
               </div>
-            ) : (
-              <p className="text-slate-400 text-xs">✅ Sin morosos</p>
-            )}
-          </div>
+            </div>
+          )}
         </div>
       )}
     </div>
