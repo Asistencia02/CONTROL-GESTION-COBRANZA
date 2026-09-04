@@ -116,7 +116,7 @@ export const ReportesEjecutivos: React.FC = () => {
     morosos: [],
   })
 
-  // ========== PROCESAR INSTITUCIÓN (LÓGICA EXACTA DE useReportesFinancieros) ==========
+  // ========== PROCESAR INSTITUCIÓN (LÓGICA EXACTA DE useDeudas) ==========
   const procesarInstitucion = async (institucionId: number) => {
     try {
       console.log(`[EXEC] ========== Procesando institución ${institucionId} ==========`)
@@ -125,12 +125,8 @@ export const ReportesEjecutivos: React.FC = () => {
       const diaActual = today.getDate()
       const mesActual = today.getMonth() + 1
       const anioActual = today.getFullYear()
-      
-      // Día de vencimiento: 10 - si es antes del día 10, el mes aún no vence
-      const mesVencidoActual = diaActual >= PRIMER_DIA_VENCIMIENTO ? mesActual : mesActual - 1
-      const anioVencidoActual = mesVencidoActual < mesActual ? anioActual : anioActual
 
-      // 1. OBTENER ESTUDIANTES (excluir NO_VIENE_MAS)
+      // 1. OBTENER ESTUDIANTES
       const { data: estudiantes, error: errEst } = await supabase
         .from('estudiantes')
         .select('id, dni, nombre, apellido, carrera_id, estado, carreras(nombre)')
@@ -171,42 +167,23 @@ export const ReportesEjecutivos: React.FC = () => {
 
       if (errConc) throw errConc
 
-      // SEPARAR INSCRIPCIONES (sin mes/año) de CUOTAS+SEGUROS (con mes/año)
-      const inscripciones = (conceptos || []).filter(c => 
-        c.tipo?.toUpperCase() === 'INSCRIPCION' && 
-        (!c.mes || !c.año)
-      )
-
-      console.log(`[EXEC] Inscripciones: ${inscripciones.length}`)
-
-      // CUOTAS + SEGURO - SOLO MESES ACADÉMICOS (3-8) y VENCIDOS
-      // Si día < 10, NO incluir mes actual
-      const conceptosVencidos = (conceptos || []).filter(c => {
-        // Incluir INSCRIPCIÓN sin mes/año
-        if (c.tipo?.toUpperCase() === 'INSCRIPCION' && (!c.mes || !c.año)) {
-          return true
-        }
-        
-        // Para CUOTA y SEGURO, aplicar filtro de mes/año
+      // FILTRAR EXACTAMENTE COMO useDeudas
+      const conceptosFiltrados = (conceptos || []).filter(c => {
         if (c.mes && c.año) {
-          // Excluir enero y febrero - solo contar marzo a agosto
-          if (c.mes < PRIMER_MES_ACADEMICO || c.mes > ULTIMO_MES_ACADEMICO) return false
-          
           if (c.año < anioActual) return true
           if (c.año === anioActual) {
-            // Si está en mes actual Y día < 10, NO incluir mes actual
-            if (c.mes === mesActual && diaActual < PRIMER_DIA_VENCIMIENTO) return false
             if (c.mes < mesActual) return true
-            if (c.mes === mesActual && diaActual >= PRIMER_DIA_VENCIMIENTO) return true
+            if (c.mes === mesActual && diaActual > 10) return true
           }
+          return false
+        } else {
+          return true
         }
-        return false
       })
 
-      const conceptosFiltrados = [...inscripciones, ...conceptosVencidos]
-      console.log(`[EXEC] Conceptos vencidos: ${conceptosVencidos.length}`)
+      console.log(`[EXEC] ${conceptosFiltrados.length} conceptos filtrados`)
 
-      // 3. OBTENER PAGOS DE AMBAS TABLAS CON PAGINACIÓN
+      // 3. OBTENER PAGOS INDIVIDUALES CON PAGINACIÓN (EXACTO useDeudas)
       let todosPagos: any[] = []
       let pagina = 0
       let tieneRangoMas = true
@@ -217,7 +194,7 @@ export const ReportesEjecutivos: React.FC = () => {
         
         const { data: pagosBloques, error: errorPagos } = await supabase
           .from('pagos')
-          .select('id, estudiante_id, concepto_id, monto_pagado, estado')
+          .select('estudiante_id, concepto_id, monto_pagado, estado')
           .eq('institucion_id', institucionId)
           .neq('estado', 'ANULADO')
           .range(desde, hasta)
@@ -234,50 +211,46 @@ export const ReportesEjecutivos: React.FC = () => {
 
       console.log(`[EXEC] Pagos individuales: ${todosPagos.length}`)
 
-      // 4. OBTENER PAGOS MÚLTIPLES
-      const { data: pagosMultiples, error: errPagosMultiples } = await supabase
-        .from('pagos_multiples_detalle')
+      // 4. OBTENER PAGOS MÚLTIPLES (EXACTO useDeudas)
+      const { data: pagosMultiplesData } = await supabase
+        .from('pagos_multiples')
         .select(`
           id,
-          concepto_id,
-          monto_pagado,
-          pagos_multiples!inner(
-            estudiante_id,
-            estado,
-            institucion_id
+          estudiante_id,
+          estado,
+          pagos_multiples_detalle(
+            concepto_id,
+            monto_pagado
           )
         `)
-        .eq('pagos_multiples.institucion_id', institucionId)
-        .neq('pagos_multiples.estado', 'ANULADO')
+        .eq('institucion_id', institucionId)
+        .neq('estado', 'ANULADO')
 
-      if (errPagosMultiples) throw errPagosMultiples
+      if (pagosMultiplesData) {
+        pagosMultiplesData.forEach((pm: any) => {
+          if (pm.pagos_multiples_detalle && Array.isArray(pm.pagos_multiples_detalle)) {
+            pm.pagos_multiples_detalle.forEach((detalle: any) => {
+              todosPagos.push({
+                estudiante_id: pm.estudiante_id,
+                concepto_id: detalle.concepto_id,
+                monto_pagado: detalle.monto_pagado,
+                estado: 'COMPLETADO'
+              })
+            })
+          }
+        })
+      }
 
-      // Convertir pagos múltiples al mismo formato
-      const pagosMultiplesFormato = (pagosMultiples || []).map((p: any) => ({
-        id: p.id,
-        estudiante_id: p.pagos_multiples?.estudiante_id,
-        concepto_id: p.concepto_id,
-        monto_pagado: p.monto_pagado,
-        estado: p.pagos_multiples?.estado || 'PAGADO'
-      }))
-
-      // Combinar ambas tablas
-      const pagosValidos = [...todosPagos, ...pagosMultiplesFormato]
-      console.log(`[EXEC] Pagos totales: ${pagosValidos.length} (${todosPagos.length} individuales + ${pagosMultiplesFormato.length} múltiples)`)
-
-      // 5. CALCULAR CONCEPTOS VENCIDOS ANTES DEL DÍA 10 DEL MES ACTUAL (para mora)
-      const conceptosVencidosMora = conceptosVencidos.filter(c => {
-        if (c.mes && c.año) {
-          if (c.mes < PRIMER_MES_ACADEMICO || c.mes > ULTIMO_MES_ACADEMICO) return false
-          if (c.año < anioVencidoActual) return true
-          if (c.año === anioVencidoActual && c.mes <= mesVencidoActual) return true
-        }
-        return false
+      // 5. CREAR MAPEO DE PAGOS - EXACTAMENTE COMO useDeudas (.set SIN SUMAR)
+      const pagosMap = new Map<string, number>()
+      todosPagos.forEach(p => {
+        const key = `${p.estudiante_id}-${p.concepto_id}`
+        pagosMap.set(key, p.monto_pagado)  // ⚠️ SOBRESCRIBE - última entrada gana
       })
 
-      console.log(`[EXEC] Conceptos vencidos para mora: ${conceptosVencidosMora.length}`)
+      console.log(`[EXEC] ${todosPagos.length} pagos, ${pagosMap.size} pares únicos`)
 
-      // 6. CALCULAR RESUMEN - LÓGICA EXACTA DE useReportesFinancieros
+      // 6. PROCESAR ESTUDIANTES - EXACTO useDeudas
       let totalRecaudable = 0
       let totalRecaudado = 0
       let estudiantesEnMora = 0
@@ -301,60 +274,58 @@ export const ReportesEjecutivos: React.FC = () => {
         carreras.get(est.carrera_id)!.estudiantes++
       })
 
-      // PROCESAR CADA ESTUDIANTE - CALCULAR DEUDA CON CONCEPTOS VENCIDOS
+      // PROCESAR CADA ESTUDIANTE - EXACTO useDeudas
       estudiantesActivos.forEach(est => {
-        // Conceptos vencidos de esta carrera
-        const conceptosDelEstudiante = conceptosVencidos.filter(c => c.carrera_id === est.carrera_id)
-        
+        let pagadoTotal = 0
+        let adeudadoTotal = 0
+
+        // Filtrar conceptos POR CARRERA
+        const conceptosDelEstudiante = conceptosFiltrados.filter(c => c.carrera_id === est.carrera_id)
+
         if (conceptosDelEstudiante.length === 0) return
 
-        let deudaEst = 0
-        let recaudadoEst = 0
-
-        // Para cada concepto vencido, verificar si está pagado
+        // EXACTO useDeudas
         conceptosDelEstudiante.forEach(concepto => {
-          const montoPago = pagosValidos
-            .filter(p => p.estudiante_id === est.id && p.concepto_id === concepto.id)
-            .reduce((sum, p) => sum + (p.monto_pagado || 0), 0)
-
+          const montoPago = pagosMap.get(`${est.id}-${concepto.id}`) || 0
           const montoOriginal = concepto.monto
-          recaudadoEst += montoPago
 
-          // Si no pagó el monto completo, está en deuda
-          if (montoPago < montoOriginal) {
-            deudaEst += montoOriginal - montoPago
+          pagadoTotal += montoPago
+
+          const deudaDelConcepto = montoOriginal - montoPago
+          if (deudaDelConcepto > 0) {
+            adeudadoTotal += deudaDelConcepto
           }
         })
 
+        // AL DÍA si sin deuda
+        const esDeudor = adeudadoTotal > 0
+
         // Actualizar totales
         totalRecaudable += conceptosDelEstudiante.reduce((sum, c) => sum + c.monto, 0)
-        totalRecaudado += recaudadoEst
+        totalRecaudado += pagadoTotal
 
-        // Si está en deuda
-        if (deudaEst > 0) {
+        if (esDeudor) {
           estudiantesEnMora++
           morosos.push({
             dni: est.dni || '',
             nombre: `${est.nombre || ''} ${est.apellido || ''}`,
             carrera: (est as any).carreras?.nombre || 'Sin carrera',
-            deuda: deudaEst,
+            deuda: adeudadoTotal,
           })
 
-          // Actualizar carrera
           const carr = carreras.get(est.carrera_id)
           if (carr) {
             carr.enMora++
             carr.recaudable += conceptosDelEstudiante.reduce((sum, c) => sum + c.monto, 0)
-            carr.recaudado += recaudadoEst
-            carr.deuda += deudaEst
+            carr.recaudado += pagadoTotal
+            carr.deuda += adeudadoTotal
           }
         } else {
-          // Al día
           const carr = carreras.get(est.carrera_id)
           if (carr) {
             carr.alDia++
             carr.recaudable += conceptosDelEstudiante.reduce((sum, c) => sum + c.monto, 0)
-            carr.recaudado += recaudadoEst
+            carr.recaudado += pagadoTotal
           }
         }
       })
