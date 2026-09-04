@@ -243,7 +243,7 @@ export const useReportesFinancieros = (institucionId: number) => {
         }
         return false
       })
-      console.log('[MORA] Conceptos vencidos para mora:', conceptosVencidosMoraLocal.length, 'de', conceptosVencidos.length, '| diaActual:', diaActual, 'mesVencidoActual:', mesVencidoActual)
+      console.log('[MORA] Conceptos vencidos para mora: cuota+seguro:', conceptosVencidosMoraLocal.filter(c => c.tipo?.toUpperCase() !== 'INSCRIPCION').length, '| Total:', conceptosVencidosMoraLocal.length, '| diaActual:', diaActual, 'mesVencidoActual:', mesVencidoActual)
 
       // ========== CALCULAR RESUMEN EJECUTIVO - PARTE ANUAL ==========
       let totalRecaudable = 0
