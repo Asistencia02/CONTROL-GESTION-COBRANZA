@@ -116,7 +116,7 @@ export const ReportesEjecutivos: React.FC = () => {
     morosos: [],
   })
 
-  // ========== PROCESAR INSTITUCIÓN (LÓGICA EXACTA DE useDeudas) ==========
+  // ========== PROCESAR INSTITUCIÓN (LÓGICA EXACTA DE useDeudas CON SUMA CORRECTA) ==========
   const procesarInstitucion = async (institucionId: number) => {
     try {
       console.log(`[EXEC] ========== Procesando institución ${institucionId} ==========`)
@@ -241,11 +241,12 @@ export const ReportesEjecutivos: React.FC = () => {
         })
       }
 
-      // 5. CREAR MAPEO DE PAGOS - EXACTAMENTE COMO useDeudas (.set SIN SUMAR)
+      // 5. CREAR MAPEO DE PAGOS - CORREGIDO: SUMAR múltiples pagos del mismo concepto
       const pagosMap = new Map<string, number>()
       todosPagos.forEach(p => {
         const key = `${p.estudiante_id}-${p.concepto_id}`
-        pagosMap.set(key, p.monto_pagado)  // ⚠️ SOBRESCRIBE - última entrada gana
+        const prev = pagosMap.get(key) || 0
+        pagosMap.set(key, prev + (p.monto_pagado || 0))  // ✅ SUMA correctamente
       })
 
       console.log(`[EXEC] ${todosPagos.length} pagos, ${pagosMap.size} pares únicos`)
