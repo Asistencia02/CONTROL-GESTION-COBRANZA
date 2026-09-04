@@ -178,7 +178,7 @@ export const ReportesEjecutivos: React.FC = () => {
       // 1. OBTENER TODOS LOS ESTUDIANTES ACTIVOS
       const { data: estudiantes, error: errEst } = await supabase
         .from('estudiantes')
-        .select('id, dni, nombre, apellido, carrera_id, estado, carreras(id, nombre)')
+        .select('id, dni, nombre, apellido, carrera_id, estado')
         .eq('institucion_id', institucionId)
         .eq('estado', 'ACTIVO')
 
@@ -187,6 +187,19 @@ export const ReportesEjecutivos: React.FC = () => {
       const totalEstudiantes = estudiantesActivos.length
 
       console.log(`[PANEL] Institución ${institucionId}: ${totalEstudiantes} estudiantes`)
+
+      // 1.5 OBTENER MAPA DE CARRERAS
+      const { data: carrerasData } = await supabase
+        .from('carreras')
+        .select('id, nombre')
+        .eq('institucion_id', institucionId)
+
+      const carrerasMap = new Map<number, string>()
+      ;(carrerasData || []).forEach(c => {
+        carrerasMap.set(c.id, c.nombre)
+      })
+
+      console.log(`[PANEL] Institución ${institucionId}: ${carrerasMap.size} carreras cargadas`)
 
       // 2. OBTENER TODOS LOS CONCEPTOS (sin filtrar, filtramos después)
       const { data: todosConceptos, error: errCon } = await supabase
@@ -319,7 +332,7 @@ export const ReportesEjecutivos: React.FC = () => {
             topMorosos.push({
               dni: est.dni || '',
               nombre: `${est.nombre} ${est.apellido}`,
-              carrera: (est as any).carreras?.nombre || 'Sin carrera',
+              carrera: carrerasMap.get(est.carrera_id) || 'Sin carrera',
               deuda: deudaEstudiante,
             })
           }
@@ -349,9 +362,7 @@ export const ReportesEjecutivos: React.FC = () => {
 
       // 9. CONSTRUIR DATOS POR CARRERA
       const porCarrera: DatosCarrera[] = Array.from(dataCarreras.entries()).map(([carreraId, data]) => {
-        // Buscar nombre de carrera desde la tabla carreras, NO de conceptos
-        const carreraInfo = estudiantesActivos.find(e => e.carrera_id === carreraId)?.carreras as any
-        const carreraNombre = carreraInfo?.nombre || `Carrera ${carreraId}`
+        const carreraNombre = carrerasMap.get(carreraId) || `Carrera ${carreraId}`
         const eficiencia = data.recaudable > 0 ? (data.recaudado / data.recaudable) * 100 : 0
         const moraCarrera = data.estudiantes > 0 ? (data.estudiantesEnMora / data.estudiantes) * 100 : 0
 
