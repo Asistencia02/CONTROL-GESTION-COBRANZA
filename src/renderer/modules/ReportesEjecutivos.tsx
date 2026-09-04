@@ -116,7 +116,7 @@ export const ReportesEjecutivos: React.FC = () => {
     morosos: [],
   })
 
-  // ========== PROCESAR INSTITUCIÓN (LÓGICA EXACTA DE useDeudas CON SUMA CORRECTA) ==========
+  // ========== PROCESAR INSTITUCIÓN ==========
   const procesarInstitucion = async (institucionId: number) => {
     try {
       console.log(`[EXEC] ========== Procesando institución ${institucionId} ==========`)
@@ -183,7 +183,7 @@ export const ReportesEjecutivos: React.FC = () => {
 
       console.log(`[EXEC] ${conceptosFiltrados.length} conceptos filtrados`)
 
-      // 3. OBTENER PAGOS INDIVIDUALES CON PAGINACIÓN (EXACTO useDeudas)
+      // 3. OBTENER PAGOS INDIVIDUALES CON PAGINACIÓN
       let todosPagos: any[] = []
       let pagina = 0
       let tieneRangoMas = true
@@ -211,7 +211,7 @@ export const ReportesEjecutivos: React.FC = () => {
 
       console.log(`[EXEC] Pagos individuales: ${todosPagos.length}`)
 
-      // 4. OBTENER PAGOS MÚLTIPLES (EXACTO useDeudas)
+      // 4. OBTENER PAGOS MÚLTIPLES
       const { data: pagosMultiplesData } = await supabase
         .from('pagos_multiples')
         .select(`
@@ -241,17 +241,17 @@ export const ReportesEjecutivos: React.FC = () => {
         })
       }
 
-      // 5. CREAR MAPEO DE PAGOS - CORREGIDO: SUMAR múltiples pagos del mismo concepto
+      // 5. CREAR MAPEO DE PAGOS - SUMA múltiples pagos del mismo concepto
       const pagosMap = new Map<string, number>()
       todosPagos.forEach(p => {
         const key = `${p.estudiante_id}-${p.concepto_id}`
         const prev = pagosMap.get(key) || 0
-        pagosMap.set(key, prev + (p.monto_pagado || 0))  // ✅ SUMA correctamente
+        pagosMap.set(key, prev + (p.monto_pagado || 0))
       })
 
       console.log(`[EXEC] ${todosPagos.length} pagos, ${pagosMap.size} pares únicos`)
 
-      // 6. PROCESAR ESTUDIANTES - EXACTO useDeudas
+      // 6. PROCESAR ESTUDIANTES
       let totalRecaudable = 0
       let totalRecaudado = 0
       let estudiantesEnMora = 0
@@ -275,9 +275,9 @@ export const ReportesEjecutivos: React.FC = () => {
         carreras.get(est.carrera_id)!.estudiantes++
       })
 
-      // PROCESAR CADA ESTUDIANTE - EXACTO useDeudas
+      // PROCESAR CADA ESTUDIANTE
       estudiantesActivos.forEach(est => {
-        let pagadoTotal = 0
+        let recaudadoEst = 0
         let adeudadoTotal = 0
 
         // Filtrar conceptos POR CARRERA
@@ -285,25 +285,26 @@ export const ReportesEjecutivos: React.FC = () => {
 
         if (conceptosDelEstudiante.length === 0) return
 
-        // EXACTO useDeudas
+        // PROCESAR CADA CONCEPTO
         conceptosDelEstudiante.forEach(concepto => {
           const montoPago = pagosMap.get(`${est.id}-${concepto.id}`) || 0
           const montoOriginal = concepto.monto
 
-          pagadoTotal += montoPago
-
-          const deudaDelConcepto = montoOriginal - montoPago
-          if (deudaDelConcepto > 0) {
-            adeudadoTotal += deudaDelConcepto
+          // ✅ SOLO SUMAR CONCEPTOS COMPLETAMENTE PAGADOS
+          if (montoPago >= montoOriginal) {
+            recaudadoEst += montoOriginal
+          } else {
+            // Concepto NO pagado completamente → deuda
+            adeudadoTotal += montoOriginal - montoPago
           }
         })
 
         // AL DÍA si sin deuda
         const esDeudor = adeudadoTotal > 0
 
-        // Actualizar totales
+        // Actualizar totales GLOBALES
         totalRecaudable += conceptosDelEstudiante.reduce((sum, c) => sum + c.monto, 0)
-        totalRecaudado += pagadoTotal
+        totalRecaudado += recaudadoEst
 
         if (esDeudor) {
           estudiantesEnMora++
@@ -318,7 +319,7 @@ export const ReportesEjecutivos: React.FC = () => {
           if (carr) {
             carr.enMora++
             carr.recaudable += conceptosDelEstudiante.reduce((sum, c) => sum + c.monto, 0)
-            carr.recaudado += pagadoTotal
+            carr.recaudado += recaudadoEst
             carr.deuda += adeudadoTotal
           }
         } else {
@@ -326,7 +327,7 @@ export const ReportesEjecutivos: React.FC = () => {
           if (carr) {
             carr.alDia++
             carr.recaudable += conceptosDelEstudiante.reduce((sum, c) => sum + c.monto, 0)
-            carr.recaudado += pagadoTotal
+            carr.recaudado += recaudadoEst
           }
         }
       })
