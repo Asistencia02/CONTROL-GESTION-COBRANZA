@@ -173,9 +173,9 @@ export const ReportesEjecutivos: React.FC = () => {
     try {
       const { mesVencido, anioVencido } = fechas
 
-      console.log(`[PANEL] Institución ${institucionId}: Buscando vencidos desde mes ${mesVencido}/${anioVencido}`)
+      console.log(`[PANEL] Institución ${institucionId}: Procesando...`)
 
-      // 1. OBTENER TODOS LOS ESTUDIANTES ACTIVOS
+      // ===== 1. OBTENER ESTUDIANTES =====
       const { data: estudiantes, error: errEst } = await supabase
         .from('estudiantes')
         .select('id, dni, nombre, apellido, carrera_id, estado')
@@ -185,10 +185,9 @@ export const ReportesEjecutivos: React.FC = () => {
       if (errEst) throw errEst
       const estudiantesActivos = estudiantes || []
       const totalEstudiantes = estudiantesActivos.length
+      console.log(`[PANEL] ${totalEstudiantes} estudiantes activos`)
 
-      console.log(`[PANEL] Institución ${institucionId}: ${totalEstudiantes} estudiantes`)
-
-      // 1.5 OBTENER MAPA DE CARRERAS
+      // ===== 2. OBTENER MAPA DE CARRERAS =====
       const { data: carrerasData } = await supabase
         .from('carreras')
         .select('id, nombre')
@@ -199,9 +198,7 @@ export const ReportesEjecutivos: React.FC = () => {
         carrerasMap.set(c.id, c.nombre)
       })
 
-      console.log(`[PANEL] Institución ${institucionId}: ${carrerasMap.size} carreras cargadas`)
-
-      // 2. OBTENER TODOS LOS CONCEPTOS (sin filtrar, filtramos después)
+      // ===== 3. OBTENER CONCEPTOS VENCIDOS =====
       const { data: todosConceptos, error: errCon } = await supabase
         .from('conceptos_pago')
         .select('id, tipo, monto, mes, año, carrera_id')
@@ -210,58 +207,42 @@ export const ReportesEjecutivos: React.FC = () => {
 
       if (errCon) throw errCon
 
-      // 3. FILTRAR CONCEPTOS VENCIDOS según la regla
+      // Filtrar vencidos
       const conceptosArr = (todosConceptos || []).filter(c => {
-        // INSCRIPCION sin fecha: siempre vencido
-        if (c.tipo?.toUpperCase() === 'INSCRIPCION' && (!c.mes || !c.año)) {
-          return true
-        }
-        // Conceptos con fecha: validar si están vencidos
+        if (c.tipo?.toUpperCase() === 'INSCRIPCION' && (!c.mes || !c.año)) return true
         if (c.mes && c.año) {
-          // Vencido si: año anterior O (mismo año y mes <= mesVencido)
           if (c.año < anioVencido) return true
           if (c.año === anioVencido && c.mes <= mesVencido) return true
         }
         return false
       })
 
-      console.log(`[PANEL] Institución ${institucionId}: ${conceptosArr.length} conceptos vencidos`)
+      console.log(`[PANEL] ${conceptosArr.length} conceptos vencidos`)
 
-      // 4. OBTENER PAGOS SIMPLES
-      const { data: pagosSimples, error: errPS } = await supabase
-        .from('pagos')
-        .select('estudiante_id, concepto_id, monto_pagado')
-        .eq('institucion_id', institucionId)
-        .neq('estado', 'ANULADO')
-
-      if (errPS) throw errPS
-
-      // 5. OBTENER PAGOS MÚLTIPLES CON DETALLES
-      const { data: pagosMultiples, error: errPM } = await supabase
+      // ===== 4. OBTENER PAGOS - MÉTODO SIMPLIFICADO =====
+      // Query única a pagos_multiples_detalle que incluye TODOS los pagos
+      const { data: todosPagosDetalle, error: errPagos } = await supabase
         .from('pagos_multiples_detalle')
         .select('concepto_id, monto_pagado, pagos_multiples(estudiante_id, institucion_id)')
         .eq('pagos_multiples.institucion_id', institucionId)
         .neq('pagos_multiples.estado', 'ANULADO')
 
-      if (errPM) throw errPM
+      if (errPagos) throw errPagos
 
-      // 6. UNIFICAR PAGOS
-      const pagosUnificados = new Map<string, number>()
-
-      // Agregar pagos simples
-      ;(pagosSimples || []).forEach((p: any) => {
-        const key = `${p.estudiante_id}-${p.concepto_id}`
-        pagosUnificados.set(key, (pagosUnificados.get(key) || 0) + (p.monto_pagado || 0))
-      })
-
-      // Agregar pagos múltiples
-      ;(pagosMultiples || []).forEach((p: any) => {
+      // CREAR MAPA: clave = "estudiante_id-concepto_id" → valor = monto_pagado
+      const pagosMap = new Map<string, number>()
+      ;(todosPagosDetalle || []).forEach((p: any) => {
         const estId = p.pagos_multiples?.estudiante_id
+        if (!estId) return
+        
         const key = `${estId}-${p.concepto_id}`
-        pagosUnificados.set(key, (pagosUnificados.get(key) || 0) + (p.monto_pagado || 0))
+        const montoActual = pagosMap.get(key) || 0
+        pagosMap.set(key, montoActual + (p.monto_pagado || 0))
       })
 
-      // 7. CALCULAR POR ESTUDIANTE
+      console.log(`[PANEL] ${pagosMap.size} pares estudiante-concepto con pagos`)
+
+      // ===== 5. PROCESAR CADA ESTUDIANTE =====
       let recaudoTotalInst = 0
       let recaudableTotalInst = 0
       let deudaTotalInst = 0
@@ -269,6 +250,7 @@ export const ReportesEjecutivos: React.FC = () => {
       let estudiantesMoraCount = 0
       const topMorosos: Array<{ dni: string; nombre: string; carrera: string; deuda: number }> = []
 
+      // Mapa de carreras para acumular datos
       const dataCarreras = new Map<number, {
         estudiantes: number
         estudiantesAlDia: number
@@ -290,12 +272,12 @@ export const ReportesEjecutivos: React.FC = () => {
             deuda: 0,
           })
         }
-        const carr = dataCarreras.get(est.carrera_id)!
-        carr.estudiantes++
+        dataCarreras.get(est.carrera_id)!.estudiantes++
       })
 
-      // Procesar cada estudiante
+      // PROCESAR CADA ESTUDIANTE
       estudiantesActivos.forEach(est => {
+        // Conceptos vencidos de esta carrera
         const conceptosEstudiante = conceptosArr.filter(c => c.carrera_id === est.carrera_id)
 
         if (conceptosEstudiante.length === 0) return
@@ -305,11 +287,15 @@ export const ReportesEjecutivos: React.FC = () => {
         let deudaEstudiante = 0
         let conceptosPagados = 0
 
+        // CALCULAR por cada concepto
         conceptosEstudiante.forEach(concepto => {
           recaudableEstudiante += concepto.monto
-          const montoPagado = pagosUnificados.get(`${est.id}-${concepto.id}`) || 0
+          
+          // Buscar pago para este estudiante-concepto
+          const montoPagado = pagosMap.get(`${est.id}-${concepto.id}`) || 0
           recaudoEstudiante += montoPagado
 
+          // Si pagó >= monto, está pagado
           if (montoPagado >= concepto.monto) {
             conceptosPagados++
           } else {
@@ -317,12 +303,12 @@ export const ReportesEjecutivos: React.FC = () => {
           }
         })
 
-        // Actualizar totales institución
+        // ACTUALIZAR TOTALES INSTITUCIÓN
         recaudoTotalInst += recaudoEstudiante
         recaudableTotalInst += recaudableEstudiante
         deudaTotalInst += deudaEstudiante
 
-        // Determinar estado
+        // DETERMINAR ESTADO
         const alDia = conceptosPagados === conceptosEstudiante.length
         if (alDia) {
           estudiantesAlDiaCount++
@@ -338,7 +324,7 @@ export const ReportesEjecutivos: React.FC = () => {
           }
         }
 
-        // Actualizar carrera
+        // ACTUALIZAR CARRERA
         const carrData = dataCarreras.get(est.carrera_id)!
         carrData.recaudable += recaudableEstudiante
         carrData.recaudado += recaudoEstudiante
@@ -352,7 +338,9 @@ export const ReportesEjecutivos: React.FC = () => {
 
       topMorosos.sort((a, b) => b.deuda - a.deuda)
 
-      // 8. OBTENER GASTOS
+      console.log(`[PANEL] Al día: ${estudiantesAlDiaCount}, En mora: ${estudiantesMoraCount}`)
+
+      // ===== 6. OBTENER GASTOS =====
       const { data: gastosData } = await supabase
         .from('gastos')
         .select('monto')
@@ -360,27 +348,29 @@ export const ReportesEjecutivos: React.FC = () => {
 
       const gastosAnual = (gastosData || []).reduce((sum, g) => sum + (g.monto || 0), 0)
 
-      // 9. CONSTRUIR DATOS POR CARRERA
-      const porCarrera: DatosCarrera[] = Array.from(dataCarreras.entries()).map(([carreraId, data]) => {
-        const carreraNombre = carrerasMap.get(carreraId) || `Carrera ${carreraId}`
-        const eficiencia = data.recaudable > 0 ? (data.recaudado / data.recaudable) * 100 : 0
-        const moraCarrera = data.estudiantes > 0 ? (data.estudiantesEnMora / data.estudiantes) * 100 : 0
+      // ===== 7. CONSTRUIR DATOS POR CARRERA =====
+      const porCarrera: DatosCarrera[] = Array.from(dataCarreras.entries())
+        .map(([carreraId, data]) => {
+          const carreraNombre = carrerasMap.get(carreraId) || `Carrera ${carreraId}`
+          const eficiencia = data.recaudable > 0 ? (data.recaudado / data.recaudable) * 100 : 0
+          const moraCarrera = data.estudiantes > 0 ? (data.estudiantesEnMora / data.estudiantes) * 100 : 0
 
-        return {
-          carreraId,
-          carrera: carreraNombre,
-          estudiantes: data.estudiantes,
-          estudiantesAlDia: data.estudiantesAlDia,
-          estudiantesEnMora: data.estudiantesEnMora,
-          recaudable: data.recaudable,
-          recaudado: data.recaudado,
-          deuda: data.deuda,
-          eficiencia: parseFloat(eficiencia.toFixed(1)),
-          moraCarrera: parseFloat(moraCarrera.toFixed(1)),
-        }
-      })
+          return {
+            carreraId,
+            carrera: carreraNombre,
+            estudiantes: data.estudiantes,
+            estudiantesAlDia: data.estudiantesAlDia,
+            estudiantesEnMora: data.estudiantesEnMora,
+            recaudable: data.recaudable,
+            recaudado: data.recaudado,
+            deuda: data.deuda,
+            eficiencia: parseFloat(eficiencia.toFixed(1)),
+            moraCarrera: parseFloat(moraCarrera.toFixed(1)),
+          }
+        })
+        .sort((a, b) => b.estudiantes - a.estudiantes) // Ordenar por cantidad de estudiantes
 
-      // 10. CALCULAR MÉTRICAS FINALES
+      // ===== 8. CALCULAR MÉTRICAS FINALES =====
       const eficienciaInst = recaudableTotalInst > 0 ? (recaudoTotalInst / recaudableTotalInst) * 100 : 0
       const moraInst = totalEstudiantes > 0 ? (estudiantesMoraCount / totalEstudiantes) * 100 : 0
       const netoAnual = recaudoTotalInst - gastosAnual
@@ -400,7 +390,7 @@ export const ReportesEjecutivos: React.FC = () => {
         topMorosos: topMorosos.slice(0, 10),
       }
 
-      console.log(`[PANEL] Institución ${institucionId}:`, resultado)
+      console.log(`[PANEL] Institución ${institucionId} finalizada:`, resultado)
       return resultado
     } catch (err) {
       console.error(`[PANEL] Error institución ${institucionId}:`, err)
@@ -593,30 +583,34 @@ export const ReportesEjecutivos: React.FC = () => {
           {/* CARRERAS */}
           <div className="space-y-3">
             <h4 className="text-sm font-bold text-white">📚 Detalle por Carreras</h4>
-            {isipp.porCarrera.map((carr, idx) => (
-              <div key={idx} className="bg-slate-800/60 border border-slate-700/50 rounded-lg overflow-hidden">
-                <button
-                  onClick={() => setExpandidosISIPP({ ...expandidosISIPP, [idx]: !expandidosISIPP[idx] })}
-                  className="w-full flex items-center justify-between p-3 hover:bg-slate-700/50 transition-all"
-                >
-                  <div className="flex items-center gap-2 flex-1">
-                    <span className="font-bold text-slate-200">{carr.carrera}</span>
-                    <span className="text-xs text-slate-400">({carr.estudiantes} est.) | {carr.estudiantesAlDia} ✅ | {carr.estudiantesEnMora} ⚠️</span>
-                  </div>
-                  {expandidosISIPP[idx] ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
-                </button>
-                {expandidosISIPP[idx] && (
-                  <div className="p-3 border-t border-slate-700/50 bg-slate-900/30 grid grid-cols-6 gap-2 text-xs">
-                    <div><p className="text-slate-400">Recaudable</p><p className="text-orange-300 font-bold">{formatoMoneda(carr.recaudable)}</p></div>
-                    <div><p className="text-slate-400">Recaudado</p><p className="text-green-300 font-bold">{formatoMoneda(carr.recaudado)}</p></div>
-                    <div><p className="text-slate-400">Deuda</p><p className="text-red-300 font-bold">{formatoMoneda(carr.deuda)}</p></div>
-                    <div><p className="text-slate-400">Al Día</p><p className="text-blue-300 font-bold">{carr.estudiantesAlDia}</p></div>
-                    <div><p className="text-slate-400">En Mora</p><p className="text-red-300 font-bold">{carr.estudiantesEnMora}</p></div>
-                    <div><p className="text-slate-400">Eficiencia</p><p className="text-cyan-300 font-bold">{carr.eficiencia.toFixed(1)}%</p></div>
-                  </div>
-                )}
-              </div>
-            ))}
+            {isipp.porCarrera.length > 0 ? (
+              isipp.porCarrera.map((carr, idx) => (
+                <div key={idx} className="bg-slate-800/60 border border-slate-700/50 rounded-lg overflow-hidden">
+                  <button
+                    onClick={() => setExpandidosISIPP({ ...expandidosISIPP, [idx]: !expandidosISIPP[idx] })}
+                    className="w-full flex items-center justify-between p-3 hover:bg-slate-700/50 transition-all"
+                  >
+                    <div className="flex items-center gap-2 flex-1">
+                      <span className="font-bold text-slate-200">{carr.carrera}</span>
+                      <span className="text-xs text-slate-400">({carr.estudiantes} est.) | {carr.estudiantesAlDia} ✅ | {carr.estudiantesEnMora} ⚠️</span>
+                    </div>
+                    {expandidosISIPP[idx] ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+                  </button>
+                  {expandidosISIPP[idx] && (
+                    <div className="p-3 border-t border-slate-700/50 bg-slate-900/30 grid grid-cols-6 gap-2 text-xs">
+                      <div><p className="text-slate-400">Recaudable</p><p className="text-orange-300 font-bold">{formatoMoneda(carr.recaudable)}</p></div>
+                      <div><p className="text-slate-400">Recaudado</p><p className="text-green-300 font-bold">{formatoMoneda(carr.recaudado)}</p></div>
+                      <div><p className="text-slate-400">Deuda</p><p className="text-red-300 font-bold">{formatoMoneda(carr.deuda)}</p></div>
+                      <div><p className="text-slate-400">Al Día</p><p className="text-blue-300 font-bold">{carr.estudiantesAlDia}</p></div>
+                      <div><p className="text-slate-400">En Mora</p><p className="text-red-300 font-bold">{carr.estudiantesEnMora}</p></div>
+                      <div><p className="text-slate-400">Eficiencia</p><p className="text-cyan-300 font-bold">{carr.eficiencia.toFixed(1)}%</p></div>
+                    </div>
+                  )}
+                </div>
+              ))
+            ) : (
+              <p className="text-slate-400 text-xs">Sin carreras con conceptos vencidos</p>
+            )}
           </div>
 
           {/* TOP MOROSOS */}
@@ -654,30 +648,34 @@ export const ReportesEjecutivos: React.FC = () => {
           {/* CARRERAS */}
           <div className="space-y-3">
             <h4 className="text-sm font-bold text-white">📚 Detalle por Carreras</h4>
-            {milagros.porCarrera.map((carr, idx) => (
-              <div key={idx} className="bg-slate-800/60 border border-slate-700/50 rounded-lg overflow-hidden">
-                <button
-                  onClick={() => setExpandidosMilagros({ ...expandidosMilagros, [idx]: !expandidosMilagros[idx] })}
-                  className="w-full flex items-center justify-between p-3 hover:bg-slate-700/50 transition-all"
-                >
-                  <div className="flex items-center gap-2 flex-1">
-                    <span className="font-bold text-slate-200">{carr.carrera}</span>
-                    <span className="text-xs text-slate-400">({carr.estudiantes} est.) | {carr.estudiantesAlDia} ✅ | {carr.estudiantesEnMora} ⚠️</span>
-                  </div>
-                  {expandidosMilagros[idx] ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
-                </button>
-                {expandidosMilagros[idx] && (
-                  <div className="p-3 border-t border-slate-700/50 bg-slate-900/30 grid grid-cols-6 gap-2 text-xs">
-                    <div><p className="text-slate-400">Recaudable</p><p className="text-orange-300 font-bold">{formatoMoneda(carr.recaudable)}</p></div>
-                    <div><p className="text-slate-400">Recaudado</p><p className="text-green-300 font-bold">{formatoMoneda(carr.recaudado)}</p></div>
-                    <div><p className="text-slate-400">Deuda</p><p className="text-red-300 font-bold">{formatoMoneda(carr.deuda)}</p></div>
-                    <div><p className="text-slate-400">Al Día</p><p className="text-blue-300 font-bold">{carr.estudiantesAlDia}</p></div>
-                    <div><p className="text-slate-400">En Mora</p><p className="text-red-300 font-bold">{carr.estudiantesEnMora}</p></div>
-                    <div><p className="text-slate-400">Eficiencia</p><p className="text-cyan-300 font-bold">{carr.eficiencia.toFixed(1)}%</p></div>
-                  </div>
-                )}
-              </div>
-            ))}
+            {milagros.porCarrera.length > 0 ? (
+              milagros.porCarrera.map((carr, idx) => (
+                <div key={idx} className="bg-slate-800/60 border border-slate-700/50 rounded-lg overflow-hidden">
+                  <button
+                    onClick={() => setExpandidosMilagros({ ...expandidosMilagros, [idx]: !expandidosMilagros[idx] })}
+                    className="w-full flex items-center justify-between p-3 hover:bg-slate-700/50 transition-all"
+                  >
+                    <div className="flex items-center gap-2 flex-1">
+                      <span className="font-bold text-slate-200">{carr.carrera}</span>
+                      <span className="text-xs text-slate-400">({carr.estudiantes} est.) | {carr.estudiantesAlDia} ✅ | {carr.estudiantesEnMora} ⚠️</span>
+                    </div>
+                    {expandidosMilagros[idx] ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+                  </button>
+                  {expandidosMilagros[idx] && (
+                    <div className="p-3 border-t border-slate-700/50 bg-slate-900/30 grid grid-cols-6 gap-2 text-xs">
+                      <div><p className="text-slate-400">Recaudable</p><p className="text-orange-300 font-bold">{formatoMoneda(carr.recaudable)}</p></div>
+                      <div><p className="text-slate-400">Recaudado</p><p className="text-green-300 font-bold">{formatoMoneda(carr.recaudado)}</p></div>
+                      <div><p className="text-slate-400">Deuda</p><p className="text-red-300 font-bold">{formatoMoneda(carr.deuda)}</p></div>
+                      <div><p className="text-slate-400">Al Día</p><p className="text-blue-300 font-bold">{carr.estudiantesAlDia}</p></div>
+                      <div><p className="text-slate-400">En Mora</p><p className="text-red-300 font-bold">{carr.estudiantesEnMora}</p></div>
+                      <div><p className="text-slate-400">Eficiencia</p><p className="text-cyan-300 font-bold">{carr.eficiencia.toFixed(1)}%</p></div>
+                    </div>
+                  )}
+                </div>
+              ))
+            ) : (
+              <p className="text-slate-400 text-xs">Sin carreras con conceptos vencidos</p>
+            )}
           </div>
 
           {/* TOP MOROSOS */}
