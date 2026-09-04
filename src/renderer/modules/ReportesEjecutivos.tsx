@@ -191,7 +191,7 @@ export const ReportesEjecutivos: React.FC = () => {
       // 2. OBTENER TODOS LOS CONCEPTOS (sin filtrar, filtramos después)
       const { data: todosConceptos, error: errCon } = await supabase
         .from('conceptos_pago')
-        .select('id, tipo, monto, mes, año, carrera_id, nombre')
+        .select('id, tipo, monto, mes, año, carrera_id')
         .eq('institucion_id', institucionId)
         .eq('activo', true)
 
@@ -349,7 +349,9 @@ export const ReportesEjecutivos: React.FC = () => {
 
       // 9. CONSTRUIR DATOS POR CARRERA
       const porCarrera: DatosCarrera[] = Array.from(dataCarreras.entries()).map(([carreraId, data]) => {
-        const carreraNombre = conceptosArr.find(c => c.carrera_id === carreraId)?.nombre || `Carrera ${carreraId}`
+        // Buscar nombre de carrera desde la tabla carreras, NO de conceptos
+        const carreraInfo = estudiantesActivos.find(e => e.carrera_id === carreraId)?.carreras as any
+        const carreraNombre = carreraInfo?.nombre || `Carrera ${carreraId}`
         const eficiencia = data.recaudable > 0 ? (data.recaudado / data.recaudable) * 100 : 0
         const moraCarrera = data.estudiantes > 0 ? (data.estudiantesEnMora / data.estudiantes) * 100 : 0
 
