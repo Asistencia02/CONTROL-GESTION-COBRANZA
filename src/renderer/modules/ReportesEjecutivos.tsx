@@ -183,33 +183,9 @@ export const ReportesEjecutivos: React.FC = () => {
 
       console.log(`[EXEC] ${conceptosFiltrados.length} conceptos filtrados`)
 
-      // 3. OBTENER PAGOS INDIVIDUALES CON PAGINACIÓN
+      // 3. INICIALIZAR ARRAY DE PAGOS (SOLO DE pagos_multiples_detalle)
       let todosPagos: any[] = []
-      let pagina = 0
-      let tieneRangoMas = true
-
-      while (tieneRangoMas) {
-        const desde = pagina * 1000
-        const hasta = desde + 999
-        
-        const { data: pagosBloques, error: errorPagos } = await supabase
-          .from('pagos')
-          .select('estudiante_id, concepto_id, monto_pagado, estado')
-          .eq('institucion_id', institucionId)
-          .neq('estado', 'ANULADO')
-          .range(desde, hasta)
-
-        if (errorPagos) throw errorPagos
-        
-        if (!pagosBloques || pagosBloques.length === 0) {
-          tieneRangoMas = false
-        } else {
-          todosPagos = [...todosPagos, ...pagosBloques]
-          pagina++
-        }
-      }
-
-      console.log(`[EXEC] Pagos individuales: ${todosPagos.length}`)
+      console.log(`[EXEC] (Leyendo solo de pagos_multiples_detalle)`)
 
       // 4. OBTENER PAGOS MÚLTIPLES
       const { data: pagosMultiplesData } = await supabase
@@ -290,12 +266,15 @@ export const ReportesEjecutivos: React.FC = () => {
           const montoPago = pagosMap.get(`${est.id}-${concepto.id}`) || 0
           const montoOriginal = concepto.monto
 
-          // ✅ SOLO SUMAR CONCEPTOS COMPLETAMENTE PAGADOS
-          if (montoPago >= montoOriginal) {
-            recaudadoEst += montoOriginal
-          } else {
-            // Concepto NO pagado completamente → deuda
-            adeudadoTotal += montoOriginal - montoPago
+          // Sumar LO QUE PAGÓ (puede ser parcial o completo)
+          if (montoPago > 0) {
+            recaudadoEst += Math.min(montoPago, montoOriginal)
+          }
+          
+          // Calcular deuda = lo que falta pagar
+          const deudaConcepto = Math.max(0, montoOriginal - montoPago)
+          if (deudaConcepto > 0) {
+            adeudadoTotal += deudaConcepto
           }
         })
 
@@ -306,28 +285,24 @@ export const ReportesEjecutivos: React.FC = () => {
         totalRecaudable += conceptosDelEstudiante.reduce((sum, c) => sum + c.monto, 0)
         totalRecaudado += recaudadoEst
 
-        if (esDeudor) {
-          estudiantesEnMora++
-          morosos.push({
-            dni: est.dni || '',
-            nombre: `${est.nombre || ''} ${est.apellido || ''}`,
-            carrera: (est as any).carreras?.nombre || 'Sin carrera',
-            deuda: adeudadoTotal,
-          })
-
-          const carr = carreras.get(est.carrera_id)
-          if (carr) {
+        // Actualizar carrera
+        const carr = carreras.get(est.carrera_id)
+        if (carr) {
+          carr.recaudable += conceptosDelEstudiante.reduce((sum, c) => sum + c.monto, 0)
+          carr.recaudado += recaudadoEst
+          
+          if (esDeudor) {
             carr.enMora++
-            carr.recaudable += conceptosDelEstudiante.reduce((sum, c) => sum + c.monto, 0)
-            carr.recaudado += recaudadoEst
             carr.deuda += adeudadoTotal
-          }
-        } else {
-          const carr = carreras.get(est.carrera_id)
-          if (carr) {
+            estudiantesEnMora++
+            morosos.push({
+              dni: est.dni || '',
+              nombre: `${est.nombre || ''} ${est.apellido || ''}`,
+              carrera: (est as any).carreras?.nombre || 'Sin carrera',
+              deuda: adeudadoTotal,
+            })
+          } else {
             carr.alDia++
-            carr.recaudable += conceptosDelEstudiante.reduce((sum, c) => sum + c.monto, 0)
-            carr.recaudado += recaudadoEst
           }
         }
       })
