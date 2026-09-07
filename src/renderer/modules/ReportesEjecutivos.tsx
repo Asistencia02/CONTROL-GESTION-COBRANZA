@@ -3,7 +3,6 @@ import { supabase } from '@renderer/lib/supabase'
 import { formatoMoneda } from '@renderer/lib/helpers'
 import { BarChart3, RefreshCw, Users, DollarSign, AlertCircle, TrendingUp, ChevronDown, ChevronUp } from 'lucide-react'
 
-// ========== TIPOS ==========
 interface KPIData {
   estudiantes: number
   estudiantesAlDia: number
@@ -33,7 +32,6 @@ interface MorosoData {
   deuda: number
 }
 
-// ========== KPI CARD COMPONENT ==========
 const KPICard: React.FC<{
   label: string
   value: string | number
@@ -71,14 +69,12 @@ const KPICard: React.FC<{
   )
 }
 
-// ========== MAIN COMPONENT ==========
 export const ReportesEjecutivos: React.FC = () => {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [tabActiva, setTabActiva] = useState('global')
   const [expandedCarreras, setExpandedCarreras] = useState<Record<string, boolean>>({})
 
-  // DATA
   const [global, setGlobal] = useState<KPIData>({
     estudiantes: 0,
     estudiantesAlDia: 0,
@@ -110,12 +106,10 @@ export const ReportesEjecutivos: React.FC = () => {
     morosos: [],
   })
 
-  // ========== PROCESAR INSTITUCIÓN ==========
   const procesarInstitucion = async (institucionId: number) => {
     try {
       console.log(`[EXEC] ========== Procesando institución ${institucionId} ==========`)
 
-      // 1. OBTENER ESTUDIANTES
       const { data: estudiantes, error: errEst } = await supabase
         .from('estudiantes')
         .select('id, dni, nombre, apellido, carrera_id, estado, carreras(nombre)')
@@ -147,31 +141,20 @@ export const ReportesEjecutivos: React.FC = () => {
         }
       }
 
-      // 2. OBTENER DATOS DE PAGOS REALES DESDE pagos_multiples_detalle
+      // OBTENER PAGOS REALES DIRECTAMENTE
       const { data: pagosRealData, error: errPagosReal } = await supabase
         .from('pagos_multiples_detalle')
-        .select(`
-          id,
-          pago_multiple_id,
-          concepto_id,
-          monto_pagado,
-          conceptos_pago(
-            id,
-            carrera_id,
-            tipo,
-            mes,
-            institucion_id
-          )
-        `)
+        .select('monto_pagado, conceptos_pago(carrera_id, institucion_id)')
 
       if (errPagosReal) throw errPagosReal
 
-      // Filtrar solo datos de esta institución
-      const pagosFiltered = pagosRealData?.filter(p => p.conceptos_pago?.institucion_id === institucionId) || []
+      const pagosFiltered = (pagosRealData || []).filter(p => {
+        return p.conceptos_pago && (p.conceptos_pago as any).institucion_id === institucionId
+      })
 
-      console.log(`[EXEC] ${pagosFiltered.length} detalles de pago cargados para institución ${institucionId}`)
+      console.log(`[EXEC] ${pagosFiltered.length} detalles de pago para institución ${institucionId}`)
 
-      // 3. INICIALIZAR CARRERAS
+      // INICIALIZAR CARRERAS
       const carreras = new Map<number, CarreraData>()
       estudiantesActivos.forEach(est => {
         if (!carreras.has(est.carrera_id)) {
@@ -189,31 +172,37 @@ export const ReportesEjecutivos: React.FC = () => {
         carreras.get(est.carrera_id)!.estudiantes++
       })
 
-      // 4. PROCESAR PAGOS REALES
+      // PROCESAR PAGOS
       let totalRecaudado = 0
-      const estudiantesConPago = new Set<number>()
-
+      
       pagosFiltered.forEach((detalle: any) => {
         if (detalle.conceptos_pago) {
-          const carreraId = detalle.conceptos_pago.carrera_id
+          const carreraId = (detalle.conceptos_pago as any).carrera_id
+          const monto = detalle.monto_pagado || 0
+          
+          totalRecaudado += monto
+          
           const carr = carreras.get(carreraId)
           if (carr) {
-            totalRecaudado += detalle.monto_pagado
-            carr.recaudado += detalle.monto_pagado
+            carr.recaudado += monto
           }
         }
       })
 
-      // 5. OBTENER ESTUDIANTES CON PAGO DESDE pagos_multiples
+      console.log(`[EXEC] Total recaudado: $${totalRecaudado}`)
+
+      // OBTENER ESTUDIANTES CON PAGO
       const { data: pagosMultiplesData } = await supabase
         .from('pagos_multiples')
-        .select('estudiante_id, estudiantes(carrera_id)')
+        .select('estudiante_id')
         .eq('institucion_id', institucionId)
         .neq('estado', 'ANULADO')
 
+      const estudiantesConPago = new Set<number>()
       let estudiantesAlDia = 0
-      if (pagosMultiplesData) {
-        pagosMultiplesData.forEach(pm => {
+      
+      if (pagosMultiplesData && pagosMultiplesData.length > 0) {
+        pagosMultiplesData.forEach((pm: any) => {
           estudiantesConPago.add(pm.estudiante_id)
         })
         estudiantesAlDia = estudiantesConPago.size
@@ -221,20 +210,16 @@ export const ReportesEjecutivos: React.FC = () => {
 
       const estudiantesEnMora = Math.max(0, totalEstudiantes - estudiantesAlDia)
 
-      // 6. ACTUALIZAR CARRERAS CON ESTUDIANTES AL DÍA/EN MORA
+      // ACTUALIZAR CARRERAS
       carreras.forEach(carr => {
         const estudiantesCarrera = estudiantesActivos.filter(e => e.carrera_id === carr.id)
         const conPago = estudiantesCarrera.filter(e => estudiantesConPago.has(e.id))
         
         carr.alDia = conPago.length
         carr.enMora = estudiantesCarrera.length - conPago.length
-        carr.recaudable = carr.recaudado // No mostramos recaudable, solo lo pagado
+        carr.recaudable = carr.recaudado
         carr.deuda = 0
       })
-
-      // CALCULAR MÉTRICAS
-      const eficiencia = totalRecaudado > 0 ? 100 : 0 // Si hay recaudación, eficiencia es 100%
-      const moraPercentage = totalEstudiantes > 0 ? (estudiantesEnMora / totalEstudiantes) * 100 : 0
 
       const resultado = {
         kpi: {
@@ -245,18 +230,13 @@ export const ReportesEjecutivos: React.FC = () => {
           recaudado: totalRecaudado,
           deuda: 0,
           eficiencia: 100,
-          moraPercentage: parseFloat(moraPercentage.toFixed(1)),
+          moraPercentage: totalEstudiantes > 0 ? (estudiantesEnMora / totalEstudiantes) * 100 : 0,
         },
         carreras: Array.from(carreras.values()).sort((a, b) => b.estudiantes - a.estudiantes),
         morosos: [],
       }
 
-      console.log(`[EXEC] ✅ Institución ${institucionId}:`, {
-        estudiantes: totalEstudiantes,
-        alDia: estudiantesAlDia,
-        enMora: estudiantesEnMora,
-        recaudado: formatoMoneda(totalRecaudado),
-      })
+      console.log(`[EXEC] ✅ Institución ${institucionId}: $${totalRecaudado} recaudado`)
 
       return resultado
     } catch (err) {
@@ -265,13 +245,10 @@ export const ReportesEjecutivos: React.FC = () => {
     }
   }
 
-  // ========== CARGAR DATOS ==========
   const cargarDatos = async () => {
     try {
       setLoading(true)
       setError(null)
-
-      console.log('[EXEC] ==================== INICIANDO CARGA ====================')
 
       const [isippRes, milagrosRes] = await Promise.all([
         procesarInstitucion(1),
@@ -281,7 +258,6 @@ export const ReportesEjecutivos: React.FC = () => {
       setISIPP(isippRes)
       setMilagros(milagrosRes)
 
-      // CONSOLIDAR GLOBAL
       const globalData = {
         estudiantes: isippRes.kpi.estudiantes + milagrosRes.kpi.estudiantes,
         estudiantesAlDia: isippRes.kpi.estudiantesAlDia + milagrosRes.kpi.estudiantesAlDia,
@@ -299,13 +275,6 @@ export const ReportesEjecutivos: React.FC = () => {
       }
 
       setGlobal(globalData)
-
-      console.log('[EXEC] ✅ CARGA COMPLETADA:', {
-        total: globalData.estudiantes,
-        alDia: globalData.estudiantesAlDia,
-        enMora: globalData.estudiantesEnMora,
-        recaudado: formatoMoneda(globalData.recaudado),
-      })
     } catch (err) {
       console.error('[EXEC] ERROR FATAL:', err)
       setError(err instanceof Error ? err.message : 'Error desconocido')
@@ -323,7 +292,7 @@ export const ReportesEjecutivos: React.FC = () => {
       <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex items-center justify-center">
         <div className="text-center">
           <BarChart3 size={48} className="text-cyan-400 animate-spin mx-auto mb-3" />
-          <p className="text-slate-400 text-sm font-bold">⏳ Cargando reportes...</p>
+          <p className="text-slate-400 text-sm font-bold">Cargando reportes...</p>
         </div>
       </div>
     )
@@ -333,7 +302,7 @@ export const ReportesEjecutivos: React.FC = () => {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex items-center justify-center p-6">
         <div className="bg-red-500/20 border border-red-500/50 rounded-lg p-4 max-w-sm">
-          <p className="text-red-400 font-bold text-sm mb-2">❌ Error:</p>
+          <p className="text-red-400 font-bold text-sm mb-2">Error:</p>
           <p className="text-red-300 text-xs mb-3">{error}</p>
           <button
             onClick={cargarDatos}
@@ -348,7 +317,6 @@ export const ReportesEjecutivos: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 p-4 md:p-6">
-      {/* HEADER */}
       <div className="flex justify-between items-start mb-6">
         <div>
           <h1 className="text-4xl font-black text-transparent bg-gradient-to-r from-cyan-400 to-blue-400 bg-clip-text mb-1">
@@ -365,7 +333,6 @@ export const ReportesEjecutivos: React.FC = () => {
         </button>
       </div>
 
-      {/* TABS */}
       <div className="flex gap-2 mb-6 border-b border-slate-700/50 pb-2">
         {[
           { id: 'global', label: '🌍 Global' },
@@ -386,64 +353,38 @@ export const ReportesEjecutivos: React.FC = () => {
         ))}
       </div>
 
-      {/* GLOBAL TAB */}
       {tabActiva === 'global' && (
         <div className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-            <KPICard
-              label="👥 ESTUDIANTES"
-              value={global.estudiantes}
-              icon={<Users size={24} />}
-              color="blue"
-              subtext={`${global.estudiantesAlDia} al día`}
-            />
-            <KPICard
-              label="✅ AL DÍA"
-              value={global.estudiantesAlDia}
-              icon={<TrendingUp size={24} />}
-              color="green"
-            />
-            <KPICard
-              label="⚠️ EN MORA"
-              value={global.estudiantesEnMora}
-              icon={<AlertCircle size={24} />}
-              color="red"
-            />
-            <KPICard
-              label="💰 RECAUDADO"
-              value={formatoMoneda(global.recaudado)}
-              icon={<DollarSign size={24} />}
-              color="green"
-            />
+            <KPICard label="👥 ESTUDIANTES" value={global.estudiantes} icon={<Users size={24} />} color="blue" subtext={`${global.estudiantesAlDia} al día`} />
+            <KPICard label="✅ AL DÍA" value={global.estudiantesAlDia} icon={<TrendingUp size={24} />} color="green" />
+            <KPICard label="⚠️ EN MORA" value={global.estudiantesEnMora} icon={<AlertCircle size={24} />} color="red" />
+            <KPICard label="💰 RECAUDADO" value={formatoMoneda(global.recaudado)} icon={<DollarSign size={24} />} color="green" />
           </div>
 
-          {/* COMPARATIVA */}
-          <div className="bg-slate-800/50 border border-slate-700/50 rounded-lg p-4 overflow-x-auto">
-            <h3 className="text-sm font-bold text-white mb-3">📋 Comparativa por Institución</h3>
+          <div className="bg-slate-800/50 border border-slate-700/50 rounded-lg p-4">
+            <h3 className="text-sm font-bold text-white mb-3">Comparativa por Institución</h3>
             <table className="w-full text-xs">
               <thead>
                 <tr className="border-b border-slate-700/50">
                   <th className="px-3 py-2 text-left text-slate-300">Institución</th>
-                  <th className="px-3 py-2 text-right text-blue-400">Estudiantes</th>
-                  <th className="px-3 py-2 text-right text-green-400">Al Día</th>
-                  <th className="px-3 py-2 text-right text-red-400">En Mora</th>
-                  <th className="px-3 py-2 text-right text-green-400">Recaudado</th>
+                  <th className="px-3 py-2 text-right">Estudiantes</th>
+                  <th className="px-3 py-2 text-right">Al Día</th>
+                  <th className="px-3 py-2 text-right">Recaudado</th>
                 </tr>
               </thead>
               <tbody>
-                <tr className="border-b border-slate-700/30 hover:bg-slate-900/50">
+                <tr className="border-b border-slate-700/30">
                   <td className="px-3 py-2 font-bold text-cyan-400">ISIPP</td>
-                  <td className="px-3 py-2 text-right text-blue-300">{isipp.kpi.estudiantes}</td>
-                  <td className="px-3 py-2 text-right text-green-300">{isipp.kpi.estudiantesAlDia}</td>
-                  <td className="px-3 py-2 text-right text-red-300">{isipp.kpi.estudiantesEnMora}</td>
-                  <td className="px-3 py-2 text-right text-green-300 font-bold">{formatoMoneda(isipp.kpi.recaudado)}</td>
+                  <td className="px-3 py-2 text-right">{isipp.kpi.estudiantes}</td>
+                  <td className="px-3 py-2 text-right">{isipp.kpi.estudiantesAlDia}</td>
+                  <td className="px-3 py-2 text-right font-bold text-green-300">{formatoMoneda(isipp.kpi.recaudado)}</td>
                 </tr>
-                <tr className="border-b border-slate-700/30 hover:bg-slate-900/50">
+                <tr>
                   <td className="px-3 py-2 font-bold text-orange-400">MILAGROS</td>
-                  <td className="px-3 py-2 text-right text-blue-300">{milagros.kpi.estudiantes}</td>
-                  <td className="px-3 py-2 text-right text-green-300">{milagros.kpi.estudiantesAlDia}</td>
-                  <td className="px-3 py-2 text-right text-red-300">{milagros.kpi.estudiantesEnMora}</td>
-                  <td className="px-3 py-2 text-right text-green-300 font-bold">{formatoMoneda(milagros.kpi.recaudado)}</td>
+                  <td className="px-3 py-2 text-right">{milagros.kpi.estudiantes}</td>
+                  <td className="px-3 py-2 text-right">{milagros.kpi.estudiantesAlDia}</td>
+                  <td className="px-3 py-2 text-right font-bold text-green-300">{formatoMoneda(milagros.kpi.recaudado)}</td>
                 </tr>
               </tbody>
             </table>
@@ -451,132 +392,44 @@ export const ReportesEjecutivos: React.FC = () => {
         </div>
       )}
 
-      {/* ISIPP TAB */}
       {tabActiva === 'isipp' && (
         <div className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-            <KPICard
-              label="👥 Estudiantes"
-              value={isipp.kpi.estudiantes}
-              icon={<Users size={20} />}
-              color="blue"
-            />
-            <KPICard
-              label="✅ Al Día"
-              value={isipp.kpi.estudiantesAlDia}
-              icon={<TrendingUp size={20} />}
-              color="green"
-            />
-            <KPICard
-              label="⚠️ En Mora"
-              value={isipp.kpi.estudiantesEnMora}
-              icon={<AlertCircle size={20} />}
-              color="red"
-            />
-            <KPICard
-              label="💰 Recaudado"
-              value={formatoMoneda(isipp.kpi.recaudado)}
-              icon={<DollarSign size={20} />}
-              color="green"
-            />
+            <KPICard label="👥 Estudiantes" value={isipp.kpi.estudiantes} icon={<Users size={20} />} color="blue" />
+            <KPICard label="✅ Al Día" value={isipp.kpi.estudiantesAlDia} icon={<TrendingUp size={20} />} color="green" />
+            <KPICard label="⚠️ En Mora" value={isipp.kpi.estudiantesEnMora} icon={<AlertCircle size={20} />} color="red" />
+            <KPICard label="💰 Recaudado" value={formatoMoneda(isipp.kpi.recaudado)} icon={<DollarSign size={20} />} color="green" />
           </div>
 
-          {/* CARRERAS */}
           <div className="space-y-2">
-            <h3 className="text-sm font-bold text-white">📚 Carreras</h3>
+            <h3 className="text-sm font-bold text-white">Carreras</h3>
             {isipp.carreras.map((carr, idx) => (
-              <div key={idx} className="bg-slate-800/50 border border-slate-700/50 rounded-lg">
-                <button
-                  onClick={() =>
-                    setExpandedCarreras({
-                      ...expandedCarreras,
-                      [`isipp-${idx}`]: !expandedCarreras[`isipp-${idx}`],
-                    })
-                  }
-                  className="w-full flex justify-between items-center p-3 hover:bg-slate-700/30 transition-all"
-                >
-                  <div>
-                    <p className="font-bold text-slate-200">{carr.nombre}</p>
-                    <p className="text-xs text-slate-400">
-                      {carr.estudiantes} est. | {carr.alDia} ✅ | {carr.enMora} ⚠️
-                    </p>
-                  </div>
-                  {expandedCarreras[`isipp-${idx}`] ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
-                </button>
-                {expandedCarreras[`isipp-${idx}`] && (
-                  <div className="p-3 border-t border-slate-700/50 bg-slate-900/30 grid grid-cols-2 gap-3 text-xs">
-                    <div>
-                      <p className="text-slate-400">Recaudado</p>
-                      <p className="text-green-300 font-bold">{formatoMoneda(carr.recaudado)}</p>
-                    </div>
-                  </div>
-                )}
+              <div key={idx} className="bg-slate-800/50 border border-slate-700/50 rounded-lg p-3">
+                <p className="font-bold text-slate-200">{carr.nombre}</p>
+                <p className="text-xs text-slate-400 mb-2">{carr.estudiantes} est. | {carr.alDia} ✅ | {carr.enMora} ⚠️</p>
+                <p className="text-green-300 font-bold text-sm">{formatoMoneda(carr.recaudado)}</p>
               </div>
             ))}
           </div>
         </div>
       )}
 
-      {/* MILAGROS TAB */}
       {tabActiva === 'milagros' && (
         <div className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-            <KPICard
-              label="👥 Estudiantes"
-              value={milagros.kpi.estudiantes}
-              icon={<Users size={20} />}
-              color="blue"
-            />
-            <KPICard
-              label="✅ Al Día"
-              value={milagros.kpi.estudiantesAlDia}
-              icon={<TrendingUp size={20} />}
-              color="green"
-            />
-            <KPICard
-              label="⚠️ En Mora"
-              value={milagros.kpi.estudiantesEnMora}
-              icon={<AlertCircle size={20} />}
-              color="red"
-            />
-            <KPICard
-              label="💰 Recaudado"
-              value={formatoMoneda(milagros.kpi.recaudado)}
-              icon={<DollarSign size={20} />}
-              color="green"
-            />
+            <KPICard label="👥 Estudiantes" value={milagros.kpi.estudiantes} icon={<Users size={20} />} color="blue" />
+            <KPICard label="✅ Al Día" value={milagros.kpi.estudiantesAlDia} icon={<TrendingUp size={20} />} color="green" />
+            <KPICard label="⚠️ En Mora" value={milagros.kpi.estudiantesEnMora} icon={<AlertCircle size={20} />} color="red" />
+            <KPICard label="💰 Recaudado" value={formatoMoneda(milagros.kpi.recaudado)} icon={<DollarSign size={20} />} color="green" />
           </div>
 
-          {/* CARRERAS */}
           <div className="space-y-2">
-            <h3 className="text-sm font-bold text-white">📚 Carreras</h3>
+            <h3 className="text-sm font-bold text-white">Carreras</h3>
             {milagros.carreras.map((carr, idx) => (
-              <div key={idx} className="bg-slate-800/50 border border-slate-700/50 rounded-lg">
-                <button
-                  onClick={() =>
-                    setExpandedCarreras({
-                      ...expandedCarreras,
-                      [`milagros-${idx}`]: !expandedCarreras[`milagros-${idx}`],
-                    })
-                  }
-                  className="w-full flex justify-between items-center p-3 hover:bg-slate-700/30 transition-all"
-                >
-                  <div>
-                    <p className="font-bold text-slate-200">{carr.nombre}</p>
-                    <p className="text-xs text-slate-400">
-                      {carr.estudiantes} est. | {carr.alDia} ✅ | {carr.enMora} ⚠️
-                    </p>
-                  </div>
-                  {expandedCarreras[`milagros-${idx}`] ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
-                </button>
-                {expandedCarreras[`milagros-${idx}`] && (
-                  <div className="p-3 border-t border-slate-700/50 bg-slate-900/30 grid grid-cols-2 gap-3 text-xs">
-                    <div>
-                      <p className="text-slate-400">Recaudado</p>
-                      <p className="text-green-300 font-bold">{formatoMoneda(carr.recaudado)}</p>
-                    </div>
-                  </div>
-                )}
+              <div key={idx} className="bg-slate-800/50 border border-slate-700/50 rounded-lg p-3">
+                <p className="font-bold text-slate-200">{carr.nombre}</p>
+                <p className="text-xs text-slate-400 mb-2">{carr.estudiantes} est. | {carr.alDia} ✅ | {carr.enMora} ⚠️</p>
+                <p className="text-green-300 font-bold text-sm">{formatoMoneda(carr.recaudado)}</p>
               </div>
             ))}
           </div>
