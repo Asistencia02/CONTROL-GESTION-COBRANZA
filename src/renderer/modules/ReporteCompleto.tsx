@@ -44,7 +44,17 @@ export const ReporteCompleto: React.FC = () => {
 
       console.log('[REPORTE] ========== INICIANDO CARGA ==========')
 
-      // Paso 1: Obtener todos los pagos multiples detalle
+      // Paso 1: Obtener TODAS las instituciones y carreras
+      const { data: instituciones } = await supabase.from('instituciones').select('id, nombre')
+      const { data: carreras } = await supabase.from('carreras').select('id, nombre')
+      const { data: configCarreras } = await supabase.from('configuracion_carreras').select('institucion_id, carrera_id')
+
+      const instMap = new Map(instituciones?.map(i => [i.id, i.nombre]) || [])
+      const carrMap = new Map(carreras?.map(c => [c.id, c.nombre]) || [])
+
+      console.log(`[REPORTE] ${instMap.size} instituciones, ${carrMap.size} carreras`)
+
+      // Paso 2: Obtener todos los pagos multiples detalle
       const { data: pagosDetalle, error: errPagos } = await supabase
         .from('pagos_multiples_detalle')
         .select('id, monto_pagado, concepto_id')
@@ -54,7 +64,7 @@ export const ReporteCompleto: React.FC = () => {
 
       console.log(`[REPORTE] ${pagosDetalle.length} registros de pago cargados`)
 
-      // Paso 2: Obtener conceptos (sin traer carreras directo)
+      // Paso 3: Obtener conceptos - TODOS, sin filtro
       const { data: conceptosData, error: errConc } = await supabase
         .from('conceptos_pago')
         .select('id, institucion_id, carrera_id, tipo, mes, monto')
@@ -62,57 +72,80 @@ export const ReporteCompleto: React.FC = () => {
       if (errConc) throw errConc
       if (!conceptosData) throw new Error('No se pudieron cargar conceptos')
 
-      console.log(`[REPORTE] ${conceptosData.length} conceptos cargados`)
+      console.log(`[REPORTE] ${conceptosData.length} conceptos cargados TOTALES`)
+      
+      // Debug: contar conceptos por institución-carrera
+      const conceptosPorInstCarrera = new Map<string, number>()
+      conceptosData.forEach((c: any) => {
+        const key = `inst${c.institucion_id}-carr${c.carrera_id}`
+        conceptosPorInstCarrera.set(key, (conceptosPorInstCarrera.get(key) || 0) + 1)
+      })
+      console.log('[REPORTE] Conceptos por inst-carrera:', Object.fromEntries(conceptosPorInstCarrera))
 
-      // Paso 3: Obtener instituciones y carreras
-      const { data: instituciones } = await supabase.from('instituciones').select('id, nombre')
-      const { data: carreras } = await supabase.from('carreras').select('id, nombre')
-
-      const instMap = new Map(instituciones?.map(i => [i.id, i.nombre]) || [])
-      const carrMap = new Map(carreras?.map(c => [c.id, c.nombre]) || [])
-
-      console.log(`[REPORTE] ${instMap.size} instituciones, ${carrMap.size} carreras`)
-
-      // Paso 4: Procesar: agrupar pagos por concepto
-      const conceptosMap = new Map<number, ConceptoPago>()
+      // Paso 4: Crear mapa de pagos por concepto
+      const pagosMap = new Map<number, { monto: number; cantidad: number }>()
 
       pagosDetalle.forEach((pago: any) => {
-        const concepto = conceptosData.find(c => c.id === pago.concepto_id)
-        if (!concepto) return
+        if (!pagosMap.has(pago.concepto_id)) {
+          pagosMap.set(pago.concepto_id, { monto: 0, cantidad: 0 })
+        }
+        const item = pagosMap.get(pago.concepto_id)!
+        item.monto += pago.monto_pagado
+        item.cantidad++
+      })
 
-        const conceptoId = concepto.id
-        const institucionNombre = instMap.get(concepto.institucion_id) || `Institución ${concepto.institucion_id}`
-        const carreraNombre = carrMap.get(concepto.carrera_id) || `Carrera ${concepto.carrera_id}`
+      // Paso 5: Procesar conceptos y crear array de reportes
+      const conceptosArray: ConceptoPago[] = conceptosData.map((concepto: any) => {
+        const pagos = pagosMap.get(concepto.id) || { monto: 0, cantidad: 0 }
+        return {
+          id: concepto.id,
+          institucion_id: concepto.institucion_id,
+          institucion_nombre: instMap.get(concepto.institucion_id) || `Institución ${concepto.institucion_id}`,
+          carrera_id: concepto.carrera_id,
+          carrera_nombre: carrMap.get(concepto.carrera_id) || `Carrera ${concepto.carrera_id}`,
+          tipo: concepto.tipo,
+          mes: concepto.mes,
+          monto: concepto.monto || 0,
+          monto_pagado: pagos.monto,
+          cantidad_pagos: pagos.cantidad,
+        }
+      })
 
-        if (!conceptosMap.has(conceptoId)) {
-          conceptosMap.set(conceptoId, {
-            id: conceptoId,
-            institucion_id: concepto.institucion_id,
-            institucion_nombre: institucionNombre,
-            carrera_id: concepto.carrera_id,
-            carrera_nombre: carreraNombre,
-            tipo: concepto.tipo,
-            mes: concepto.mes,
-            monto: concepto.monto || 0,
-            monto_pagado: 0,
-            cantidad_pagos: 0,
+      setConceptos(conceptosArray)
+      console.log(`[REPORTE] ${conceptosArray.length} conceptos procesados`)
+
+      // Paso 6: Crear resumen por institución y carrera - INCLUYENDO TODAS LAS CARRERAS
+      const institucionesMap = new Map<number, ResumenInstitucion>()
+
+      // Primero: crear entrada para cada institución-carrera
+      configCarreras?.forEach((config: any) => {
+        const instId = config.institucion_id
+        const carrId = config.carrera_id
+
+        if (!institucionesMap.has(instId)) {
+          institucionesMap.set(instId, {
+            institucion_id: instId,
+            institucion_nombre: instMap.get(instId) || `Institución ${instId}`,
+            monto_total: 0,
+            carreras: [],
           })
         }
 
-        const item = conceptosMap.get(conceptoId)!
-        item.monto_pagado += pago.monto_pagado
-        item.cantidad_pagos++
+        const inst = institucionesMap.get(instId)!
+        if (!inst.carreras.find(c => c.carrera_id === carrId)) {
+          inst.carreras.push({
+            carrera_id: carrId,
+            carrera_nombre: carrMap.get(carrId) || `Carrera ${carrId}`,
+            monto_total: 0,
+            cantidad_conceptos: 0,
+          })
+        }
       })
 
-      const conceptosArray = Array.from(conceptosMap.values())
-      setConceptos(conceptosArray)
-
-      console.log(`[REPORTE] ${conceptosArray.length} conceptos con pagos`)
-
-      // Paso 5: Crear resumen por institución y carrera
-      const institucionesMap = new Map<number, ResumenInstitucion>()
-
+      // Segundo: agregar pagos a las carreras
       conceptosArray.forEach(concepto => {
+        if (concepto.monto_pagado === 0) return // Solo procesar conceptos con pagos
+
         const instId = concepto.institucion_id
 
         if (!institucionesMap.has(instId)) {
@@ -127,7 +160,6 @@ export const ReporteCompleto: React.FC = () => {
         const inst = institucionesMap.get(instId)!
         inst.monto_total += concepto.monto_pagado
 
-        // Buscar o crear carrera en institución
         let carrera = inst.carreras.find(c => c.carrera_id === concepto.carrera_id)
         if (!carrera) {
           carrera = {
@@ -242,7 +274,11 @@ export const ReporteCompleto: React.FC = () => {
                   <div className="flex items-center justify-between">
                     <div>
                       <h3 className="font-bold text-slate-200">{carrera.carrera_nombre}</h3>
-                      <p className="text-xs text-slate-400 mt-1">{carrera.cantidad_conceptos} conceptos pagados</p>
+                      <p className="text-xs text-slate-400 mt-1">
+                        {carrera.cantidad_conceptos > 0
+                          ? `${carrera.cantidad_conceptos} conceptos pagados`
+                          : 'Sin pagos registrados'}
+                      </p>
                     </div>
                     <div className="text-right">
                       <p className="text-sm text-slate-400 mb-1">Recaudado</p>
@@ -274,6 +310,7 @@ export const ReporteCompleto: React.FC = () => {
             </thead>
             <tbody>
               {conceptos
+                .filter(c => c.monto_pagado > 0)
                 .sort((a, b) => b.monto_pagado - a.monto_pagado)
                 .map((concepto, idx) => (
                   <tr key={idx} className="border-b border-slate-700/30 hover:bg-slate-700/20">
@@ -292,7 +329,8 @@ export const ReporteCompleto: React.FC = () => {
       </div>
 
       <div className="mt-4 text-xs text-slate-500 text-center">
-        {conceptos.length} conceptos con pagos registrados | Último actualizado: {new Date().toLocaleString()}
+        {conceptos.filter(c => c.monto_pagado > 0).length} conceptos con pagos registrados | Último actualizado:{' '}
+        {new Date().toLocaleString()}
       </div>
     </div>
   )

@@ -1,0 +1,142 @@
+📋 FIX PARA FK VIOLATION - PAGOS_MULTIPLES_ESTUDIANTE_ID_FKEY
+
+================================================================================
+🔴 PROBLEMA:
+  ❌ RPC search_estudiantes_by_dni NO filtraba por institución
+  ❌ Retornaba IDs de estudiantes de otras instituciones
+  ❌ FK violation al insertar en pagos_multiples: (institucion_id, estudiante_id)
+
+================================================================================
+✅ SOLUCIÓN:
+
+PASO 1: ACTUALIZAR RPC EN SUPABASE SQL
+────────────────────────────────────────
+
+1. Ve a Supabase Dashboard → SQL Editor
+2. Ejecuta este SQL para REEMPLAZAR la función:
+
+---START SQL---
+
+CREATE OR REPLACE FUNCTION search_estudiantes_by_dni(
+  p_institucion_id BIGINT,
+  dni_list TEXT[]
+)
+RETURNS TABLE(id BIGINT, dni TEXT) AS $$
+BEGIN
+  RETURN QUERY
+  SELECT e.id, e.dni 
+  FROM estudiantes e
+  WHERE e.dni = ANY(dni_list)
+  AND e.institucion_id = p_institucion_id;  -- ✅ AGREGAR FILTRO DE INSTITUCIÓN
+END;
+$$ LANGUAGE plpgsql;
+
+---END SQL---
+
+================================================================================
+PASO 2: ACTUALIZAR SCRIPT DE GOOGLE APPS SCRIPT
+────────────────────────────────────────────────
+
+1. En Google Apps Script, busca la función: buscarEstudiantesById()
+
+2. REEMPLAZA la línea del payload:
+
+ANTES (INCORRECTO):
+  payload: JSON.stringify({ 
+    dni_list: chunk 
+  }),
+
+DESPUÉS (CORRECTO):
+  payload: JSON.stringify({ 
+    p_institucion_id: instId,  // ✅ AGREGAR ESTO
+    dni_list: chunk 
+  }),
+
+3. Verifica que al inicio de la función tengas:
+  const instId = parseInt(config.institucionId);
+
+CÓDIGO COMPLETO DE LA FUNCIÓN:
+
+---START JS---
+
+function buscarEstudiantesById(config, estudiantes) {
+  const dniAId = {};
+  const dnis = estudiantes.map(e => e.dni);
+  const chunkSize = 100;
+  const instId = parseInt(config.institucionId);  // ✅ AGREGAR ESTO
+  
+  for (let i = 0; i < dnis.length; i += chunkSize) {
+    const chunk = dnis.slice(i, i + chunkSize);
+    
+    try {
+      logConTiempo(`      → Fetch: POST /rpc/search_estudiantes_by_dni (chunk ${chunk.length}/${dnis.length})`);
+      STATS_GLOBAL.totalFetches++;
+      
+      const resp = UrlFetchApp.fetch(
+        `${config.supabaseUrl}/rest/v1/rpc/search_estudiantes_by_dni`,
+        {
+          method: "post",
+          headers: { "apikey": config.supabaseKey, "Content-Type": "application/json" },
+          payload: JSON.stringify({ 
+            p_institucion_id: instId,  // ✅ AGREGAR INSTITUCIÓN
+            dni_list: chunk 
+          }),
+          muteHttpExceptions: true,
+          timeout: 60
+        }
+      );
+      
+      logConTiempo(`      ← Response: ${resp.getResponseCode()}`);
+      
+      if (resp.getResponseCode() === 200) {
+        const datos = JSON.parse(resp.getContentText());
+        logConTiempo(`      ✅ Encontrados: ${datos.length}/${chunk.length}`);
+        for (let est of datos) {
+          dniAId[est.dni] = est.id;
+        }
+        for (let dni of chunk) {
+          if (!dniAId[dni]) {
+            logConTiempo(`      ⚠️ DNI NO ENCONTRADO EN BD: ${dni}`);
+          }
+        }
+      } else {
+        const error = resp.getContentText().substring(0, 100);
+        registrarError("SEARCH_ESTUDIANTES_BY_DNI", "CHUNK", "CHUNK", "CHUNK", `HTTP ${resp.getResponseCode()}: ${error}`);
+        logConTiempo(`      ❌ Error: ${error}`);
+      }
+      
+      sleepConConfig("afterSearchRPC");
+    } catch (e) {
+      registrarError("SEARCH_ESTUDIANTES_BY_DNI", "CHUNK", "CHUNK", "CHUNK", e.toString());
+      logConTiempo(`      ❌ Exception: ${e}`);
+    }
+  }
+  
+  return dniAId;
+}
+
+---END JS---
+
+================================================================================
+PASO 3: PROBAR
+──────────────
+
+1. Ve a Google Sheets
+2. Menú → 🔄 SINCRONIZACIÓN COBRANZA v3.1.1 → ▶️ DRY RUN
+3. Verifica que NO haya errores de FK
+4. Si todo OK → ▶️ SINCRONIZAR (DNI ÚNICO - RÁPIDO)
+
+================================================================================
+✅ RESULTADO ESPERADO:
+
+Antes (FALLA):
+  ❌ RPC_INSERTAR_PAGO | DNI: 10000678 | Error: insert or update on table "pagos_multiples" violates foreign key constraint
+
+Después (OK):
+  ✅ SINCRONIZACIÓN COMPLETADA
+  • Estudiantes cargados: 214
+  • Pagos creados: 123
+  • Conceptos agrupados: 450+
+  • Errores: 0
+
+================================================================================
