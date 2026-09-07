@@ -64,24 +64,30 @@ export const ReporteCompleto: React.FC = () => {
 
       console.log(`[REPORTE] ${pagosDetalle.length} registros de pago cargados`)
 
-      // Paso 3: Obtener TODOS los conceptos (sin RLS)
-      // Usar una query raw con Supabase que evite RLS
+      // Paso 3: Obtener TODOS los conceptos
       const { data: conceptosData, error: errConc } = await supabase
         .from('conceptos_pago')
-        .select('id, institucion_id, carrera_id, tipo, mes, monto', { count: 'exact' })
+        .select('id, institucion_id, carrera_id, tipo, mes, monto')
 
       if (errConc) throw errConc
       if (!conceptosData) throw new Error('No se pudieron cargar conceptos')
 
       console.log(`[REPORTE] ${conceptosData.length} conceptos cargados TOTALES`)
       
-      // Debug: contar conceptos por institución-carrera
-      const conceptosPorInstCarrera = new Map<string, number>()
+      // DEBUG DETALLADO: mostrar conceptos por institución-carrera
+      const conceptosPorInstCarrera = new Map<string, number[]>()
       conceptosData.forEach((c: any) => {
         const key = `inst${c.institucion_id}-carr${c.carrera_id}`
-        conceptosPorInstCarrera.set(key, (conceptosPorInstCarrera.get(key) || 0) + 1)
+        if (!conceptosPorInstCarrera.has(key)) {
+          conceptosPorInstCarrera.set(key, [])
+        }
+        conceptosPorInstCarrera.get(key)!.push(c.id)
       })
-      console.log('[REPORTE] ✅ Conceptos por inst-carrera:', Object.fromEntries(conceptosPorInstCarrera))
+      
+      console.log('[REPORTE] 🔍 CONCEPTOS DETALLADOS POR INSTITUCIÓN-CARRERA:')
+      conceptosPorInstCarrera.forEach((ids, key) => {
+        console.log(`  ${key}: IDs ${ids.slice(0, 5).join(', ')}${ids.length > 5 ? '...' : ''} (total: ${ids.length})`)
+      })
 
       // Paso 4: Crear mapa de pagos por concepto
       const pagosMap = new Map<number, { monto: number; cantidad: number }>()
@@ -97,6 +103,12 @@ export const ReporteCompleto: React.FC = () => {
 
       console.log('[REPORTE] 📊 Conceptos únicos con pagos:', pagosMap.size)
       console.log('[REPORTE] 🔍 Primeros 10 concepto_ids con pagos:', Array.from(pagosMap.keys()).slice(0, 10))
+      console.log('[REPORTE] 🔍 Últimos 10 concepto_ids con pagos:', Array.from(pagosMap.keys()).slice(-10))
+      
+      // DEBUG: verificar si los concepto_ids 523-564 están en pagosMap
+      const idsVerificar = [523, 524, 525, 534, 544, 555, 564]
+      const idsEnMapa = idsVerificar.filter(id => pagosMap.has(id))
+      console.log('[REPORTE] 🔍 IDs 523-564 en pagosMap:', idsEnMapa.length, '/', idsVerificar.length)
       
       // Debug: contar cuántos pagos corresponden a cada carrera
       const pagosConceptos = new Map<number, number>()
