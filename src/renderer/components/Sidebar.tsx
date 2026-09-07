@@ -85,6 +85,12 @@ const NAV_ITEMS: NavItem[] = [
     color: 'from-yellow-500 to-orange-500',
   },
   {
+    id: 'reportefinanciero',
+    label: 'Reporte Financiero',
+    icon: <BarChart3 size={20} />,
+    color: 'from-green-500 to-emerald-500',
+  },
+  {
     id: 'cierre',
     label: 'Cierre de Caja',
     icon: <Lock size={20} />,
@@ -130,7 +136,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   // Filtrar items según permisos
   const itemsVisibles = NAV_ITEMS.filter(item => {
     if (item.id === 'testing') return false
-    if (item.id === 'reportesejecutivos') return true
+    if (item.id === 'reportesejecutivos' || item.id === 'reportefinanciero') return true
     if (item.id === 'dashboard') return modulosPermitidos.includes('dashboard')
     return modulosPermitidos.includes(item.id)
   })
