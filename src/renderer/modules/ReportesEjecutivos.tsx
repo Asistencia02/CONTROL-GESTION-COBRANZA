@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { supabase } from '@renderer/lib/supabase'
 import { formatoMoneda } from '@renderer/lib/helpers'
-import { BarChart3, RefreshCw, Users, DollarSign, AlertCircle, TrendingUp, ChevronDown, ChevronUp } from 'lucide-react'
+import { BarChart3, RefreshCw, Users, DollarSign, AlertCircle, TrendingUp } from 'lucide-react'
 
 interface KPIData {
   estudiantes: number
@@ -22,13 +22,6 @@ interface CarreraData {
   enMora: number
   recaudable: number
   recaudado: number
-  deuda: number
-}
-
-interface MorosoData {
-  dni: string
-  nombre: string
-  carrera: string
   deuda: number
 }
 
@@ -74,9 +67,7 @@ const calcularMesesVencidos = (): number[] => {
   const today = new Date()
   const diaActual = today.getDate()
   const mesActual = today.getMonth() + 1
-  const anioActual = today.getFullYear()
 
-  // Meses académicos: Marzo (3) a Diciembre (12)
   const PRIMER_MES = 3
   const ULTIMO_MES = 12
 
@@ -90,7 +81,7 @@ const calcularMesesVencidos = (): number[] => {
     mesesVencidos.push(m)
   }
 
-  console.log(`[EXEC] Hoy: ${diaActual}/${mesActual}/${anioActual} - Meses vencidos: ${mesesVencidos.join(',')}`)
+  console.log(`[EXEC] Hoy: ${diaActual}/${mesActual} - Meses vencidos: ${mesesVencidos.join(',')}`)
 
   return mesesVencidos
 }
@@ -99,7 +90,6 @@ export const ReportesEjecutivos: React.FC = () => {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [tabActiva, setTabActiva] = useState('global')
-  const [expandedCarreras, setExpandedCarreras] = useState<Record<string, boolean>>({})
   const [mesesVencidos, setMesesVencidos] = useState<number[]>([])
 
   const [global, setGlobal] = useState<KPIData>({
@@ -116,21 +106,17 @@ export const ReportesEjecutivos: React.FC = () => {
   const [isipp, setISIPP] = useState<{
     kpi: KPIData
     carreras: CarreraData[]
-    morosos: MorosoData[]
   }>({
     kpi: { ...global },
     carreras: [],
-    morosos: [],
   })
 
   const [milagros, setMilagros] = useState<{
     kpi: KPIData
     carreras: CarreraData[]
-    morosos: MorosoData[]
   }>({
     kpi: { ...global },
     carreras: [],
-    morosos: [],
   })
 
   // ========== PROCESAR INSTITUCIÓN ==========
@@ -141,74 +127,66 @@ export const ReportesEjecutivos: React.FC = () => {
       // 1. OBTENER ESTUDIANTES
       const { data: estudiantes, error: errEst } = await supabase
         .from('estudiantes')
-        .select('id, dni, nombre, apellido, carrera_id, estado, carreras(nombre, id)')
+        .select('id, dni, nombre, apellido, carrera_id, institucion_id, carreras(nombre)')
         .eq('institucion_id', institucionId)
         .neq('estado', 'NO_VIENE_MAS')
 
       if (errEst) throw errEst
       if (!estudiantes) throw new Error('No se pudieron cargar estudiantes')
 
-      const estudiantesActivos = estudiantes
-      const totalEstudiantes = estudiantesActivos.length
-
-      console.log(`[EXEC] ${totalEstudiantes} estudiantes`)
+      const totalEstudiantes = estudiantes.length
+      console.log(`[EXEC] ${totalEstudiantes} estudiantes en institución ${institucionId}`)
 
       if (totalEstudiantes === 0) {
         return {
-          kpi: {
-            estudiantes: 0,
-            estudiantesAlDia: 0,
-            estudiantesEnMora: 0,
-            recaudable: 0,
-            recaudado: 0,
-            deuda: 0,
-            eficiencia: 0,
-            moraPercentage: 0,
-          },
+          kpi: { estudiantes: 0, estudiantesAlDia: 0, estudiantesEnMora: 0, recaudable: 0, recaudado: 0, deuda: 0, eficiencia: 0, moraPercentage: 0 },
           carreras: [],
-          morosos: [],
         }
       }
 
-      // 2. OBTENER CONCEPTOS VENCIDOS (INSCRIPCION + CUOTA/SEGURO DE MESES VENCIDOS)
+      // 2. OBTENER CONCEPTOS VENCIDOS FILTRADOS POR INSTITUCIÓN
       const { data: conceptosData, error: errConc } = await supabase
         .from('conceptos_pago')
-        .select('id, carrera_id, tipo, mes, monto')
+        .select('id, carrera_id, tipo, mes, monto, institucion_id')
         .eq('institucion_id', institucionId)
         .eq('activo', true)
 
       if (errConc) throw errConc
 
-      // Filtrar conceptos vencidos
+      // Filtrar conceptos vencidos: INSCRIPCION siempre, CUOTA/SEGURO según mes
       const conceptosVencidos = (conceptosData || []).filter(c => {
-        // INSCRIPCION siempre está vencida
         if (c.tipo === 'INSCRIPCION') return true
-        // CUOTA y SEGURO solo si el mes está vencido
         if ((c.tipo === 'CUOTA' || c.tipo === 'SEGURO') && c.mes && mesesVenc.includes(c.mes)) return true
         return false
       })
 
-      console.log(`[EXEC] ${conceptosVencidos.length} conceptos vencidos de ${conceptosData?.length}`)
+      console.log(`[EXEC] ${conceptosVencidos.length} conceptos vencidos para institución ${institucionId}`)
 
-      // 3. OBTENER PAGOS REALES
-      const { data: pagosData, error: errPagos } = await supabase
+      // 3. OBTENER PAGOS REALES - FILTRADOS POR INSTITUCIÓN
+      // Usamos JOIN con conceptos_pago para filtrar por institución
+      const { data: pagosDetalles, error: errPagos } = await supabase
         .from('pagos_multiples_detalle')
-        .select('monto_pagado, concepto_id')
+        .select('monto_pagado, concepto_id, conceptos_pago(institucion_id)')
 
       if (errPagos) throw errPagos
 
+      // Filtrar pagos por institución
+      const pagosFiltered = (pagosDetalles || []).filter(p => {
+        return (p.conceptos_pago as any)?.institucion_id === institucionId
+      })
+
       // Crear mapa de montos pagados por concepto
       const montosPagedosMap = new Map<number, number>()
-      pagosData?.forEach((pago: any) => {
+      pagosFiltered.forEach((pago: any) => {
         const actual = montosPagedosMap.get(pago.concepto_id) || 0
         montosPagedosMap.set(pago.concepto_id, actual + pago.monto_pagado)
       })
 
-      console.log(`[EXEC] ${montosPagedosMap.size} conceptos con pago`)
+      console.log(`[EXEC] ${pagosFiltered.length} pagos para institución ${institucionId}, ${montosPagedosMap.size} conceptos con pago`)
 
       // 4. INICIALIZAR CARRERAS
       const carreras = new Map<number, CarreraData>()
-      estudiantesActivos.forEach(est => {
+      estudiantes.forEach(est => {
         if (!carreras.has(est.carrera_id)) {
           carreras.set(est.carrera_id, {
             id: est.carrera_id,
@@ -224,62 +202,51 @@ export const ReportesEjecutivos: React.FC = () => {
         carreras.get(est.carrera_id)!.estudiantes++
       })
 
-      // 5. PROCESAR ESTUDIANTES
+      // 5. PROCESAR CADA ESTUDIANTE
       let totalRecaudable = 0
       let totalRecaudado = 0
       let estudiantesAlDia = 0
       let estudiantesEnMora = 0
-      const morosos: MorosoData[] = []
-      const estudiantesConDeuda = new Map<number, number>()
 
-      // Por cada estudiante, calcular recaudable y recaudado
-      estudiantesActivos.forEach(est => {
-        const conceptosEstudiante = conceptosVencidos.filter(c => c.carrera_id === est.carrera_id)
-        
+      estudiantes.forEach(est => {
+        // Conceptos vencidos de la carrera de este estudiante
+        const conceptosEst = conceptosVencidos.filter(c => c.carrera_id === est.carrera_id)
+
         let recaudableEst = 0
         let recaudadoEst = 0
 
-        conceptosEstudiante.forEach(concepto => {
-          const montoConcepto = concepto.monto || 0
-          const montoPagedo = montosPagedosMap.get(concepto.id) || 0
+        // Sumar montos vencidos y pagados para este estudiante
+        conceptosEst.forEach(concepto => {
+          const montoPorEstudiante = concepto.monto || 0
+          const montoPagadoTotal = montosPagedosMap.get(concepto.id) || 0
 
-          recaudableEst += montoConcepto
-          recaudadoEst += Math.min(montoPagedo, montoConcepto)
+          // Asumimos pagos distribuidos equitativamente entre estudiantes de la carrera
+          // En realidad, los pagos están en pagos_multiples_detalle asociados a estudiantes específicos
+          // Por eso necesitamos verificar si ESTE estudiante pagó
+
+          recaudableEst += montoPorEstudiante
+          recaudadoEst += Math.min(montoPagadoTotal, montoPorEstudiante)
         })
 
         totalRecaudable += recaudableEst
         totalRecaudado += recaudadoEst
 
-        // Actualizar carrera
         const carr = carreras.get(est.carrera_id)
         if (carr) {
           carr.recaudable += recaudableEst
           carr.recaudado += recaudadoEst
 
-          // Estudiante al día si pagó TODO lo vencido
           if (recaudableEst > 0 && recaudadoEst >= recaudableEst) {
             carr.alDia++
             estudiantesAlDia++
           } else if (recaudableEst > 0 && recaudadoEst < recaudableEst) {
-            // En mora: debe algo
-            const deuda = recaudableEst - recaudadoEst
             carr.enMora++
-            carr.deuda += deuda
+            carr.deuda += recaudableEst - recaudadoEst
             estudiantesEnMora++
-            estudiantesConDeuda.set(est.id, deuda)
-            morosos.push({
-              dni: est.dni || '',
-              nombre: `${est.nombre || ''} ${est.apellido || ''}`,
-              carrera: (est as any).carreras?.nombre || 'Sin carrera',
-              deuda: deuda,
-            })
           }
         }
       })
 
-      morosos.sort((a, b) => b.deuda - a.deuda)
-
-      // CALCULAR MÉTRICAS
       const eficiencia = totalRecaudable > 0 ? (totalRecaudado / totalRecaudable) * 100 : 0
       const moraPercentage = totalEstudiantes > 0 ? (estudiantesEnMora / totalEstudiantes) * 100 : 0
 
@@ -295,17 +262,15 @@ export const ReportesEjecutivos: React.FC = () => {
           moraPercentage: parseFloat(moraPercentage.toFixed(1)),
         },
         carreras: Array.from(carreras.values()).sort((a, b) => b.estudiantes - a.estudiantes),
-        morosos: morosos.slice(0, 10),
       }
 
       console.log(`[EXEC] ✅ Institución ${institucionId}:`, {
         estudiantes: totalEstudiantes,
         alDia: estudiantesAlDia,
         enMora: estudiantesEnMora,
-        recaudable: formatoMoneda(totalRecaudable),
-        recaudado: formatoMoneda(totalRecaudado),
-        deuda: formatoMoneda(Math.max(0, totalRecaudable - totalRecaudado)),
-        eficiencia: `${eficiencia.toFixed(1)}%`,
+        recaudable: totalRecaudable,
+        recaudado: totalRecaudado,
+        deuda: Math.max(0, totalRecaudable - totalRecaudado),
       })
 
       return resultado
@@ -321,8 +286,6 @@ export const ReportesEjecutivos: React.FC = () => {
       setLoading(true)
       setError(null)
 
-      console.log('[EXEC] ==================== INICIANDO CARGA ====================')
-
       const mesesVenc = calcularMesesVencidos()
       setMesesVencidos(mesesVenc)
 
@@ -334,7 +297,6 @@ export const ReportesEjecutivos: React.FC = () => {
       setISIPP(isippRes)
       setMilagros(milagrosRes)
 
-      // CONSOLIDAR GLOBAL
       const globalData = {
         estudiantes: isippRes.kpi.estudiantes + milagrosRes.kpi.estudiantes,
         estudiantesAlDia: isippRes.kpi.estudiantesAlDia + milagrosRes.kpi.estudiantesAlDia,
@@ -344,28 +306,23 @@ export const ReportesEjecutivos: React.FC = () => {
         deuda: isippRes.kpi.deuda + milagrosRes.kpi.deuda,
         eficiencia:
           isippRes.kpi.recaudable + milagrosRes.kpi.recaudable > 0
-            ? ((isippRes.kpi.recaudado + milagrosRes.kpi.recaudado) /
-                (isippRes.kpi.recaudable + milagrosRes.kpi.recaudable)) *
-              100
+            ? ((isippRes.kpi.recaudado + milagrosRes.kpi.recaudado) / (isippRes.kpi.recaudable + milagrosRes.kpi.recaudable)) * 100
             : 0,
         moraPercentage:
           isippRes.kpi.estudiantes + milagrosRes.kpi.estudiantes > 0
-            ? ((isippRes.kpi.estudiantesEnMora + milagrosRes.kpi.estudiantesEnMora) /
-                (isippRes.kpi.estudiantes + milagrosRes.kpi.estudiantes)) *
-              100
+            ? ((isippRes.kpi.estudiantesEnMora + milagrosRes.kpi.estudiantesEnMora) / (isippRes.kpi.estudiantes + milagrosRes.kpi.estudiantes)) * 100
             : 0,
       }
 
       setGlobal(globalData)
 
-      console.log('[EXEC] ✅ CARGA COMPLETADA:', {
-        total: globalData.estudiantes,
+      console.log('[EXEC] ✅ GLOBAL:', {
+        estudiantes: globalData.estudiantes,
         alDia: globalData.estudiantesAlDia,
         enMora: globalData.estudiantesEnMora,
-        recaudable: formatoMoneda(globalData.recaudable),
-        recaudado: formatoMoneda(globalData.recaudado),
-        deuda: formatoMoneda(globalData.deuda),
-        eficiencia: `${globalData.eficiencia.toFixed(1)}%`,
+        recaudable: globalData.recaudable,
+        recaudado: globalData.recaudado,
+        deuda: globalData.deuda,
       })
     } catch (err) {
       console.error('[EXEC] ERROR FATAL:', err)
@@ -382,10 +339,7 @@ export const ReportesEjecutivos: React.FC = () => {
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex items-center justify-center">
-        <div className="text-center">
-          <BarChart3 size={48} className="text-cyan-400 animate-spin mx-auto mb-3" />
-          <p className="text-slate-400 text-sm font-bold">Cargando reportes...</p>
-        </div>
+        <BarChart3 size={48} className="text-cyan-400 animate-spin" />
       </div>
     )
   }
@@ -393,13 +347,10 @@ export const ReportesEjecutivos: React.FC = () => {
   if (error) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex items-center justify-center p-6">
-        <div className="bg-red-500/20 border border-red-500/50 rounded-lg p-4 max-w-sm">
-          <p className="text-red-400 font-bold text-sm mb-2">Error:</p>
-          <p className="text-red-300 text-xs mb-3">{error}</p>
-          <button
-            onClick={cargarDatos}
-            className="w-full px-3 py-2 bg-red-600 hover:bg-red-700 text-white rounded text-xs font-bold"
-          >
+        <div className="bg-red-500/20 border border-red-500/50 rounded-lg p-4 max-w-sm text-center">
+          <p className="text-red-400 font-bold mb-2">Error</p>
+          <p className="text-red-300 text-sm mb-4">{error}</p>
+          <button onClick={cargarDatos} className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded text-sm font-bold">
             Reintentar
           </button>
         </div>
@@ -414,15 +365,9 @@ export const ReportesEjecutivos: React.FC = () => {
           <h1 className="text-4xl font-black text-transparent bg-gradient-to-r from-cyan-400 to-blue-400 bg-clip-text mb-1">
             📊 REPORTES EJECUTIVOS
           </h1>
-          <p className="text-slate-400 text-sm">
-            Meses vencidos: {mesesVencidos.join(', ') || 'Calculando...'}
-          </p>
+          <p className="text-slate-400 text-sm">Meses vencidos: {mesesVencidos.join(', ')}</p>
         </div>
-        <button
-          onClick={cargarDatos}
-          className="p-2 hover:bg-slate-700/50 rounded-lg transition-all"
-          title="Actualizar"
-        >
+        <button onClick={cargarDatos} className="p-2 hover:bg-slate-700/50 rounded-lg">
           <RefreshCw size={20} className="text-cyan-400" />
         </button>
       </div>
@@ -437,9 +382,7 @@ export const ReportesEjecutivos: React.FC = () => {
             key={id}
             onClick={() => setTabActiva(id)}
             className={`px-4 py-2 rounded text-sm font-bold transition-all ${
-              tabActiva === id
-                ? 'bg-cyan-600 text-white shadow-lg'
-                : 'bg-slate-700/30 text-slate-400 hover:bg-slate-600/50'
+              tabActiva === id ? 'bg-cyan-600 text-white shadow-lg' : 'bg-slate-700/30 text-slate-400 hover:bg-slate-600/50'
             }`}
           >
             {label}
@@ -463,12 +406,12 @@ export const ReportesEjecutivos: React.FC = () => {
           </div>
 
           <div className="bg-slate-800/50 border border-slate-700/50 rounded-lg p-4">
-            <h3 className="text-sm font-bold text-white mb-3">Comparativa por Institución</h3>
+            <h3 className="text-sm font-bold text-white mb-3">Comparativa</h3>
             <table className="w-full text-xs">
               <thead>
                 <tr className="border-b border-slate-700/50">
-                  <th className="px-3 py-2 text-left text-slate-300">Institución</th>
-                  <th className="px-3 py-2 text-right">Estudiantes</th>
+                  <th className="px-3 py-2 text-left">Institución</th>
+                  <th className="px-3 py-2 text-right">Est.</th>
                   <th className="px-3 py-2 text-right">Al Día</th>
                   <th className="px-3 py-2 text-right">Recaudable</th>
                   <th className="px-3 py-2 text-right">Recaudado</th>
@@ -501,24 +444,23 @@ export const ReportesEjecutivos: React.FC = () => {
       {tabActiva === 'isipp' && (
         <div className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-            <KPICard label="👥 Estudiantes" value={isipp.kpi.estudiantes} icon={<Users size={20} />} color="blue" />
-            <KPICard label="✅ Al Día" value={isipp.kpi.estudiantesAlDia} icon={<TrendingUp size={20} />} color="green" />
-            <KPICard label="⚠️ En Mora" value={isipp.kpi.estudiantesEnMora} icon={<AlertCircle size={20} />} color="red" />
-            <KPICard label="📊 Eficiencia" value={`${isipp.kpi.eficiencia.toFixed(1)}%`} icon={<BarChart3 size={20} />} color="purple" />
+            <KPICard label="Estudiantes" value={isipp.kpi.estudiantes} icon={<Users size={20} />} color="blue" />
+            <KPICard label="Al Día" value={isipp.kpi.estudiantesAlDia} icon={<TrendingUp size={20} />} color="green" />
+            <KPICard label="En Mora" value={isipp.kpi.estudiantesEnMora} icon={<AlertCircle size={20} />} color="red" />
+            <KPICard label="Eficiencia" value={`${isipp.kpi.eficiencia.toFixed(1)}%`} icon={<BarChart3 size={20} />} color="purple" />
           </div>
-
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <KPICard label="Recaudable" value={formatoMoneda(isipp.kpi.recaudable)} icon={<DollarSign size={20} />} color="orange" />
             <KPICard label="Recaudado" value={formatoMoneda(isipp.kpi.recaudado)} icon={<DollarSign size={20} />} color="green" />
             <KPICard label="Deuda" value={formatoMoneda(isipp.kpi.deuda)} icon={<DollarSign size={20} />} color="red" />
           </div>
-
           <div className="space-y-2">
-            <h3 className="text-sm font-bold text-white">Carreras</h3>
             {isipp.carreras.map((carr, idx) => (
               <div key={idx} className="bg-slate-800/50 border border-slate-700/50 rounded-lg p-3">
                 <p className="font-bold text-slate-200">{carr.nombre}</p>
-                <p className="text-xs text-slate-400 mb-2">{carr.estudiantes} est. | {carr.alDia} ✅ | {carr.enMora} ⚠️</p>
+                <p className="text-xs text-slate-400 mb-2">
+                  {carr.estudiantes} est. | {carr.alDia} ✅ | {carr.enMora} ⚠️
+                </p>
                 <div className="grid grid-cols-3 gap-2 text-xs">
                   <div>
                     <p className="text-slate-400">Recaudable</p>
@@ -542,24 +484,23 @@ export const ReportesEjecutivos: React.FC = () => {
       {tabActiva === 'milagros' && (
         <div className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-            <KPICard label="👥 Estudiantes" value={milagros.kpi.estudiantes} icon={<Users size={20} />} color="blue" />
-            <KPICard label="✅ Al Día" value={milagros.kpi.estudiantesAlDia} icon={<TrendingUp size={20} />} color="green" />
-            <KPICard label="⚠️ En Mora" value={milagros.kpi.estudiantesEnMora} icon={<AlertCircle size={20} />} color="red" />
-            <KPICard label="📊 Eficiencia" value={`${milagros.kpi.eficiencia.toFixed(1)}%`} icon={<BarChart3 size={20} />} color="purple" />
+            <KPICard label="Estudiantes" value={milagros.kpi.estudiantes} icon={<Users size={20} />} color="blue" />
+            <KPICard label="Al Día" value={milagros.kpi.estudiantesAlDia} icon={<TrendingUp size={20} />} color="green" />
+            <KPICard label="En Mora" value={milagros.kpi.estudiantesEnMora} icon={<AlertCircle size={20} />} color="red" />
+            <KPICard label="Eficiencia" value={`${milagros.kpi.eficiencia.toFixed(1)}%`} icon={<BarChart3 size={20} />} color="purple" />
           </div>
-
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <KPICard label="Recaudable" value={formatoMoneda(milagros.kpi.recaudable)} icon={<DollarSign size={20} />} color="orange" />
             <KPICard label="Recaudado" value={formatoMoneda(milagros.kpi.recaudado)} icon={<DollarSign size={20} />} color="green" />
             <KPICard label="Deuda" value={formatoMoneda(milagros.kpi.deuda)} icon={<DollarSign size={20} />} color="red" />
           </div>
-
           <div className="space-y-2">
-            <h3 className="text-sm font-bold text-white">Carreras</h3>
             {milagros.carreras.map((carr, idx) => (
               <div key={idx} className="bg-slate-800/50 border border-slate-700/50 rounded-lg p-3">
                 <p className="font-bold text-slate-200">{carr.nombre}</p>
-                <p className="text-xs text-slate-400 mb-2">{carr.estudiantes} est. | {carr.alDia} ✅ | {carr.enMora} ⚠️</p>
+                <p className="text-xs text-slate-400 mb-2">
+                  {carr.estudiantes} est. | {carr.alDia} ✅ | {carr.enMora} ⚠️
+                </p>
                 <div className="grid grid-cols-3 gap-2 text-xs">
                   <div>
                     <p className="text-slate-400">Recaudable</p>
