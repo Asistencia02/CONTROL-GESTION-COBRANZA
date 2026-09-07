@@ -1,0 +1,245 @@
+================================================================================
+QUICK REFERENCE - v2.22 COBRANZA
+================================================================================
+
+📋 CHECKLIST PRE-USO
+════════════════════════════════════════════════════════════════════════════════
+
+□ Copié google-apps-script-codigo-v2-22-COBRANZA.gs a Google Apps Script
+□ El Excel origen existe: CUOTAS 2025 INSM vigente para cristian.xlsx
+□ El Excel tiene 5 hojas: ANALISTA2026, HIGIENE2026, INICIAL2026, PRIMARIA2026, SECUNDARIA2026
+□ Las hojas tienen columnas: ITEM, DNI, APELLIDO, NOMBRES, TELEFONO, INSCRIPCION, ...
+□ Método EFECTIVO o TRANSFERENCIA o TARJETA_CREDITO o TARJETA_DEBITO
+□ Si uso DIVIDIDO, existe hoja PAGOS_DETALLES con DNI, CONCEPTO, MES, MONTO, METODO_PAGO, TALONARIO
+□ Supabase tiene tabla: pagos, pagos_multiples, pagos_multiples_detalle
+□ Supabase tiene RPC: insertar_pago_multiple_con_detalles_upsert
+□ Supabase tiene conceptos en tabla: configuracion_carreras con montos
+
+════════════════════════════════════════════════════════════════════════════════
+🚀 INICIO RÁPIDO
+════════════════════════════════════════════════════════════════════════════════
+
+1. COPIAR CÓDIGO
+   └─ google-apps-script-codigo-v2-22-COBRANZA.gs
+   └─ A: Google Sheet → Extensions → Apps Script (copiar y pegar todo)
+
+2. EJECUTAR
+   └─ Google Sheet → 🔄 SINCRONIZACIÓN → ▶️ FULL AUTO MULTI
+
+3. ESPERAR & REVISAR
+   └─ Se abrirá diálogo: "⏳ Procesando múltiples instituciones..."
+   └─ Cuando termine: Alerta con ✅ COMPLETADO MULTI-INSTITUCIÓN
+
+4. VER RESULTADOS
+   └─ Hoja: LOG_SINCRONIZACION (resumen)
+   └─ Hoja: SKIPPED_DETAILS (errores)
+   └─ Hoja: ESTUDIANTES_INST1, ESTUDIANTES_INST2, ... (datos normalizados)
+
+════════════════════════════════════════════════════════════════════════════════
+🔑 VARIABLES CLAVE
+════════════════════════════════════════════════════════════════════════════════
+
+const CONFIG_SHEET_NAME = "CONFIG"                    // Hoja de configuración (auto-creada)
+const LOG_SHEET_NAME = "LOG_SINCRONIZACION"           // Resumen de sincronización
+const SKIPPED_SHEET_NAME = "SKIPPED_DETAILS"          // Errores por fila
+const EXCEL_NORMALIZADO_NOMBRE = "SYNC_NORMALIZADO_MULTI_2026"  // Excel de trabajo
+const PAGOS_DETALLES_SHEET = "PAGOS_DETALLES"         // Detalles para DIVIDIDO
+
+const SUPABASE_URL = "https://tcqamchiwtijniiwbpde.supabase.co"
+const SUPABASE_KEY = "sb_publishable_p2KFfCQlF79Q5WTgMgrlNQ_sYCsxxCP"
+
+const MAPEO_HOJAS = {
+  "ANALISTA2026": { institucion_id: 1, carrera_id: 1 },
+  "HIGIENE2026": { institucion_id: 1, carrera_id: 3 },
+  "INICIAL2026": { institucion_id: 2, carrera_id: 4 },
+  "PRIMARIA2026": { institucion_id: 2, carrera_id: 5 },
+  "SECUNDARIA2026": { institucion_id: 2, carrera_id: 6 }
+};
+
+════════════════════════════════════════════════════════════════════════════════
+🔴 MÉTODOS DE PAGO SOPORTADOS
+════════════════════════════════════════════════════════════════════════════════
+
+┌──────────────────────┬────────────────────┬───────────────────────────────┐
+│ METODO_PAGO          │ TIPO_TARJETA       │ EJEMPLO DE USO                │
+├──────────────────────┼────────────────────┼───────────────────────────────┤
+│ EFECTIVO             │ NULL               │ Efectivo en caja              │
+│ TRANSFERENCIA        │ NULL               │ Transferencia bancaria        │
+│ TARJETA_CREDITO      │ CREDITO            │ Tarjeta de crédito            │
+│ TARJETA_DEBITO       │ DEBITO             │ Tarjeta de débito             │
+│ DIVIDIDO             │ NULL               │ Múltiples cuotas (1 pago)     │
+└──────────────────────┴────────────────────┴───────────────────────────────┘
+
+Ejemplo en Excel:
+  METODO: "EFECTIVO" → metodo_pago = "EFECTIVO", tipo_tarjeta = null
+  METODO: "TARJETA_CREDITO" → metodo_pago = "TARJETA_CREDITO", tipo_tarjeta = "CREDITO"
+  METODO: "DIVIDIDO" → Busca en PAGOS_DETALLES
+
+════════════════════════════════════════════════════════════════════════════════
+📊 ESTADO DE PAGO
+════════════════════════════════════════════════════════════════════════════════
+
+┌──────────┬─────────────────────────────────────────────┐
+│ ESTADO   │ SIGNIFICADO                                 │
+├──────────┼─────────────────────────────────────────────┤
+│ PAGADO   │ Monto pagado >= monto original              │
+│ PARCIAL  │ Monto pagado < monto original               │
+│ ANULADO  │ Pago marcado como inválido (por usuario)   │
+└──────────┴─────────────────────────────────────────────┘
+
+El script calcula automáticamente basado en:
+  monto_adeudado = monto_original - monto_pagado
+  si monto_adeudado == 0 → PAGADO
+  si monto_adeudado > 0 → PARCIAL
+
+════════════════════════════════════════════════════════════════════════════════
+🎯 FLUJO DE DATOS
+════════════════════════════════════════════════════════════════════════════════
+
+Excel Origen
+  ↓ normalizarExcelMulti()
+  ├─ Valida DNI, APELLIDO, NOMBRES (longitudes máximas)
+  ├─ Genera DNI autoincrementable si falta
+  └─ Crea Excel Normalizado
+  ↓
+Sincronizar por Institución
+  ├─ procesarEstudiantes() → INSERT INTO estudiantes
+  ├─ buscarEstudiantes() → SELECT * WHERE dni IN (...)
+  ├─ cargarConceptos() → SELECT * FROM configuracion_carreras
+  ├─ obtenerPagosExistentes() → SELECT * FROM pagos
+  ├─ obtenerPagosDetalles() → Lee hoja PAGOS_DETALLES
+  └─ procesarPagosConMetodo()
+      ├─ Si DIVIDIDO → INSERT INTO pagos_multiples (RPC)
+      └─ Si otro → INSERT INTO pagos
+  ↓
+Supabase (Actualizado)
+  ├─ Tabla: estudiantes
+  ├─ Tabla: pagos
+  ├─ Tabla: pagos_multiples
+  └─ Tabla: pagos_multiples_detalle
+
+════════════════════════════════════════════════════════════════════════════════
+⚠️ ERRORES COMUNES & SOLUCIONES
+════════════════════════════════════════════════════════════════════════════════
+
+❌ "Archivo no encontrado: CUOTAS 2025 INSM vigente para cristian.xlsx"
+   → Verifica el NOMBRE EXACTO del archivo
+   → Debe estar en Google Drive (accesible por Google Apps Script)
+
+❌ "DNI generado como NULL (agotados)"
+   → Se agotó el rango de DNIs para esa institución (100k)
+   → Usa DNI real en lugar de dejar vacío
+
+❌ "DIVIDIDO sin detalles: DNI ..., CUOTA, MARZO"
+   → No existe esa combinación en hoja PAGOS_DETALLES
+   → Agrega fila: 12345678 | CUOTA | MARZO | monto | metodo | talonario
+
+❌ "Error INSERT batch: 400"
+   → DNI > 20 caracteres
+   → APELLIDO o NOMBRES > 200 caracteres
+   → TELÉFONO > 20 caracteres
+   → El script lo valida y SALTA esa fila (ver SKIPPED_DETAILS)
+
+❌ "Encontrados: 0/45 estudiantes"
+   → Esperó 15s pero estudiantes aún no se insertaron
+   → Aumentar tiempo en Utilities.sleep(15000) a 30000
+
+❌ "No hay logs disponibles"
+   → Primera ejecución no tiene resultados
+   → Ejecuta nuevamente después de la 1ra sincronización
+
+════════════════════════════════════════════════════════════════════════════════
+🔍 DEBUGGING
+════════════════════════════════════════════════════════════════════════════════
+
+1. Ver LOGS en tiempo real
+   └─ Google Apps Script → View → Logs
+   └─ O: Google Sheet → Extensions → Apps Script → View → Logs
+
+2. Ver hoja SKIPPED_DETAILS
+   └─ Filas que NO se procesaron + MOTIVO
+
+3. Ver hoja LOG_SINCRONIZACION
+   └─ Resumen por institución + fecha
+
+4. Revisa emails si configuraste
+   └─ MailApp.sendEmail() para alertas
+
+5. Usa EJEMPLOS_JSON_v2.22.gs para test individual
+   └─ insertarPagoSimple()
+   └─ insertarPagoMultiple()
+   └─ insertarLotePagos()
+
+════════════════════════════════════════════════════════════════════════════════
+⚡ OPTIMIZACIONES IMPLEMENTADAS
+════════════════════════════════════════════════════════════════════════════════
+
+✅ Batch Processing
+   - cargarPagos: 1000 pagos por query
+   - procesarEstudiantes: 50 estudiantes por batch
+   - buscarEstudiantes: 50 DNIs por RPC call
+   - insertarPagos: 20 pagos por POST
+   - insertarPagosMultiples: 1 RPC por pago múltiple
+
+✅ Parallel RPC Calls
+   - search_estudiantes_by_dni (batch de 50)
+   - search_pagos_by_estudiantes (batch de 10)
+   - insertar_pago_multiple_con_detalles_upsert (1 por 1, pero batch en DB)
+
+✅ Delay Management
+   - DELAY_MS = 200 entre batches (evita rate limit)
+   - Utilities.sleep(1000) entre chunks grandes
+   - Utilities.sleep(15000) después de insertar estudiantes
+
+✅ Error Handling
+   - muteHttpExceptions: true (no falla por timeout)
+   - Try/catch en loops (continúa si 1 fila falla)
+   - SKIPPED_DETAILS por cada error
+
+════════════════════════════════════════════════════════════════════════════════
+📱 COMPATIBLE CON FRONTEND
+════════════════════════════════════════════════════════════════════════════════
+
+Escribe en las MISMAS tablas que tu React consume:
+
+✅ RegistroPagos.tsx
+   └─ Carga SELECT * FROM pagos UNION pagos_multiples
+   └─ Ve todos los pagos del script
+
+✅ ModalConfirmacionCobro.tsx
+   └─ Muestra metodoPago del script
+   └─ Calcula mora automática
+
+✅ usePagos.ts (hook)
+   └─ cargarPagos() obtiene datos del script
+   └─ resumenPorMetodo() filtra por method_pago
+
+════════════════════════════════════════════════════════════════════════════════
+🎓 PARÁMETROS DE FUNCIÓN (REFERENCIA)
+════════════════════════════════════════════════════════════════════════════════
+
+ejecutarFullAutoInterno()
+  → No parámetros
+  → Retorna: { exito, mensaje, resultadoSync { institucion → { contadores } } }
+
+procesarPagosConMetodo(config, pagosArray, tipo, dniAId, conceptos, pagosExistentes, pagosDetalles)
+  → config: { supabaseUrl, supabaseKey, institucionId }
+  → pagosArray: array de arrays [item, dni, apellido, ...]
+  → tipo: "INSCRIPCION" | "CUOTA" | "SEGURO"
+  → dniAId: { dni → estudiante_id } mapping
+  → conceptos: { carrera_id → { inscripcion, seguros, cuotas } }
+  → pagosExistentes: { estudiante_id|concepto_id → pago data }
+  → pagosDetalles: { dni|concepto|mes → [ { monto, metodo, talonario } ] }
+  → Retorna: { insertados, actualizados, pagosMultiples, errores, skipped, ignorados }
+
+════════════════════════════════════════════════════════════════════════════════
+📞 CONTACTO / AYUDA
+════════════════════════════════════════════════════════════════════════════════
+
+Si algo no funciona después de revisar esta guía:
+
+1. Verifica SKIPPED_DETAILS (99% de errores están ahí)
+2. Revisa Logs (Google Apps Script → View → Logs)
+3. Prototipa con EJEMPLOS_JSON_v2.22.gs
+
+================================================================================

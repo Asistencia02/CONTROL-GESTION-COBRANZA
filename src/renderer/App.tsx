@@ -10,7 +10,7 @@ import { VentasModerno } from '@renderer/modules/VentasModerno'
 import { ConfiguracionModerno } from '@renderer/modules/ConfiguracionModerno'
 import { GastosModerno } from '@renderer/modules/GastosModerno'
 import { ReportesFinancierosModerno } from '@renderer/modules/ReportesFinancierosModerno'
-import { ReportesEjecutivos } from '@renderer/modules/ReportesEjecutivos'
+import { ReporteCompleto } from '@renderer/modules/ReporteCompleto'
 import { CierreModerno } from '@renderer/modules/CierreModerno'
 import { VentaKioscoModerno } from '@renderer/modules/VentaKioscoModerno'
 import { KioscoConfiguracionModerno } from '@renderer/modules/KioscoConfiguracionModerno'
@@ -100,7 +100,7 @@ export const App: React.FC = () => {
       case 'ventakiosco': return <VentaKioscoModerno />
       case 'gastos': return <GastosModerno />
       case 'reportes': return <ReportesFinancierosModerno />
-      case 'reportesejecutivos': return <ReportesEjecutivos />
+      case 'reportesejecutivos': return <ReporteCompleto />
       case 'cierre': return <CierreModerno />
       case 'kioscoconfig': return <KioscoConfiguracionModerno />
       case 'sincronizacion': return <Sincronizacion />

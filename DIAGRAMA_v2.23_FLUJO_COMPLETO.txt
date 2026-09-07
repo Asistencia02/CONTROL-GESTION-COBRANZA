@@ -1,0 +1,238 @@
+================================================================================
+DIAGRAMA VISUAL: v2.23 COBRANZA AGRUPADA
+================================================================================
+
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃                            EXCEL ORIGEN (Google Drive)                      ┃
+┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┫
+┃                                                                              ┃
+┃  CUOTAS 2025 INSM vigente para cristian.xlsx                               ┃
+┃  ├─ ANALISTA2026 (institución 1, carrera 1)                               ┃
+┃  │  ├─ Row 1: JUAN PÉREZ, DNI 12345678, INSCRIPCIÓN 5000, CUOTA MARZO 2000┃
+┃  │  ├─ Row 2: MARÍA GARCÍA, DNI 87654321, INSCRIPCIÓN 2500, CUOTA MARZO 0 ┃
+┃  │  └─ ... (más filas)                                                     ┃
+┃  ├─ HIGIENE2026 (institución 1, carrera 3)                                ┃
+┃  ├─ INICIAL2026 (institución 2, carrera 4)                                ┃
+┃  ├─ PRIMARIA2026 (institución 2, carrera 5)                               ┃
+┃  └─ SECUNDARIA2026 (institución 2, carrera 6)                             ┃
+┃                                                                              ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+                                    ↓↓↓
+                          ejecutarCobranzaAgrupada()
+                                    ↓↓↓
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃                         SCRIPT: NORMALIZACIÓN                               ┃
+┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┫
+┃                                                                              ┃
+┃  POR CADA ESTUDIANTE:                                                      ┃
+┃  ┌────────────────────────────────────────────────────────────────────┐   ┃
+┃  │ Input:                                                             │   ┃
+┃  │  - Row: [JUAN PÉREZ, 12345678, ...INSCR 5000...CUOTA M 2000...]   │   ┃
+┃  │                                                                     │   ┃
+┃  │ Procesa:                                                          │   ┃
+┃  │  - DNI validado/generado                                          │   ┃
+┃  │  - Recolecta TODOS los conceptos pagados:                         │   ┃
+┃  │    • INSCRIPCIÓN: 5000 (METODO: EFECTIVO)                         │   ┃
+┃  │    • CUOTA MARZO: 2000 (METODO: EFECTIVO)                         │   ┃
+┃  │    • SEGURO MARZO: 500 (METODO: EFECTIVO)                         │   ┃
+┃  │    • CUOTA ABRIL: 2000 (METODO: EFECTIVO)                         │   ┃
+┃  │    • SEGURO ABRIL: 500 (METODO: EFECTIVO)                         │   ┃
+┃  │    ... (más meses si tiene pagos)                                 │   ┃
+┃  │                                                                     │   ┃
+┃  │ Output:                                                            │   ┃
+┃  │  estudiantesMap[12345678] = {                                     │   ┃
+┃  │    dni: "12345678",                                               │   ┃
+┃  │    apellido: "PÉREZ",                                             │   ┃
+┃  │    nombres: "JUAN",                                               │   ┃
+┃  │    carrera_id: 1,                                                 │   ┃
+┃  │    conceptos: [                                                   │   ┃
+┃  │      { tipo: "INSCRIPCION", mes: null, montoPagado: 5000, ... }   │   ┃
+┃  │      { tipo: "CUOTA", mes: "MARZO", montoPagado: 2000, ... }     │   ┃
+┃  │      { tipo: "SEGURO", mes: "MARZO", montoPagado: 500, ... }     │   ┃
+┃  │      ...                                                          │   ┃
+┃  │    ]                                                              │   ┃
+┃  │  }                                                                │   ┃
+┃  └────────────────────────────────────────────────────────────────────┘   ┃
+┃                                                                              ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+                                    ↓↓↓
+                    procesarCobranzaPorInstitucion()
+                                    ↓↓↓
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃                    SCRIPT: INSERCIÓN EN BD + RPC                            ┃
+┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┫
+┃                                                                              ┃
+┃  PASO 1: INSERT Estudiantes                                               ┃
+┃  ┌────────────────────────────────────────────────────────────────────┐   ┃
+┃  │ POST /rest/v1/estudiantes                                          │   ┃
+┃  │ {                                                                   │   ┃
+┃  │   dni: "12345678", nombre: "JUAN", apellido: "PÉREZ",             │   ┃
+┃  │   institucion_id: 1, carrera_id: 1, estado: "ACTIVO"             │   ┃
+┃  │ }                                                                   │   ┃
+┃  │                                                                     │   ┃
+┃  │ Response: id = 25 (estudiante_id en BD)                           │   ┃
+┃  └────────────────────────────────────────────────────────────────────┘   ┃
+┃                                                                              ┃
+┃  PASO 2: Buscar estudiantes (map DNI → ID)                               ┃
+┃  ┌────────────────────────────────────────────────────────────────────┐   ┃
+┃  │ RPC /rest/v1/rpc/search_estudiantes_by_dni                         │   ┃
+┃  │ { dni_list: ["12345678", "87654321", ...] }                       │   ┃
+┃  │                                                                     │   ┃
+┃  │ Response: dniAId = { "12345678" → 25, "87654321" → 26 }          │   ┃
+┃  └────────────────────────────────────────────────────────────────────┘   ┃
+┃                                                                              ┃
+┃  PASO 3: Cargar configuración de carreras (montos originales)            ┃
+┃  ┌────────────────────────────────────────────────────────────────────┐   ┃
+┃  │ GET /rest/v1/configuracion_carreras?institucion_id=eq.1            │   ┃
+┃  │                                                                     │   ┃
+┃  │ Response: config_carreras = {                                      │   ┃
+┃  │   1: { monto_inscripcion: 5000, monto_cuota: 2500, monto_seguro:600}│   ┃
+┃  │   3: { ... }                                                        │   ┃
+┃  │ }                                                                   │   ┃
+┃  └────────────────────────────────────────────────────────────────────┘   ┃
+┃                                                                              ┃
+┃  PASO 4: Cargar conceptos (mapear INSCRIPCIÓN/CUOTA/SEGURO → concepto_id) ┃
+┃  ┌────────────────────────────────────────────────────────────────────┐   ┃
+┃  │ GET /rest/v1/conceptos_pago?institucion_id=eq.1                    │   ┃
+┃  │                                                                     │   ┃
+┃  │ Response: conceptos = {                                            │   ┃
+┃  │   1: {                                                              │   ┃
+┃  │     inscripcion: 15,                                               │   ┃
+┃  │     cuotas: { 3: 16, 4: 18, 5: 20, 6: 22, 7: 24, 8: 26 },        │   ┃
+┃  │     seguros: { 3: 17, 4: 19, 5: 21, 6: 23, 7: 25, 8: 27 }        │   ┃
+┃  │   }                                                                 │   ┃
+┃  │ }                                                                   │   ┃
+┃  └────────────────────────────────────────────────────────────────────┘   ┃
+┃                                                                              ┃
+┃  PASO 5: ⭐ CREAR PAGOS_MULTIPLES AGRUPADOS                              ┃
+┃  ┌────────────────────────────────────────────────────────────────────┐   ┃
+┃  │ PER ESTUDIANTE:                                                    │   ┃
+┃  │                                                                     │   ┃
+┃  │  Input:                                                            │   ┃
+┃  │  - estId: 25 (JUAN PÉREZ)                                          │   ┃
+┃  │  - estudiante.conceptos: [                                         │   ┃
+┃  │      { tipo: "INSCRIPCION", montoPagado: 5000 },                  │   ┃
+┃  │      { tipo: "CUOTA", mes: "MARZO", montoPagado: 2000 },          │   ┃
+┃  │      { tipo: "SEGURO", mes: "MARZO", montoPagado: 500 },          │   ┃
+┃  │      ...                                                           │   ┃
+┃  │    ]                                                               │   ┃
+┃  │                                                                     │   ┃
+┃  │  Procesa:                                                          │   ┃
+┃  │  - Para cada concepto, busca:                                      │   ┃
+┃  │    • concepto_id (de la tabla conceptos)                           │   ┃
+┃  │    • monto_original (de config_carreras)                           │   ┃
+┃  │                                                                     │   ┃
+┃  │  Crea JSON de detalles:                                            │   ┃
+┃  │  detalles = [                                                      │   ┃
+┃  │    { concepto_id: 15, monto_original: 5000, monto_pagado: 5000 },  │   ┃
+┃  │    { concepto_id: 16, monto_original: 2500, monto_pagado: 2000 },  │   ┃
+┃  │    { concepto_id: 17, monto_original: 600, monto_pagado: 500 },    │   ┃
+┃  │    { concepto_id: 18, monto_original: 2500, monto_pagado: 2000 },  │   ┃
+┃  │    { concepto_id: 19, monto_original: 600, monto_pagado: 500 },    │   ┃
+┃  │    ...                                                             │   ┃
+┃  │  ]                                                                 │   ┃
+┃  │                                                                     │   ┃
+┃  │  Llama RPC:                                                        │   ┃
+┃  │  POST /rest/v1/rpc/insertar_pago_multiple_con_detalles_upsert      │   ┃
+┃  │  {                                                                  │   ┃
+┃  │    p_institucion_id: 1,                                            │   ┃
+┃  │    p_estudiante_id: 25,                                            │   ┃
+┃  │    p_numero_talonario: "AUTO_25_1682601234",                       │   ┃
+┃  │    p_monto_total: 19000,                                           │   ┃
+┃  │    p_cantidad_conceptos: 13,                                       │   ┃
+┃  │    p_metodo_pago: "EFECTIVO",                                      │   ┃
+┃  │    p_fecha_cobro: "2026-04-27",                                    │   ┃
+┃  │    p_descripcion: "Pago agrupado: 13 conceptos",                   │   ┃
+┃  │    p_detalles: JSON.stringify(detalles)                            │   ┃
+┃  │  }                                                                  │   ┃
+┃  │                                                                     │   ┃
+┃  │  Response:                                                         │   ┃
+┃  │  { pago_multiple_id: 42, detalles_insertados: 13, accion: "insertado" }│   ┃
+┃  └────────────────────────────────────────────────────────────────────┘   ┃
+┃                                                                              ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+                                    ↓↓↓
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃                           SUPABASE (BD)                                    ┃
+┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┫
+┃                                                                              ┃
+┃  TABLA: estudiantes                                                        ┃
+┃  ┌────┬─────────┬──────────┬─────────┬────────────┐                        ┃
+┃  │ id │ dni     │ apellido │ nombres │ carrera_id │                        ┃
+┃  ├────┼─────────┼──────────┼─────────┼────────────┤                        ┃
+┃  │ 25 │ 12345678│ PÉREZ    │ JUAN    │ 1          │                        ┃
+┃  │ 26 │ 87654321│ GARCÍA   │ MARÍA   │ 1          │                        ┃
+┃  └────┴─────────┴──────────┴─────────┴────────────┘                        ┃
+┃                                                                              ┃
+┃  TABLA: pagos_multiples                                                    ┃
+┃  ┌────┬──────────────┬────────────┬──────────────┬──────────────┐          ┃
+┃  │ id │ estudiante_id│ numero_talo│ monto_total  │ cantidad_con │          ┃
+┃  ├────┼──────────────┼────────────┼──────────────┼──────────────┤          ┃
+┃  │ 42 │ 25           │ AUTO_25_.. │ 19000        │ 13           │          ┃
+┃  │ 43 │ 26           │ AUTO_26_.. │ 8500         │ 5            │          ┃
+┃  └────┴──────────────┴────────────┴──────────────┴──────────────┘          ┃
+┃                                                                              ┃
+┃  TABLA: pagos_multiples_detalle                                            ┃
+┃  ┌────┬──────────────┬──────────────┬────────────────┬────────────────┐    ┃
+┃  │ id │ pago_mult_id │ concepto_id  │ monto_original │ monto_pagado   │    ┃
+┃  ├────┼──────────────┼──────────────┼────────────────┼────────────────┤    ┃
+┃  │ 1  │ 42           │ 15           │ 5000           │ 5000           │    ┃
+┃  │ 2  │ 42           │ 16           │ 2500           │ 2000           │    ┃
+┃  │ 3  │ 42           │ 17           │ 600            │ 500            │    ┃
+┃  │ 4  │ 42           │ 18           │ 2500           │ 2000           │    ┃
+┃  │ 5  │ 42           │ 19           │ 600            │ 500            │    ┃
+┃  │ 6  │ 42           │ 20           │ 2500           │ 2000           │    ┃
+┃  │ 7  │ 42           │ 21           │ 600            │ 500            │    ┃
+┃  │ 8  │ 42           │ 22           │ 2500           │ 2000           │    ┃
+┃  │ 9  │ 42           │ 23           │ 600            │ 500            │    ┃
+┃  │ 10 │ 42           │ 24           │ 2500           │ 2000           │    ┃
+┃  │ 11 │ 42           │ 25           │ 600            │ 500            │    ┃
+┃  │ 12 │ 42           │ 26           │ 2500           │ 2000           │    ┃
+┃  │ 13 │ 42           │ 27           │ 600            │ 500            │    ┃
+┃  └────┴──────────────┴──────────────┴────────────────┴────────────────┘    ┃
+┃  [Detalles para estudiante 26 también...]                                 ┃
+┃                                                                              ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+                                    ↓↓↓
+                    (El frontend React accede aquí)
+                                    ↓↓↓
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃                          FRONTEND: REACT                                   ┃
+┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┫
+┃                                                                              ┃
+┃  PestaniaTalonariosModerna.tsx                                             ┃
+┃  └─ Carga pagos (UNION de pagos + pagos_multiples)                         ┃
+┃  └─ Convierte pagos_multiples_detalle a lista de conceptos                 ┃
+┃  └─ ModalConfirmacionCobro muestra:                                        ┃
+┃     • Estudiante: JUAN PÉREZ                                               ┃
+┃     • Conceptos (13):                                                       ┃
+┃        - INSCRIPCIÓN: $5000                                                ┃
+┃        - CUOTA MARZO: $2000                                                ┃
+┃        - SEGURO MARZO: $500                                                ┃
+┃        ... (todos los 13)                                                  ┃
+┃     • Total: $19,000                                                        ┃
+┃     • Método: EFECTIVO                                                      ┃
+┃                                                                              ┃
+┃  RegistroPagos.tsx                                                         ┃
+┃  └─ Tabla de pagos (filtrable por talonario, método, institución)          ┃
+┃  └─ Fila por pago_multiple (no por detalle individual)                     ┃
+┃     • Talonario: AUTO_25_1682601234                                        ┃
+┃     • Estudiante: JUAN PÉREZ                                               ┃
+┃     • Monto: $19,000                                                        ┃
+┃     • Método: EFECTIVO                                                      ┃
+┃     • Estado: PAGADO                                                        ┃
+┃                                                                              ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+
+================================================================================
+BENEFICIOS DE ESTA ARQUITECTURA
+================================================================================
+
+1. ✅ CLARIDAD: Cada estudiante = 1 pago_multiple (aunque tenga 13 conceptos)
+2. ✅ AUDITORÍA: Detalles guardan qué pagó vs. qué debía (comparativa)
+3. ✅ FLEXIBILIDAD: 1 estudiante puede pagarparcialmente múltiples conceptos
+4. ✅ PERFORMANCE: 1 query = toda la información (vs. 13 queries)
+5. ✅ INTEGRIDAD: RPC UPSERT evita duplicados automáticamente
+6. ✅ COMPATIBILIDAD: Funciona con el frontend React existente
+
+================================================================================

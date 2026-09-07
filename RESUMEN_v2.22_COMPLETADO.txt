@@ -1,0 +1,277 @@
+================================================================================
+IMPLEMENTACIÓN COMPLETADA: v2.22 MODO COBRANZA
+================================================================================
+
+FECHA: 27 de Abril, 2026
+VERSIÓN: Google Apps Script v2.22
+
+================================================================================
+🎯 QUÉ SE IMPLEMENTÓ
+================================================================================
+
+Basándome en tu módulo de cobranza React (frontend) y la estructura de Supabase
+(backend), he adaptado TU LÓGICA DE COBRANZA A TU SCRIPT DE GOOGLE APPS.
+
+Ahora tu script:
+
+1. ✅ SOPORTA PAGOS SIMPLES (metodo = EFECTIVO/TRANSFERENCIA/TARJETA_*)
+   - Tabla: pagos (1 pago = 1 concepto)
+   - Rápido y directo
+   - Ejemplo: Juan pagó $5000 de CUOTA MARZO
+
+2. ✅ SOPORTA PAGOS MÚLTIPLES (metodo = DIVIDIDO)
+   - Tabla: pagos_multiples + pagos_multiples_detalle (1 pago = N conceptos)
+   - Agrupado y flexible
+   - Ejemplo: Juan pagó 3 parcialidades (1000+2000+1500) en 1 transacción
+
+3. ✅ ALMACENA METADATOS DE COBRANZA
+   - numero_talonario (ÚNICO por institución)
+   - metodo_pago (EFECTIVO/TRANSFERENCIA/TARJETA_CREDITO/TARJETA_DEBITO/DIVIDIDO)
+   - tipo_tarjeta (CREDITO/DEBITO)
+   - estado (PAGADO/PARCIAL)
+
+4. ✅ USA RPC UPSERT (no duplica)
+   - insertar_pago_multiple_con_detalles_upsert
+   - Evita talonarios duplicados
+   - Compatible con la lógica del frontend
+
+================================================================================
+📂 ARCHIVOS GENERADOS
+================================================================================
+
+1. google-apps-script-codigo-v2-22-COBRANZA.gs (46.8 KB)
+   └─ Script COMPLETO listo para copiar a Google Apps Script
+
+2. README_v2.22_COBRANZA.txt (15.3 KB)
+   └─ Documentación DETALLADA del flujo
+
+3. EJEMPLOS_JSON_v2.22.gs (8.2 KB)
+   └─ Ejemplos y funciones de TEST para validar
+
+================================================================================
+🔄 FLUJO IMPLEMENTADO (IDÉNTICO AL MÓDULO DE COBRANZA)
+================================================================================
+
+USER → Excel Origin (5 hojas)
+  ↓
+normalizarExcelMulti()
+  ├─ Lee 5 hojas: ANALISTA2026, HIGIENE2026, INICIAL2026, PRIMARIA2026, SECUNDARIA2026
+  ├─ Valida: DNI, APELLIDO, NOMBRES (máx longitudes)
+  ├─ Genera DNI autoincrementable si falta (offset por institución)
+  └─ Crea "Excel Normalizado" con datos limpios
+  ↓
+sincronizarDatos() POR INSTITUCIÓN
+  ├─ procesarEstudiantes() → INSERT estudiantes si no existen
+  ├─ Espera 15s (Supabase necesita tiempo)
+  ├─ buscarEstudiantes() → Obtiene DNI→ID mapping
+  ├─ cargarConceptos() → Descarga precios por carrera/tipo
+  ├─ obtenerPagosExistentes() → Evita duplicar pagos
+  ├─ obtenerPagosDetalles() → Lee hoja PAGOS_DETALLES
+  ├─ procesarPagosConMetodo() para INSCRIPCIÓN
+  │   ├─ Si metodo = DIVIDIDO:
+  │   │   ├─ Busca detalles en PAGOS_DETALLES
+  │   │   └─ Crea pago_multiple (RPC)
+  │   └─ Si otro metodo:
+  │       └─ Crea pago simple
+  ├─ procesarPagosConMetodo() para CUOTA
+  └─ procesarPagosConMetodo() para SEGURO
+  ↓
+SUPABASE
+  ├─ Tabla: estudiantes (inserts + updates)
+  ├─ Tabla: pagos (inserts simples)
+  ├─ Tabla: pagos_multiples (inserts via RPC)
+  └─ Tabla: pagos_multiples_detalle (auto-llenada por RPC)
+  ↓
+OUTPUT → LOG_SINCRONIZACION, SKIPPED_DETAILS
+        + Email/alerta con resultados
+
+================================================================================
+🛠️ CÓMO USAR
+================================================================================
+
+PASO 1: Copiar el código
+  └─ google-apps-script-codigo-v2-22-COBRANZA.gs
+  └─ A: Google Sheet → Extensions → Apps Script
+
+PASO 2: Preparar Excel origen
+  ├─ Archivo: CUOTAS 2025 INSM vigente para cristian.xlsx
+  ├─ Hojas: ANALISTA2026, HIGIENE2026, INICIAL2026, PRIMARIA2026, SECUNDARIA2026
+  ├─ Columnas obligatorias:
+  │   ├─ ITEM, DNI, APELLIDO, NOMBRES, TELEFONO
+  │   ├─ INSCRIPCION, METODO, TALONARIO
+  │   ├─ CUOTA MARZO/ABRIL/MAYO/JUNIO/JULIO/AGOSTO/SEPT/OCTUBRE/NOV/DIC
+  │   ├─ METODO, TALONARIO (por mes)
+  │   ├─ SEGURO MARZO/ABRIL/MAYO/JUNIO/JULIO/AGOSTO/SEPT/OCTUBRE/NOV/DIC
+  │   └─ METODO, TALONARIO (por mes)
+  └─ Valores para METODO:
+      ├─ EFECTIVO
+      ├─ TRANSFERENCIA
+      ├─ TARJETA_CREDITO o TARJETA_DEBITO
+      └─ DIVIDIDO (si tienes hoja PAGOS_DETALLES)
+
+PASO 3: (OPCIONAL) Crear PAGOS_DETALLES para DIVIDIDO
+  ├─ Nueva hoja en mismo Excel
+  ├─ Columnas: DNI, CONCEPTO, MES, MONTO, METODO_PAGO, TALONARIO
+  ├─ Ejemplo:
+  │   12345678 | CUOTA      | MARZO | 1000 | EFECTIVO | 001
+  │   12345678 | CUOTA      | MARZO | 2000 | EFECTIVO | 002
+  │   12345678 | CUOTA      | MARZO | 1500 | EFECTIVO | 003
+  └─ Esto crea 1 pago_multiple de $4500 con 3 detalles
+
+PASO 4: Ejecutar sincronización
+  ├─ Google Sheet → "🔄 SINCRONIZACIÓN" → "▶️ FULL AUTO MULTI"
+  └─ O: Script → ejecutarFullAutoManual()
+
+PASO 5: Revisar resultados
+  ├─ Hoja: LOG_SINCRONIZACION
+  │   └─ RESUMEN por institución: EST, INSC, CUOTA, SEGURO, MULTIPLES, ERRORES
+  ├─ Hoja: SKIPPED_DETAILS
+  │   └─ Errores de validación (DNI vacío, no válido, etc.)
+  ├─ Hojas: ESTUDIANTES_INST*, PAGOS_*_INST*
+  │   └─ Datos normalizados (para revisar antes de publicar)
+  └─ Google Cloud Console → Logs
+      └─ Verás todo el flujo detallado
+
+================================================================================
+📊 DIFERENCIAS v2.21 → v2.22
+================================================================================
+
+┌─────────────────────────┬──────────────────┬──────────────────────────────┐
+│ CARACTERÍSTICA          │ v2.21            │ v2.22                        │
+├─────────────────────────┼──────────────────┼──────────────────────────────┤
+│ Pagos simples           │ ✅               │ ✅ (mejorado)                │
+│ Pagos múltiples (RPC)   │ ❌               │ ✅ NUEVO                     │
+│ Metodo DIVIDIDO         │ ❌               │ ✅ NUEVO                     │
+│ Tipo de tarjeta         │ ❌               │ ✅ NUEVO (CREDITO/DEBITO)    │
+│ Numero talonario UNIQUE │ ❌               │ ✅ NUEVO (UPSERT)            │
+│ Contador pagos múltiples│ ❌               │ ✅ NUEVO                     │
+│ RPC para INSERT         │ ✅               │ ✅ (extendido)               │
+│ Validación de datos     │ ✅               │ ✅ (igual)                   │
+│ SKIPPED logging         │ ✅               │ ✅ (igual)                   │
+└─────────────────────────┴──────────────────┴──────────────────────────────┘
+
+================================================================================
+🔌 INTEGRACIÓN CON TU MÓDULO REACT
+================================================================================
+
+Tu frontend (React) usa:
+
+1. RegistroPagos.tsx
+   ├─ Carga pagos de tabla pagos + pagos_multiples
+   ├─ Muestra talonario, metodo_pago, tipo_tarjeta
+   └─ Permite filtrar, anular, editar
+
+2. ModalConfirmacionCobro.tsx
+   ├─ Muestra métodos de pago
+   ├─ Calcula mora automática
+   └─ Opción de perdonar mora / pago parcial
+
+3. usePagos.ts (hook)
+   ├─ cargarPagos() → SELECT * FROM pagos UNION pagos_multiples
+   ├─ registrarPago() → INSERT INTO pagos
+   └─ resumenPorMetodo() → GROUP BY metodo_pago
+
+El SCRIPT v2.22 AHORA ESCRIBE en las MISMAS TABLAS que tu React CONSUME.
+✅ FLUJO COMPLETO: Excel → Script → Supabase → React
+
+================================================================================
+✅ VERIFICACIÓN PRE-PRODUCCIÓN
+================================================================================
+
+Antes de usar en PRODUCCIÓN, verifica:
+
+1. ✅ DNI en Excel (no vacío, no duplicado)
+2. ✅ APELLIDO en Excel (no vacío)
+3. ✅ NOMBRES en Excel (no vacío)
+4. ✅ TELÉFONO en Excel (máx 20 caracteres)
+5. ✅ METODO en Excel (EFECTIVO/TRANSFERENCIA/TARJETA_*/DIVIDIDO)
+6. ✅ Si METODO = DIVIDIDO, existe hoja PAGOS_DETALLES con detalles
+7. ✅ Conceptos en Supabase (configuracion_carreras debe tener montos)
+8. ✅ RPC existe en Supabase: insertar_pago_multiple_con_detalles_upsert
+
+Signos de error:
+  ❌ "DNI generado como NULL (agotados)" → Demasiados estudiantes (50k+)
+  ❌ "DIVIDIDO sin detalles" → PAGOS_DETALLES sin ese registro
+  ❌ "estudiante no encontrado" → Esperó 15s pero BD no está lista
+  ❌ "Error INSERT batch: 400" → Validación Supabase (DNI > 20 chars, etc.)
+
+================================================================================
+🎓 APRENDIZAJE
+================================================================================
+
+Tu código ahora implementa (como tu módulo React):
+
+✅ MULTI-INSTITUCIÓN: Procesa 5 hojas, genera 2 instituciones separadas
+✅ BATCH PROCESSING: Agrupa queries en lotes (50 estudiantes, 20 pagos)
+✅ RPC UPSERT: Evita duplicados automáticamente
+✅ METADATOS: Almacena talonario, método, tipo_tarjeta
+✅ ERROR LOGGING: SKIPPED_DETAILS por cada fila problemática
+✅ ESTADO MÁQUINA: SKIPPED → ACTUALIZADO → PAGADO (completo)
+✅ COBRANZA FLEXIBLE: Pago simple O múltiple según necesidad
+
+Patrón replicado de tu frontend:
+  - Mismo modelo de datos (pagos + pagos_multiples)
+  - Mismo sistema de métodos (EFECTIVO, TRANSFERENCIA, TARJETA_*, DIVIDIDO)
+  - Mismo RPC UPSERT (no duplica)
+  - Mismo almacenamiento de metadatos
+
+================================================================================
+📞 SOPORTE
+================================================================================
+
+Si algo no funciona:
+
+1. Revisa hoja SKIPPED_DETAILS (errores por fila)
+2. Revisa Google Cloud Console → Logs (flujo detallado)
+3. Verifica Excel origen (columnas, datos vacíos)
+4. Verifica Supabase (conceptos, RPC, tablas)
+5. Prototipa con EJEMPLOS_JSON_v2.22.gs (funciones de test)
+
+Contacta si necesitas:
+- Debuggear un error específico
+- Agregar más validaciones
+- Optimizar performance (>10k estudiantes)
+- Adaptar a otras carreras/instituciones
+
+================================================================================
+🚀 PRÓXIMOS PASOS (OPCIONAL)
+================================================================================
+
+1. AUTOMATIZACIÓN: Configura trigger cada noche
+   └─ ejecutarFullAutoTrigger() a las 23:00
+
+2. NOTIFICACIONES: Enviar resumen por email
+   └─ MailApp.sendEmail() con LOG_SINCRONIZACION
+
+3. HISTORIAL: Archivar logs en otra sheet por mes
+   └─ Copiar LOG_SINCRONIZACION → LOG_ABRIL_2026
+
+4. AUDITORÍA: Crear tabla en Supabase para audit trail
+   └─ sync_log (fecha, institución, estudiantes, pagos, errores)
+
+5. DASHBOARD: Conectar Google Data Studio
+   └─ Visualizar tendencias de cobranza por institución
+
+================================================================================
+✨ CONCLUSIÓN
+================================================================================
+
+Ahora tienes un SISTEMA COMPLETO de cobranza:
+
+  Frontend (React) ← → Backend (Supabase) ← → Script (Google Apps)
+  
+  El script AUTOMÁTICAMENTE:
+  - Lee Excel con pagos
+  - Valida datos
+  - Agrupa en payos simples O múltiples
+  - Sincroniza con Supabase
+  - Genera logs de auditoría
+  
+  Tu frontend INMEDIATAMENTE:
+  - Ve nuevos pagos en RegistroPagos
+  - Filtra por talonario, método, institución
+  - Genera reportes
+
+🎉 IMPLEMENTACIÓN COMPLETADA 🎉
+
+================================================================================

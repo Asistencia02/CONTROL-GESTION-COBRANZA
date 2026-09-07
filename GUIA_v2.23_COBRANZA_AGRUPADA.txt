@@ -1,0 +1,307 @@
+================================================================================
+GOOGLE APPS SCRIPT v2.23 - COBRANZA AGRUPADA
+================================================================================
+
+📌 CONCEPTO CLAVE: 1 PAGO_MULTIPLE = TODOS LOS CONCEPTOS PAGADOS DEL ALUMNO
+
+================================================================================
+FLUJO CONCEPTUAL
+================================================================================
+
+Alumno: JUAN PÉREZ (DNI 12345678)
+
+EXCEL (MARZO-AGOSTO 2026):
+  - INSCRIPCIÓN: $5000 pagado
+  - CUOTA MARZO: $2000 pagado
+  - SEGURO MARZO: $500 pagado
+  - CUOTA ABRIL: $2000 pagado
+  - SEGURO ABRIL: $500 pagado
+  - CUOTA MAYO: $2000 pagado
+  - SEGURO MAYO: $500 pagado
+  - CUOTA JUNIO: $2000 pagado
+  - SEGURO JUNIO: $500 pagado
+  - CUOTA JULIO: $2000 pagado
+  - SEGURO JULIO: $500 pagado
+  - CUOTA AGOSTO: $2000 pagado
+  - SEGURO AGOSTO: $500 pagado
+  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  TOTAL PAGADO: $19,000
+
+SCRIPT HACE:
+  ┌─────────────────────────────────────────────────────────┐
+  │ 1. RECOLECTAR todos estos conceptos                    │
+  │ 2. TRAER monto_original DE LA BD:                      │
+  │    - INSCRIPCIÓN: $5000 (original)                     │
+  │    - CUOTA: $2500 x 6 meses = $15000 (original)        │
+  │    - SEGURO: $600 x 6 meses = $3600 (original)         │
+  │    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━         │
+  │    TOTAL ORIGINAL: $23,600                             │
+  │                                                         │
+  │ 3. CREAR 1 PAGO_MULTIPLE:                              │
+  │    - numero_talonario: AUTO_25_1682601234              │
+  │    - monto_total: $19,000                              │
+  │    - cantidad_conceptos: 13                            │
+  │    - metodo_pago: EFECTIVO                             │
+  │    - estado: PAGADO                                    │
+  │                                                         │
+  │ 4. CREAR 13 DETALLES EN pagos_multiples_detalle:       │
+  │    - Detalle 1: concepto_id=15 (INSC), pagado=$5000,   │
+  │                 original=$5000                         │
+  │    - Detalle 2: concepto_id=16 (CUOTA M1), pagado=$2000│
+  │                 original=$2500                         │
+  │    - Detalle 3: concepto_id=17 (SEGURO M1), pagado=$500│
+  │                 original=$600                          │
+  │    ... (repite para cada concepto)                     │
+  │                                                         │
+  │ RESULTADO: 1 PAGO_MULTIPLE = 13 conceptos agrupados    │
+  └─────────────────────────────────────────────────────────┘
+
+BENEFICIOS:
+  ✅ 1 transacción lógica = 1 estudiante
+  ✅ Auditoría clara: qué pagó cada estudiante
+  ✅ Comparativa: lo que pagó vs. lo que debía
+  ✅ Flexible: puede ser EFECTIVO, TRANSFERENCIA, TARJETA, etc.
+
+================================================================================
+COLUMNAS DEL EXCEL (REQUERIDAS)
+================================================================================
+
+HOJA: ANALISTA2026, HIGIENE2026, INICIAL2026, PRIMARIA2026, SECUNDARIA2026
+
+Columnas obligatorias:
+  • ITEM (número secuencial)
+  • DNI (o vacío para generar)
+  • APELLIDO (obligatorio)
+  • NOMBRES (obligatorio)
+  • TELEFONO (opcional, max 20 caracteres)
+  • INSCRIPCION (monto o 0)
+  • [Columna METODO para INSCRIPCION]
+  • [Columna TALONARIO para INSCRIPCION]
+
+Para cada MES (MARZO, ABRIL, MAYO, JUNIO, JULIO, AGOSTO, SEPT, OCTUBRE, NOV, DIC):
+  • CUOTA {MES} (monto o 0)
+  • [Columna METODO para CUOTA]
+  • [Columna TALONARIO para CUOTA]
+  • SEGURO {MES} (monto o 0)
+  • [Columna METODO para SEGURO]
+  • [Columna TALONARIO para SEGURO]
+
+EJEMPLO:
+┌──────┬─────────┬──────────┬───────────┬───────────┬──────────────┬─────────────────┐
+│ ITEM │ DNI     │ APELLIDO │ NOMBRES   │ TELÉFONO  │ INSCRIPCION  │ METODO          │
+├──────┼─────────┼──────────┼───────────┼───────────┼──────────────┼─────────────────┤
+│ 1    │ 12345678│ PÉREZ    │ JUAN      │ 1234567890│ 5000         │ EFECTIVO        │
+│ 2    │ 87654321│ GARCÍA   │ MARÍA     │ 9876543210│ 2500         │ TRANSFERENCIA   │
+
+Para MARZO:
+┌──────────────┬────────────┬────────────┬────────────┐
+│ CUOTA MARZO  │ METODO     │ SEGURO MARZO │ METODO   │
+├──────────────┼────────────┼────────────┼────────────┤
+│ 2000         │ EFECTIVO   │ 500        │ EFECTIVO   │
+│ 0            │            │ 600        │ TRANSFERENCIA
+
+Repite para ABRIL, MAYO, etc.
+
+================================================================================
+VARIABLES IMPORTANTES EN EL SCRIPT
+================================================================================
+
+const MAPEO_HOJAS = {
+  "ANALISTA2026": { institucion_id: 1, carrera_id: 1 },
+  "HIGIENE2026": { institucion_id: 1, carrera_id: 3 },
+  "INICIAL2026": { institucion_id: 2, carrera_id: 4 },
+  "PRIMARIA2026": { institucion_id: 2, carrera_id: 5 },
+  "SECUNDARIA2026": { institucion_id: 2, carrera_id: 6 }
+};
+
+→ Define qué hoja = qué institución + carrera
+→ Modifica si tus hojas son diferentes
+
+const SUPABASE_URL = "https://tcqamchiwtijniiwbpde.supabase.co";
+const SUPABASE_KEY = "sb_publishable_...";
+
+→ Conexión a tu BD
+
+================================================================================
+FUNCIONES PRINCIPALES
+================================================================================
+
+1️⃣ ejecutarCobranzaAgrupada()
+   └─ Función manual del menú (🔄 SINCRONIZACIÓN COBRANZA → ▶️ EJECUTAR)
+   └─ Muestra UI y resultado en alerta
+
+2️⃣ ejecutarCobranzaInterna()
+   └─ Lógica real (sin UI)
+   └─ Llamada por ejecutarCobranzaAgrupada()
+
+3️⃣ normalizarExcelParaCobranza()
+   └─ Lee Excel origen
+   └─ Extrae estudiantes + conceptos pagados
+   └─ Retorna: { inst_id: { estudiantes: { dni: data } } }
+
+4️⃣ procesarHojaCobranza()
+   └─ Por cada hoja:
+      ├─ Lee cada fila (1 estudiante)
+      ├─ Recolecta TODOS los conceptos pagados (INSCRIPCION + CUOTA + SEGURO)
+      └─ Almacena en estudiantesMap[dni].conceptos[]
+
+5️⃣ procesarCobranzaPorInstitucion()
+   └─ Insert estudiantes
+   └─ Buscar en BD
+   └─ Cargar configuración
+   └─ Cargar conceptos
+   └─ CREAR PAGOS MÚLTIPLES
+
+6️⃣ crearPagoMultipleAgrupado() ⭐ LA FUNCIÓN CLAVE
+   └─ Toma 1 estudiante + sus conceptos pagados
+   └─ Busca concepto_id en BD
+   └─ Busca monto_original en configuracion_carreras
+   └─ Crea JSON de detalles:
+      [
+        { concepto_id: 15, monto_original: 5000, monto_pagado: 5000 },
+        { concepto_id: 16, monto_original: 2500, monto_pagado: 2000 },
+        { concepto_id: 17, monto_original: 600, monto_pagado: 500 },
+        ...
+      ]
+   └─ Llama RPC insertar_pago_multiple_con_detalles_upsert
+   └─ ✅ Crea 1 pago_multiple + N detalles
+
+================================================================================
+ESTRUCTURA DE DATOS EN EXCEL NORMALIZADO
+================================================================================
+
+Script NO crea Excel normalizado en v2.23 (enfocado en cobranza pura)
+
+SOLO crea 2 hojas en Google Sheet:
+  • LOG_SINCRONIZACION: resumen
+  • SKIPPED_DETAILS: errores
+
+================================================================================
+RESULTADO EN SUPABASE
+================================================================================
+
+Después de ejecutar v2.23:
+
+TABLA: pagos_multiples
+┌────┬──────────────┬──────────────┬───────────────┬──────────────┬────────────┐
+│ id │ estudiante_id│ numero_talon │ monto_total   │ cantidad_con │ metodo_pago│
+├────┼──────────────┼──────────────┼───────────────┼──────────────┼────────────┤
+│ 42 │ 25           │ AUTO_25_xxx  │ 19000         │ 13           │ EFECTIVO   │
+│ 43 │ 26           │ AUTO_26_xxx  │ 15500         │ 8            │ TRANSFER   │
+
+TABLA: pagos_multiples_detalle
+┌────┬──────────────┬──────────────┬────────────────┬────────────────┐
+│ id │ pago_mult_id │ concepto_id  │ monto_original │ monto_pagado   │
+├────┼──────────────┼──────────────┼────────────────┼────────────────┤
+│ 1  │ 42           │ 15           │ 5000           │ 5000           │
+│ 2  │ 42           │ 16           │ 2500           │ 2000           │
+│ 3  │ 42           │ 17           │ 600            │ 500            │
+│ 4  │ 42           │ 18           │ 2500           │ 2000           │
+│ 5  │ 42           │ 19           │ 600            │ 500            │
+... (hasta 13 filas para estudiante 25)
+
+TABLA: estudiantes
+┌────┬──────────┬──────────┬──────────┬─────────────┐
+│ id │ dni      │ apellido │ nombres  │ carrera_id  │
+├────┼──────────┼──────────┼──────────┼─────────────┤
+│ 25 │ 12345678 │ PÉREZ    │ JUAN     │ 1           │
+│ 26 │ 87654321 │ GARCÍA   │ MARÍA    │ 1           │
+
+================================================================================
+CÓMO USAR
+================================================================================
+
+1. Copiar google-apps-script-v2-23-COBRANZA-AGRUPADA.gs
+   └─ A: Google Sheet → Extensions → Apps Script
+
+2. Preparar Excel con estructura correcta
+   └─ 5 hojas: ANALISTA2026, HIGIENE2026, etc.
+   └─ Columnas: DNI, APELLIDO, NOMBRES, INSCRIPCION, CUOTA MARZO, etc.
+   └─ Datos: montos pagados por estudiante
+
+3. Ejecutar
+   └─ Google Sheet → 🔄 SINCRONIZACIÓN COBRANZA → ▶️ EJECUTAR COBRANZA AGRUPADA
+
+4. Ver resultado
+   └─ Alerta muestra:
+      ✅ COBRANZA COMPLETADA
+      📦 INSTITUCIÓN 1:
+         ✅ Estudiantes procesados: 45
+         💰 Pagos múltiples creados: 45
+         📊 Conceptos agrupados: 385
+         ⚠️ Errores: 0
+   
+   └─ Hoja: LOG_SINCRONIZACION (resumen por institución)
+   └─ Hoja: SKIPPED_DETAILS (errores: DNI vacío, APELLIDO vacío, etc.)
+
+5. Verificar en Supabase
+   └─ Supabase → pagos_multiples (debe haber N nuevos registros)
+   └─ Supabase → pagos_multiples_detalle (debe haber N*M detalles)
+
+6. Ver en Frontend React
+   └─ RegistroPagos debe mostrar los pagos (cargados como pago_multiple)
+   └─ Mira ModalConfirmacionCobro: muestra conceptos + monto_final
+
+================================================================================
+COMPARATIVA: EXCEL vs BD vs SUPABASE
+================================================================================
+
+EXCEL (lo que el usuario ingresa):
+  DNI: 12345678
+  INSCRIPCIÓN: $5000 (cuánto pagó)
+  CUOTA MARZO: $2000 (cuánto pagó)
+  ...
+  TOTAL: $19,000
+
+BD (configuracion_carreras, lo que DEBE pagar):
+  monto_inscripcion: $5000
+  monto_cuota: $2500
+  monto_seguro: $600
+  ...
+  TOTAL DEBIDO: $23,600
+
+SUPABASE (lo que se REGISTRA):
+  pago_multiple: 
+    monto_total: $19,000 (lo que pagó)
+    cantidad_conceptos: 13
+  
+  pagos_multiples_detalle (para cada concepto):
+    monto_pagado: $2000 (lo que pagó en CUOTA MARZO)
+    monto_original: $2500 (lo que DEBÍA pagar)
+
+RESULTADO:
+  Adeudado = $23,600 - $19,000 = $4,600
+
+================================================================================
+ERRORES COMUNES & SOLUCIONES
+================================================================================
+
+❌ "Archivo no encontrado: CUOTAS 2025..."
+   → Verifica el NOMBRE EXACTO del Excel
+   → Debe estar en Google Drive (accesible por Apps Script)
+
+❌ "Estudiantes procesados: 0"
+   → No encontró estudiantes con conceptos pagados
+   → Verifica que Excel tiene montos > 0 en INSCRIPCIÓN, CUOTA, SEGURO
+
+❌ "Pagos múltiples creados: 0"
+   → Los RPC fallaron
+   → Revisar Logs (View → Logs) para error exacto
+   → Verificar que BD tiene conceptos_pago configurados
+
+❌ "Encontrados: 0/45"
+   → Esperó 15 segundos pero estudiantes NO se insertaron
+   → Aumentar Utilities.sleep(15000) a 20000 o 30000
+
+✅ Contactar si error persiste: revisar Supabase logs + BD estructura
+
+================================================================================
+PRÓXIMOS PASOS (OPCIONAL)
+================================================================================
+
+1. Automatizar: Trigger cada noche (ejecutarCobranzaInterna)
+2. Email: Enviar resumen a gmail
+3. Dashboard: Conectar Google Data Studio
+4. Auditoría: Guardar logs en tabla de Supabase
+
+================================================================================

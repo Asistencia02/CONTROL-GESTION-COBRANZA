@@ -1,0 +1,169 @@
+╔════════════════════════════════════════════════════════════════════════════╗
+║           CHECKLIST: VALIDACIÓN DE NORMALIZACIÓN DE DATOS                  ║
+║                    cobranza_v3_1_1_final.gs                                ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+📋 ELEMENTOS CRÍTICOS A VERIFICAR
+
+┌─ FIX #1: MANEJO DE DUPLICADOS (Línea ~678)
+│
+├─ [ ] ¿Existe validación de DNI duplicado?
+│       Debe checar: if (dniProcesado.includes(dni))
+│
+├─ [ ] ¿Se usa continue; para saltar fila?
+│       ✅ continue; // Salta a siguiente iteración
+│       ❌ Procesa de todas formas
+│
+├─ [ ] ¿Se registra en log que fue saltado?
+│       Logger.log("DNI duplicado: " + dni + " - SALTADO")
+│
+├─ [ ] ¿Se mantiene un Set/Array de DNIs procesados?
+│       ✅ dniProcesado = [] o Set
+│       ❌ Sin control de duplicados
+│
+└─ IMPACTO: Si falla → Datos duplicados en AUDIT
+
+┌─ FIX #2: DEDUPLICACIÓN EN AUDIT (Línea ~695)
+│
+├─ [ ] ¿Se deduplica ANTES de agregar a AUDIT?
+│       ✅ Checa duplicado → Si existe, no agrega
+│       ❌ Agrega y después intenta limpiar
+│
+├─ [ ] ¿Qué estructura de datos usa para deduplicación?
+│       ✅ Map con clave: DNI + "_" + CONCEPTO_TIPO
+│       ✅ Set de objetos JSON
+│       ❌ Array simple (lento)
+│
+├─ [ ] ¿Valida por DNI o por DNI + CONCEPTO_TIPO?
+│       RECOMENDADO: DNI + CONCEPTO_TIPO
+│       (un DNI puede tener INSCRIPCION, CUOTA y SEGURO)
+│
+├─ [ ] ¿Se preserva el primer registro o el último?
+│       ✅ Primer registro (más seguro)
+│       ? Último registro (puede causar pérdida de datos)
+│
+└─ IMPACTO: Si falla → AUDIT con duplicados
+
+┌─ FIX #3: VALIDACIÓN DE SUMAS (Línea ~1036-1049)
+│
+├─ [ ] ¿Calcula suma total correctamente?
+│       let sumaTotal = 0;
+│       for (let reg of registrosProcesados) {
+│         sumaTotal += parseInt(reg.MONTO);
+│       }
+│
+├─ [ ] ¿Agrupa por CONCEPTO_TIPO?
+│       let sumaPorConcepto = {
+│         'INSCRIPCION': 0,
+│         'CUOTA': 0,
+│         'SEGURO': 0
+│       };
+│
+├─ [ ] ¿Genera log con formato completo?
+│       Logger.log("💰 VALIDACIÓN AUDIT:");
+│       Logger.log("  - Total registros: " + totalRegistros);
+│       Logger.log("  - Suma total: $" + sumaTotal);
+│       Logger.log("  - INSCRIPCION: " + sumaPorConcepto['INSCRIPCION']);
+│       Logger.log("  - CUOTA: " + sumaPorConcepto['CUOTA']);
+│       Logger.log("  - SEGURO: " + sumaPorConcepto['SEGURO']);
+│
+├─ [ ] ¿Valida MONTO = CELDA_VALOR?
+│       if (monto !== celdaValor) {
+│         Logger.log("⚠️  Error: Monto inconsistente para DNI " + dni);
+│       }
+│
+├─ [ ] ¿Detecta valores atípicos?
+│       if (monto > sumaPromedio * 5) {
+│         Logger.log("⚠️  Valor atípico detectado: DNI " + dni + " monto $" + monto);
+│       }
+│
+└─ IMPACTO: Si falla → Sin validación de integridad de datos
+
+╔════════════════════════════════════════════════════════════════════════════╗
+║                      NORMALIZACIÓN DE DATOS                               ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+┌─ TEXTOS (Nombres, Apellidos)
+├─ [ ] ¿Se ejecuta .trim() para eliminar espacios?
+├─ [ ] ¿Se convierte a mayúsculas? .toUpperCase()
+├─ [ ] ¿Se eliminan caracteres especiales innecesarios?
+└─ VALIDACIÓN: "ACOSTA OJEDA" vs "acosta ojeda  " debe ser igual
+
+┌─ NÚMEROS (DNI, MONTO)
+├─ [ ] ¿Se valida que DNI sea número?
+├─ [ ] ¿Se valida que MONTO sea número?
+├─ [ ] ¿Se convierte a parseInt/parseFloat?
+└─ VALIDACIÓN: "1500" vs 1500 debe ser igual
+
+┌─ FECHAS (CONCEPTO_MES)
+├─ [ ] ¿Se valida que mes sea válido?
+│       Meses válidos: ENERO, FEBRERO, ..., DICIEMBRE
+├─ [ ] ¿Se convierte a mayúsculas?
+└─ VALIDACIÓN: "marzo" vs "MARZO" debe ser igual
+
+┌─ CONCEPTO_TIPO
+├─ [ ] ¿Solo admite: INSCRIPCION, CUOTA, SEGURO?
+├─ [ ] ¿Se valida exactamente?
+└─ VALIDACIÓN: Si viene otro valor → Registra error
+
+╔════════════════════════════════════════════════════════════════════════════╗
+║                      PRUEBAS ESPECÍFICAS                                  ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+Ejecuta DRY RUN y verifica estos casos:
+
+TEST 1: DNI Duplicado
+├─ Entrada: DNI 1 aparece 2 veces con INSCRIPCION
+├─ Esperado: Solo 1 registro en AUDIT
+└─ Verificar en Log: "Duplicado... SALTADO"
+
+TEST 2: Inconsistencia Monto
+├─ Entrada: MONTO=1500, CELDA_VALOR=2000
+├─ Esperado: Registro saltado o registrado con error
+└─ Verificar en Log: "Error: Monto inconsistente"
+
+TEST 3: Suma Total para INICIAL + PRIMARIA + SECUNDARIA
+├─ Entrada: Todos los registros de estas 3 hojas
+├─ Esperado: $9,375,000 (verificado anteriormente)
+└─ Verificar en Log: "💰 VALIDACIÓN AUDIT: Suma total: $9,375,000"
+
+TEST 4: Valores Atípicos
+├─ Entrada: DNI 871 con CUOTA = $232,000
+├─ Esperado: Registrado con advertencia
+└─ Verificar en Log: "⚠️  Valor atípico detectado"
+
+╔════════════════════════════════════════════════════════════════════════════╗
+║                      PASOS PARA VERIFICAR                                 ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+1. Abre el script: Menú → 🔄 SINCRONIZACIÓN COBRANZA v3.1.1
+2. Ejecuta: ▶️ DRY RUN (Analizar sin grabar)
+3. Abre Logs: Ctrl+Enter (View > Logs)
+4. Busca:
+   ✅ "VALIDACIÓN AUDIT" - log de validación
+   ✅ "Duplicado" - detección de duplicados
+   ✅ "Error" - inconsistencias
+   ✅ Suma total = $9,375,000 (para INICIAL+PRIMARIA+SECUNDARIA)
+
+5. Compara:
+   ├─ Total registros en Log vs. en CSV
+   ├─ Suma total en Log vs. $9,375,000
+   └─ Contador de duplicados
+
+╔════════════════════════════════════════════════════════════════════════════╗
+║                      CONCLUSIÓN ESPERADA                                  ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+Si el script está normalizado CORRECTAMENTE:
+
+✅ Log muestra: "💰 VALIDACIÓN AUDIT: Total registros: ~213, Suma total: $9,375,000"
+✅ Desglose: INSCRIPCION + CUOTA + SEGURO = $9,375,000
+✅ Sin duplicados procesados
+✅ Sin inconsistencias de MONTO/CELDA_VALOR
+✅ Valores atípicos registrados con advertencia
+
+Si NO está normalizado:
+❌ Suma ≠ $9,375,000
+❌ Duplicados no registrados
+❌ Log vacío o con errores
+❌ Inconsistencias sin reportar

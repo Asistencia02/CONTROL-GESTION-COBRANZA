@@ -1,0 +1,326 @@
+================================================================================
+CHECKLIST DE VALIDACIÓN - v2.22 COBRANZA
+================================================================================
+
+Este documento verifica que tu implementación esté LISTA PARA USAR.
+
+================================================================================
+📋 FASE 1: VALIDAR ARCHIVOS GENERADOS
+================================================================================
+
+□ google-apps-script-codigo-v2-22-COBRANZA.gs (46.8 KB)
+  └─ Contiene: normalizarExcelMulti, procesarPagosConMetodo, sincronizarDatos, etc.
+  └─ Líneas de código: ~1600
+  └─ Versión: v2.22
+
+□ README_v2.22_COBRANZA.txt (15.3 KB)
+  └─ Explica: flujo completo, estructura, examples
+  └─ Secciones: 8+
+
+□ EJEMPLOS_JSON_v2.22.gs (8.2 KB)
+  └─ Funciones: insertarPagoSimple, insertarPagoMultiple, testCompleto
+  └─ Listas para copiar & ejecutar
+
+□ RESUMEN_v2.22_COMPLETADO.txt (12.2 KB)
+  └─ Explicación: qué se implementó, flujo, próximos pasos
+
+□ QUICK_REFERENCE_v2.22.txt (15.2 KB)
+  └─ Referencia rápida: métodos, errores, debugging
+
+✅ 5 archivos listos
+
+================================================================================
+📋 FASE 2: VALIDAR GOOGLE APPS SCRIPT
+================================================================================
+
+□ Código pegado en Google Apps Script (Extensions → Apps Script)
+□ Sin errores de sintaxis (puede ejecutar)
+□ Todas las funciones presentes:
+   □ doGet()
+   □ doPost()
+   □ doOptions()
+   □ onOpen()
+   □ ejecutarFullAutoManual()
+   □ ejecutarFullAutoInterno()
+   □ ejecutarFullAutoTrigger()
+   □ normalizarExcelMulti()
+   □ procesarHoja()
+   □ procesarPagosConMetodo()
+   □ procesarEstudiantes()
+   □ buscarEstudiantes()
+   □ cargarConceptos()
+   □ obtenerPagosExistentes()
+   □ obtenerPagosDetalles()
+   □ convertirMesANumero()
+   □ validarEstudiante()
+   □ generarDNISinDuplicados()
+   □ sincronizarDatos()
+   □ guardarResultadoFinalMulti()
+   □ guardarSkippedDetails()
+   □ mostrarResumenManual()
+   □ mostrarLogsManual()
+
+✅ Todas las funciones presentes
+
+================================================================================
+📋 FASE 3: VALIDAR EXCEL ORIGEN
+================================================================================
+
+Archivo: "CUOTAS 2025 INSM vigente para cristian.xlsx"
+
+□ Archivo existe en Google Drive
+□ Script tiene acceso al archivo
+
+Hojas requeridas:
+  □ ANALISTA2026 (institución_id: 1, carrera_id: 1)
+  □ HIGIENE2026 (institución_id: 1, carrera_id: 3)
+  □ INICIAL2026 (institución_id: 2, carrera_id: 4)
+  □ PRIMARIA2026 (institución_id: 2, carrera_id: 5)
+  □ SECUNDARIA2026 (institución_id: 2, carrera_id: 6)
+
+Columnas en cada hoja:
+  □ ITEM (número secuencial)
+  □ DNI (válido o vacío para generar)
+  □ APELLIDO (obligatorio, no vacío)
+  □ NOMBRES (obligatorio, no vacío)
+  □ TELEFONO (opcional, ≤20 caracteres)
+  □ INSCRIPCION (monto numérico o 0)
+  □ Columna METODO (para INSCRIPCION)
+  □ Columna TALONARIO (para INSCRIPCION)
+  
+  Para cada mes: MARZO, ABRIL, MAYO, JUNIO, JULIO, AGOSTO, SEPT, OCTUBRE, NOV, DIC
+    □ CUOTA {MES} (monto numérico o 0)
+    □ Columna METODO (para CUOTA)
+    □ Columna TALONARIO (para CUOTA)
+    □ SEGURO {MES} (monto numérico o 0)
+    □ Columna METODO (para SEGURO)
+    □ Columna TALONARIO (para SEGURO)
+
+Datos válidos (ejemplos):
+  □ DNI: "12345678" o vacío (se genera)
+  □ APELLIDO: "PÉREZ" (no vacío)
+  □ NOMBRES: "JUAN" (no vacío)
+  □ TELEFONO: "1234567890" (≤20 chars)
+  □ METODO: "EFECTIVO", "TRANSFERENCIA", "TARJETA_CREDITO", "TARJETA_DEBITO", o "DIVIDIDO"
+  □ TALONARIO: "0001" o vacío (se genera auto)
+  □ MONTO: 5000, 10000, 0 (numéricos)
+
+✅ Excel origin válido
+
+================================================================================
+📋 FASE 4: VALIDAR HOJA PAGOS_DETALLES (SI USAS DIVIDIDO)
+================================================================================
+
+□ Hoja PAGOS_DETALLES existe en Excel origen (SI planeas usar DIVIDIDO)
+  
+  Columnas:
+    □ DNI
+    □ CONCEPTO (valores: "INSCRIPCION", "CUOTA", "SEGURO")
+    □ MES (ej: "MARZO", "ABRIL", etc.)
+    □ MONTO (numérico)
+    □ METODO_PAGO (ej: "EFECTIVO")
+    □ TALONARIO (número único)
+  
+  Ejemplo de fila:
+    DNI: 12345678
+    CONCEPTO: CUOTA
+    MES: MARZO
+    MONTO: 1000
+    METODO_PAGO: EFECTIVO
+    TALONARIO: 001
+  
+  IMPORTANTE: Todas las filas con MISMO (DNI, CONCEPTO, MES)
+              crearán 1 pago_multiple = suma de MONTOs
+
+✅ PAGOS_DETALLES válido (si aplica)
+
+================================================================================
+📋 FASE 5: VALIDAR SUPABASE
+================================================================================
+
+Base de datos: tcqamchiwtijniiwbpde
+
+□ Tabla: estudiantes (INT id, BIGINT institucion_id, VARCHAR dni, ...)
+□ Tabla: pagos (INT id, BIGINT estudiante_id, BIGINT concepto_id, ...)
+□ Tabla: pagos_multiples (BIGINT id, BIGINT estudiante_id, ...)
+□ Tabla: pagos_multiples_detalle (BIGINT id, BIGINT pago_multiple_id, ...)
+□ Tabla: conceptos_pago (INT id, INT institucion_id, INT carrera_id, ...)
+□ Tabla: configuracion_carreras (INT id, INT institucion_id, INT carrera_id, ...)
+
+Funciones RPC presentes:
+  □ search_estudiantes_by_dni(dni_list)
+  □ search_pagos_by_estudiantes(est_id_list)
+  □ insertar_pago_multiple_con_detalles_upsert(p_institucion_id, p_estudiante_id, ...)
+
+Datos en configuracion_carreras:
+  □ Institución 1:
+      □ Carrera 1 (ANALISTA): monto_inscripcion, monto_cuota, monto_seguro
+      □ Carrera 3 (HIGIENE): idem
+  □ Institución 2:
+      □ Carrera 4 (INICIAL): idem
+      □ Carrera 5 (PRIMARIA): idem
+      □ Carrera 6 (SECUNDARIA): idem
+
+✅ Supabase configurado
+
+================================================================================
+📋 FASE 6: VALIDAR PERMISOS & ACCESO
+================================================================================
+
+□ Tienes acceso a Google Apps Script (Extensions → Apps Script)
+□ Tienes acceso a Supabase (dashboard.supabase.com)
+□ API Key de Supabase está correcta en el script:
+  └─ SUPABASE_KEY = "sb_publishable_p2KFfCQlF79Q5WTgMgrlNQ_sYCsxxCP"
+□ URL de Supabase está correcta:
+  └─ SUPABASE_URL = "https://tcqamchiwtijniiwbpde.supabase.co"
+□ El usuario de Google Drive tiene acceso al archivo Excel origen
+
+✅ Permisos validados
+
+================================================================================
+📋 FASE 7: TEST INICIAL (RECOMENDADO)
+================================================================================
+
+Para verificar que TODO FUNCIONA ANTES DE USAR EN PRODUCCIÓN:
+
+1. □ Abre Google Apps Script de tu Sheet
+2. □ Selecciona función: "insertarPagoSimple" (desde EJEMPLOS_JSON_v2.22.gs)
+3. □ Click "Run"
+4. □ Revisa Logs (View → Logs)
+   └─ Status: 201 (significa ✅ insertado)
+5. □ Ve a Supabase → pagos → verifica que hay 1 fila nueva
+
+Si Status = 201: ✅ TODO OK, continúa
+Si Status = 400 u otro error: ❌ Hay problema, revisa hoja SKIPPED_DETAILS después
+
+6. □ Ahora test PAGOS_MULTIPLES (si vas a usar DIVIDIDO):
+   └─ Selecciona: "insertarPagoMultiple"
+   └─ Click "Run"
+   └─ Revisa Logs (debe haber insertado pago_multiple + 3 detalles)
+
+7. □ Test LOTE:
+   └─ Selecciona: "insertarLotePagos"
+   └─ Click "Run"
+   └─ Debe insertar 10 pagos sin errores
+
+✅ Tests iniciales pasados
+
+================================================================================
+📋 FASE 8: EJECUCIÓN PRINCIPAL (PRIMERO EN TEST)
+================================================================================
+
+□ En Google Sheet: 🔄 SINCRONIZACIÓN → ▶️ FULL AUTO MULTI
+□ Aparece diálogo: "⏳ Procesando múltiples instituciones... por favor espera"
+□ Espera entre 2-5 minutos (depende cantidad de estudiantes/pagos)
+□ Cuando termine, aparece alert: ✅ COMPLETADO MULTI-INSTITUCIÓN
+
+Alerta muestra:
+  📦 INSTITUCIÓN 1:
+     • Estudiantes: NNN
+     • Inscripciones: MMM
+     • Cuotas: XXX
+     • Seguros: YYY
+     • Ignorados: ZZZ | Errores: WWW
+  
+  📦 INSTITUCIÓN 2:
+     (idem)
+
+✅ Sincronización completada
+
+================================================================================
+📋 FASE 9: VALIDAR RESULTADOS
+================================================================================
+
+□ Hoja: SYNC_NORMALIZADO_MULTI_2026 (creada por script)
+  └─ Hojas internas:
+      □ CONFIG (vacía, es template)
+      □ ESTUDIANTES_INST1 (lista de estudiantes)
+      □ PAGOS_INSCRIPCION_INST1, PAGOS_CUOTA_INST1, PAGOS_SEGURO_INST1
+      □ ESTUDIANTES_INST2, PAGOS_INSCRIPCION_INST2, etc.
+
+□ Hoja: LOG_SINCRONIZACION
+  └─ Columnas: FECHA, INSTITUCIÓN, ESTADO, PAGOS_SIMPLES, PAGOS_MULTIPLES, ERRORES
+  └─ 1 fila por institución sincronizada
+  └─ Valores esperados: ✅ OK (si estado = OK)
+
+□ Hoja: SKIPPED_DETAILS
+  └─ Columnas: HOJA_ORIGEN, NUMERO_FILA, DNI, APELLIDO, NOMBRES, MOTIVO
+  └─ Si vacía: ✅ PERFECTO (sin errores)
+  └─ Si hay filas: ✅ Revisa motivo (común: DNI vacío, APELLIDO vacío)
+
+□ Supabase:
+  └─ Tabla estudiantes: nuevos registros insertados ✅
+  └─ Tabla pagos: nuevos pagos simples ✅
+  └─ Tabla pagos_multiples: nuevos pagos múltiples (si usaste DIVIDIDO) ✅
+  └─ Tabla pagos_multiples_detalle: detalles del pago múltiple ✅
+
+✅ Resultados validados
+
+================================================================================
+📋 FASE 10: VALIDAR CON FRONTEND
+================================================================================
+
+□ Abre tu frontend React (módulo de cobranza)
+□ Haz login
+□ Ve a RegistroPagos
+□ Filtra por la institución que sincronizaste
+□ Verás todos los PAGOS DEL SCRIPT en la tabla
+  └─ Columna Talonario: muestra numero_talonario del script
+  └─ Columna Método: muestra metodo_pago (EFECTIVO, TRANSFERENCIA, etc.)
+  └─ Columna Monto: muestra monto_pagado
+
+Si VES los pagos en React: ✅ INTEGRACIÓN PERFECTA
+Si NO VES los pagos: ❌ Revisa filtros, institución, permisos Supabase
+
+✅ Frontend sincronizado
+
+================================================================================
+📋 FASE 11: AUTOMATIZACIÓN (OPCIONAL)
+================================================================================
+
+□ En Google Sheet: Extensions → Apps Script → Editor
+□ Click: (reloj) Triggers (esquina inferior izquierda)
+□ "+ Create new trigger"
+   └─ Function: ejecutarFullAutoTrigger
+   └─ Event: Time-driven
+   └─ Type: Day timer
+   └─ Time: 23:00 (o la hora que prefieras)
+   └─ Click "Create"
+
+Ahora el script se ejecutará AUTOMÁTICAMENTE cada noche a las 23:00
+
+✅ Trigger configurado (si lo deseas)
+
+================================================================================
+📋 FASE 12: DOCUMENTACIÓN & BACKUP
+================================================================================
+
+□ Guardaste QUICK_REFERENCE_v2.22.txt para futura referencia
+□ Guardaste EJEMPLOS_JSON_v2.22.gs para debugging
+□ Hiciste BACKUP del script (Google Apps Script tiene historial)
+□ Documentaste CAMBIOS en tu MAPEO_HOJAS si modificaste
+
+✅ Documentación lista
+
+================================================================================
+✅ CHECKLIST COMPLETO: LISTO PARA PRODUCCIÓN
+================================================================================
+
+Si todos los √ están MARCADOS, tu sistema está listo para usar en producción.
+
+Si alguno NO está marcado:
+  1. Revisa esa sección
+  2. Soluciona el problema
+  3. Regresa aquí y marca cuando esté ✅
+  4. Continúa con el siguiente
+
+Si hay ERRORES en cualquier fase:
+  1. Revisa QUICK_REFERENCE_v2.22.txt (sección "ERRORES COMUNES")
+  2. Revisa README_v2.22_COBRANZA.txt (sección "TROUBLESHOOTING")
+  3. Corre EJEMPLOS_JSON_v2.22.gs para test individual
+
+Cuando TODOS los items estén ✅, tu implementación está LISTA para PRODUCCIÓN.
+
+¡Espero que disfrutes tu nuevo sistema de cobranza automatizado! 🚀
+
+================================================================================

@@ -1,0 +1,67 @@
+      // 2. OBTENER DATOS DE PAGOS REALES - JOIN directo
+      const { data: pagosRealData, error: errPagosReal } = await supabase
+        .from('pagos_multiples_detalle')
+        .select('monto_pagado, conceptos_pago(carrera_id, institucion_id)')
+
+      if (errPagosReal) throw errPagosReal
+
+      // Filtrar solo datos de esta institución
+      const pagosFiltered = (pagosRealData || []).filter(p => {
+        return p.conceptos_pago && p.conceptos_pago.institucion_id === institucionId
+      })
+
+      console.log(`[EXEC] ${pagosFiltered.length} detalles de pago cargados para institución ${institucionId}`)
+
+      // 3. INICIALIZAR CARRERAS
+      const carreras = new Map<number, CarreraData>()
+      estudiantesActivos.forEach(est => {
+        if (!carreras.has(est.carrera_id)) {
+          carreras.set(est.carrera_id, {
+            id: est.carrera_id,
+            nombre: (est as any).carreras?.nombre || `Carrera ${est.carrera_id}`,
+            estudiantes: 0,
+            alDia: 0,
+            enMora: 0,
+            recaudable: 0,
+            recaudado: 0,
+            deuda: 0,
+          })
+        }
+        carreras.get(est.carrera_id)!.estudiantes++
+      })
+
+      // 4. PROCESAR PAGOS REALES - Sumar montos por carrera
+      let totalRecaudado = 0
+      
+      pagosFiltered.forEach((detalle: any) => {
+        if (detalle.conceptos_pago) {
+          const carreraId = detalle.conceptos_pago.carrera_id
+          const monto = detalle.monto_pagado || 0
+          
+          totalRecaudado += monto
+          
+          const carr = carreras.get(carreraId)
+          if (carr) {
+            carr.recaudado += monto
+          }
+        }
+      })
+
+      console.log(`[EXEC] Total recaudado institución ${institucionId}: $${totalRecaudado}`)
+
+      // 5. OBTENER ESTUDIANTES CON PAGO DESDE pagos_multiples
+      const { data: pagosMultiplesData } = await supabase
+        .from('pagos_multiples')
+        .select('estudiante_id')
+        .eq('institucion_id', institucionId)
+        .neq('estado', 'ANULADO')
+
+      const estudiantesConPago = new Set<number>()
+      let estudiantesAlDia = 0
+      
+      if (pagosMultiplesData && pagosMultiplesData.length > 0) {
+        pagosMultiplesData.forEach((pm: any) => {
+          estudiantesConPago.add(pm.estudiante_id)
+        })
+        estudiantesAlDia = estudiantesConPago.size
+      }
