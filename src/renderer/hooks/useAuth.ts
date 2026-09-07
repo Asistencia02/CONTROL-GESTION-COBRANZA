@@ -29,7 +29,7 @@ interface UseAuthStore {
   login: (nombreCompleto: string, contraseña: string) => Promise<boolean>
   logout: () => void
   restaurarSesion: () => void
-  cargarModulosPermitidos: (usuario_id: number) => Promise<void>
+  cargarModulosPermitidos: (usuario_id: number, rol?: string) => Promise<void>
   cargarInstitucionesPermitidas: (usuario_id: number, rol: string) => Promise<void>
   obtenerTodosLosUsuarios: () => Promise<Usuario[]>
   actualizarPermisosUsuario: (usuario_id: number, modulos: { modulo: string; permitido: boolean }[]) => Promise<boolean>
@@ -98,7 +98,7 @@ export const useAuth = create<UseAuthStore>((set, get) => {
         }
 
         // Cargar módulos permitidos
-        await get().cargarModulosPermitidos(usuarios.id)
+        await get().cargarModulosPermitidos(usuarios.id, usuarios.rol || 'USER')
         // Cargar instituciones permitidas
         await get().cargarInstitucionesPermitidas(usuarios.id, usuarios.rol || 'USER')
 
@@ -157,10 +157,10 @@ export const useAuth = create<UseAuthStore>((set, get) => {
       }
     },
 
-    cargarModulosPermitidos: async (usuario_id: number) => {
+    cargarModulosPermitidos: async (usuario_id: number, rol?: string) => {
       try {
-        const usuario = get().usuarioActual
-        if (usuario?.rol === 'ADMIN') {
+        const rolUsuario = rol || get().usuarioActual?.rol
+        if (rolUsuario === 'ADMIN') {
           const todosLosModulos = [
             'dashboard',
             'cobranzas',
