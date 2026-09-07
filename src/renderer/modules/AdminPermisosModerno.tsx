@@ -20,8 +20,10 @@ const MODULOS = [
   { id: 'ventakiosco', label: 'Venta Kiosco', icon: '🛒' },
   { id: 'gastos', label: 'Gastos', icon: '📉' },
   { id: 'reportes', label: 'Reportes', icon: '📈' },
+  { id: 'reportesejecutivos', label: 'Reporte Completo', icon: '📋' },
+  { id: 'reportefinanciero', label: 'Reporte Financiero', icon: '💼' },
   { id: 'cierre', label: 'Cierre', icon: '🔒' },
-  { id: 'kioscoconfig', label: 'Config. Kiosco', icon: '??' },
+  { id: 'kioscoconfig', label: 'Config. Kiosco', icon: '⚙️' },
   { id: 'configuracion', label: 'Configuración', icon: '⚙️' },
   { id: 'sincronizacion', label: 'Sincronización', icon: '🔄' },
 ]
@@ -300,11 +302,11 @@ export const AdminPermisosModerno: React.FC = () => {
               <div>
                 <h2 className="text-lg font-bold text-white mb-2">
                   {usuarioSeleccionado.nombre_completo}
-                  {usuarioSeleccionado.rol === 'ADMIN' && <span className="ml-2 text-xs text-purple-400">(ADMINISTRADOR)</span>}
+                  {usuarioSeleccionado.rol === 'ADMIN' && <span className="ml-2 text-xs text-purple-400">(ADMINISTRADOR - Acceso a TODO)</span>}
                 </h2>
                 {usuarioSeleccionado.rol === 'ADMIN' && (
                   <div className="p-3 bg-purple-500/10 border border-purple-500/30 rounded text-purple-300 text-sm">
-                    Los administradores tienen acceso a todos los módulos automáticamente.
+                    👑 Los administradores tienen acceso automático a TODOS los módulos del sistema. Pueden administrar permisos de otros usuarios desde este panel.
                   </div>
                 )}
               </div>
@@ -361,8 +363,8 @@ export const AdminPermisosModerno: React.FC = () => {
               </div>
 
               <div>
-                <h3 className="text-sm font-bold text-white mb-3">Módulos Permitidos</h3>
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                <h3 className="text-sm font-bold text-white mb-3">Módulos Permitidos ({usuarioSeleccionado.rol === 'ADMIN' ? 'TODOS' : Object.values(usuarioSeleccionado.permisos).filter(Boolean).length})</h3>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                   {MODULOS.map(modulo => (
                     <button
                       key={modulo.id}
@@ -467,6 +469,3 @@ export const AdminPermisosModerno: React.FC = () => {
     </div>
   )
 }
-
-
-
