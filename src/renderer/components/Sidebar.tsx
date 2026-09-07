@@ -80,7 +80,7 @@ const NAV_ITEMS: NavItem[] = [
   },
   {
     id: 'reportesejecutivos',
-    label: 'Panel Ejecutivo',
+    label: 'Reporte Completo',
     icon: <BarChart3 size={20} />,
     color: 'from-yellow-500 to-orange-500',
   },

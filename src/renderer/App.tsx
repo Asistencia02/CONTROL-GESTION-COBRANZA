@@ -81,12 +81,24 @@ export const App: React.FC = () => {
     }
 
     // Validar acceso al módulo
-    if (!modulosPermitidos.includes(activeModule) && activeModule !== 'dashboard' && activeModule !== 'reportesejecutivos') {
+    if (!modulosPermitidos.includes(activeModule) && activeModule !== 'dashboard' && activeModule !== 'reportesejecutivos' && activeModule !== 'admin') {
       return (
         <div className="flex items-center justify-center h-screen">
           <div className="text-center">
             <h2 className="text-2xl font-bold text-slate-300 mb-2">Acceso Denegado</h2>
             <p className="text-slate-500">No tienes permiso para acceder a este módulo</p>
+          </div>
+        </div>
+      )
+    }
+
+    // Validar acceso a reportesejecutivos (solo admin)
+    if (activeModule === 'reportesejecutivos' && usuarioActual?.rol !== 'ADMIN') {
+      return (
+        <div className="flex items-center justify-center h-screen">
+          <div className="text-center">
+            <h2 className="text-2xl font-bold text-slate-300 mb-2">Acceso Denegado</h2>
+            <p className="text-slate-500">Solo administradores pueden acceder a Reportes Completos</p>
           </div>
         </div>
       )
