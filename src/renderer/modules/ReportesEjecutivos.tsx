@@ -158,7 +158,7 @@ export const ReportesEjecutivos: React.FC = () => {
         }
       }
 
-      // 2. OBTENER CONCEPTOS
+      // 2. OBTENER CONCEPTOS - TODOS sin filtrar por fecha
       const { data: conceptos, error: errConc } = await supabase
         .from('conceptos_pago')
         .select('id, nombre, tipo, monto, mes, año, carrera_id')
@@ -167,25 +167,14 @@ export const ReportesEjecutivos: React.FC = () => {
 
       if (errConc) throw errConc
 
-      // FILTRAR EXACTAMENTE COMO useDeudas
-      const conceptosFiltrados = (conceptos || []).filter(c => {
-        if (c.mes && c.año) {
-          if (c.año < anioActual) return true
-          if (c.año === anioActual) {
-            if (c.mes < mesActual) return true
-            if (c.mes === mesActual && diaActual > 10) return true
-          }
-          return false
-        } else {
-          return true
-        }
-      })
+      // INCLUIR TODOS LOS CONCEPTOS (el reporte muestra lo que pagaron, no lo que vence)
+      const conceptosFiltrados = (conceptos || [])
 
-      console.log(`[EXEC] ${conceptosFiltrados.length} conceptos filtrados`)
+      console.log(`[EXEC] ${conceptosFiltrados.length} conceptos cargados`)
 
       // 3. INICIALIZAR ARRAY DE PAGOS (SOLO DE pagos_multiples_detalle)
       let todosPagos: any[] = []
-      console.log(`[EXEC] (Leyendo solo de pagos_multiples_detalle)`)
+      console.log(`[EXEC] (Leyendo pagos_multiples_detalle)`)
 
       // 4. OBTENER PAGOS MÚLTIPLES
       const { data: pagosMultiplesData } = await supabase
@@ -230,6 +219,7 @@ export const ReportesEjecutivos: React.FC = () => {
       // 6. PROCESAR ESTUDIANTES
       let totalRecaudable = 0
       let totalRecaudado = 0
+      let estudiantesAlDia = 0
       let estudiantesEnMora = 0
       const morosos: MorosoData[] = []
       const carreras = new Map<number, CarreraData>()
@@ -278,9 +268,6 @@ export const ReportesEjecutivos: React.FC = () => {
           }
         })
 
-        // AL DÍA si sin deuda
-        const esDeudor = adeudadoTotal > 0
-
         // Actualizar totales GLOBALES
         totalRecaudable += conceptosDelEstudiante.reduce((sum, c) => sum + c.monto, 0)
         totalRecaudado += recaudadoEst
@@ -291,7 +278,12 @@ export const ReportesEjecutivos: React.FC = () => {
           carr.recaudable += conceptosDelEstudiante.reduce((sum, c) => sum + c.monto, 0)
           carr.recaudado += recaudadoEst
           
-          if (esDeudor) {
+          // Si pagó ALGO = está al día en el reporte
+          if (recaudadoEst > 0) {
+            carr.alDia++
+            estudiantesAlDia++
+          } else if (adeudadoTotal > 0) {
+            // Si no pagó NADA pero debe = en mora
             carr.enMora++
             carr.deuda += adeudadoTotal
             estudiantesEnMora++
@@ -301,8 +293,6 @@ export const ReportesEjecutivos: React.FC = () => {
               carrera: (est as any).carreras?.nombre || 'Sin carrera',
               deuda: adeudadoTotal,
             })
-          } else {
-            carr.alDia++
           }
         }
       })
@@ -312,7 +302,6 @@ export const ReportesEjecutivos: React.FC = () => {
       // CALCULAR MÉTRICAS
       const eficiencia = totalRecaudable > 0 ? (totalRecaudado / totalRecaudable) * 100 : 0
       const moraPercentage = totalEstudiantes > 0 ? (estudiantesEnMora / totalEstudiantes) * 100 : 0
-      const estudiantesAlDia = totalEstudiantes - estudiantesEnMora
 
       const resultado = {
         kpi: {
