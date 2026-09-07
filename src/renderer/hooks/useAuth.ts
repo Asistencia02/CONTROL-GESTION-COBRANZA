@@ -169,6 +169,8 @@ export const useAuth = create<UseAuthStore>((set, get) => {
             'ventakiosco',
             'gastos',
             'reportes',
+            'reportesejecutivos',
+            'reportefinanciero',
             'cierre',
             'configuracion',
             'sincronizacion'
