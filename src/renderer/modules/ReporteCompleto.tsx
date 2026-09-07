@@ -80,7 +80,9 @@ export const ReporteCompleto: React.FC = () => {
         const key = `inst${c.institucion_id}-carr${c.carrera_id}`
         conceptosPorInstCarrera.set(key, (conceptosPorInstCarrera.get(key) || 0) + 1)
       })
-      console.log('[REPORTE] Conceptos por inst-carrera:', Object.fromEntries(conceptosPorInstCarrera))
+      console.log('[REPORTE] ✅ Conceptos por inst-carrera:', Object.fromEntries(conceptosPorInstCarrera))
+      console.log('[REPORTE] ✅ TOTAL conceptos cargados:', conceptosData.length)
+      console.log('[REPORTE] ✅ TOTAL pagos detalle cargados:', pagosDetalle.length)
 
       // Paso 4: Crear mapa de pagos por concepto
       const pagosMap = new Map<number, { monto: number; cantidad: number }>()
@@ -93,6 +95,19 @@ export const ReporteCompleto: React.FC = () => {
         item.monto += pago.monto_pagado
         item.cantidad++
       })
+
+      console.log('[REPORTE] 📊 Conceptos únicos con pagos:', pagosMap.size)
+      console.log('[REPORTE] 🔍 Primeros 10 concepto_ids con pagos:', Array.from(pagosMap.keys()).slice(0, 10))
+      
+      // Debug: contar cuántos pagos corresponden a cada carrera
+      const pagosConceptos = new Map<number, number>()
+      conceptosData.forEach((c: any) => {
+        const pagos = pagosMap.get(c.id)
+        if (pagos && pagos.cantidad > 0) {
+          pagosConceptos.set(c.carrera_id, (pagosConceptos.get(c.carrera_id) || 0) + pagos.cantidad)
+        }
+      })
+      console.log('[REPORTE] 💰 Pagos por carrera (desde conceptos):', Object.fromEntries(pagosConceptos))
 
       // Paso 5: Procesar conceptos y crear array de reportes
       const conceptosArray: ConceptoPago[] = conceptosData.map((concepto: any) => {
