@@ -64,31 +64,20 @@ export const ReporteCompleto: React.FC = () => {
 
       console.log(`[REPORTE] ${pagosDetalle.length} registros de pago cargados`)
 
-      // Paso 3: Obtener conceptos con JOIN para traer todos los que tienen pagos
-      // Usar RPC o query directa que no tenga RLS
-      const { data: conceptosConPagos, error: errConc } = await supabase
-        .from('pagos_multiples_detalle')
-        .select('concepto_id')
-        .then(async result => {
-          if (result.error) throw result.error
-          const conceptoIds = [...new Set(result.data?.map((p: any) => p.concepto_id) || [])]
-          
-          // Traer conceptos usando los IDs directamente
-          const { data: conceptos, error: err } = await supabase
-            .from('conceptos_pago')
-            .select('id, institucion_id, carrera_id, tipo, mes, monto')
-          
-          return { data: conceptos, error: err }
-        })
+      // Paso 3: Obtener TODOS los conceptos (sin RLS)
+      // Usar una query raw con Supabase que evite RLS
+      const { data: conceptosData, error: errConc } = await supabase
+        .from('conceptos_pago')
+        .select('id, institucion_id, carrera_id, tipo, mes, monto', { count: 'exact' })
 
       if (errConc) throw errConc
-      if (!conceptosConPagos) throw new Error('No se pudieron cargar conceptos')
+      if (!conceptosData) throw new Error('No se pudieron cargar conceptos')
 
-      console.log(`[REPORTE] ${conceptosConPagos.length} conceptos cargados TOTALES`)
+      console.log(`[REPORTE] ${conceptosData.length} conceptos cargados TOTALES`)
       
       // Debug: contar conceptos por institución-carrera
       const conceptosPorInstCarrera = new Map<string, number>()
-      conceptosConPagos.forEach((c: any) => {
+      conceptosData.forEach((c: any) => {
         const key = `inst${c.institucion_id}-carr${c.carrera_id}`
         conceptosPorInstCarrera.set(key, (conceptosPorInstCarrera.get(key) || 0) + 1)
       })
@@ -111,7 +100,7 @@ export const ReporteCompleto: React.FC = () => {
       
       // Debug: contar cuántos pagos corresponden a cada carrera
       const pagosConceptos = new Map<number, number>()
-      conceptosConPagos.forEach((c: any) => {
+      conceptosData.forEach((c: any) => {
         const pagos = pagosMap.get(c.id)
         if (pagos && pagos.cantidad > 0) {
           pagosConceptos.set(c.carrera_id, (pagosConceptos.get(c.carrera_id) || 0) + pagos.cantidad)
@@ -120,7 +109,7 @@ export const ReporteCompleto: React.FC = () => {
       console.log('[REPORTE] 💰 Pagos por carrera (desde conceptos):', Object.fromEntries(pagosConceptos))
 
       // Paso 5: Procesar conceptos y crear array de reportes
-      const conceptosArray: ConceptoPago[] = conceptosConPagos.map((concepto: any) => {
+      const conceptosArray: ConceptoPago[] = conceptosData.map((concepto: any) => {
         const pagos = pagosMap.get(concepto.id) || { monto: 0, cantidad: 0 }
         return {
           id: concepto.id,
