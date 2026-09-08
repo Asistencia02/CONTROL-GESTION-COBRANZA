@@ -77,6 +77,13 @@ const PRIMER_MES_ACADEMICO = 3  // Marzo
 const ULTIMO_MES_ACADEMICO = 8  // Agosto
 const PRIMER_DIA_VENCIMIENTO = 10
 
+// Función helper para determinar si un concepto debe aplicar beca
+const esConceptoBeca = (tipo: string): boolean => {
+  if (!tipo) return true
+  const tipoLower = tipo.toLowerCase()
+  return !tipoLower.includes('inscripcion') && !tipoLower.includes('seguro')
+}
+
 export const useReportesFinancieros = (institucionId: number) => {
   const { obtenerTotalVentasPeriodo } = useVentasInsumos()
   const [resumenEjecutivo, setResumenEjecutivo] = useState<ResumenEjecutivo | null>(null)
@@ -246,6 +253,7 @@ export const useReportesFinancieros = (institucionId: number) => {
       console.log('[MORA] Conceptos vencidos para mora: cuota+seguro:', conceptosVencidosMoraLocal.filter(c => c.tipo?.toUpperCase() !== 'INSCRIPCION').length, '| Total:', conceptosVencidosMoraLocal.length, '| diaActual:', diaActual, 'mesVencidoActual:', mesVencidoActual)
 
       // ========== CALCULAR RESUMEN EJECUTIVO - PARTE ANUAL ==========
+      // ✅ ARREGLO: Aplicar lógica de becas igual que en useDeudas
       let totalRecaudable = 0
       let totalRecaudado = 0
       let estudiantesEnMora = 0
@@ -254,27 +262,56 @@ export const useReportesFinancieros = (institucionId: number) => {
       // Calcular deuda por estudiante - USAR conceptosVencidos COMPLETO (sin filtro día 10)
       estudiantesActivos.forEach(est => {
         let deudaEst = 0
+        const esBecado100 = est.estado === 'BECADO_100'
+        const esBecado50 = est.estado === 'BECADO_50'
+        
         conceptosVencidos.forEach(concepto => {
           // SOLO conceptos de la carrera del estudiante
           if (concepto.carrera_id !== est.carrera_id) return
           
-          const tienePago = pagosValidos.some(p => p.estudiante_id === est.id && p.concepto_id === concepto.id && p.monto_pagado >= concepto.monto)
-          if (!tienePago) {
-            deudaEst += concepto.monto
+          const montoPago = pagosValidos.find(p => p.estudiante_id === est.id && p.concepto_id === concepto.id)?.monto_pagado || 0
+          const montoOriginal = concepto.monto
+          const aplicaBeca = esConceptoBeca(concepto.tipo)
+          
+          // BECADO_100: conceptos con beca aparecen como pagados automáticamente
+          if (esBecado100 && aplicaBeca) {
+            return
+          }
+          
+          // BECADO_50: solo paga 50% de conceptos con beca
+          let montoAResponsabilidad = montoOriginal
+          if (esBecado50 && aplicaBeca) {
+            montoAResponsabilidad = montoOriginal * 0.5
+          }
+          
+          const deudaDelConcepto = montoAResponsabilidad - montoPago
+          if (deudaDelConcepto > 0) {
+            deudaEst += deudaDelConcepto
           }
         })
-        if (deudaEst > 0) {
+        
+        // BECADO_100 nunca aparece en mora
+        if (deudaEst > 0 && !esBecado100) {
           conceptoPorEstudiante.set(est.id, deudaEst)
           estudiantesEnMora++
         }
       })
 
-      // CORREGIDO: Calcular recaudable por carrera y sumar - NO multiplicar por TODOS los estudiantes
+      // ✅ ARREGLO: Calcular recaudable aplicando becas
       totalRecaudable = 0
       estudiantesActivos.forEach(est => {
+        const esBecado50 = est.estado === 'BECADO_50'
         const conceptosDelEstudiante = conceptosFiltrados.filter(c => c.carrera_id === est.carrera_id)
+        
         conceptosDelEstudiante.forEach(c => {
-          totalRecaudable += c.monto
+          const aplicaBeca = esConceptoBeca(c.tipo)
+          let montoResponsable = c.monto
+          
+          if (esBecado50 && aplicaBeca) {
+            montoResponsable = c.monto * 0.5
+          }
+          
+          totalRecaudable += montoResponsable
         })
       })
       totalRecaudado = pagosValidos.reduce((sum, p) => sum + p.monto_pagado, 0)
@@ -306,25 +343,55 @@ export const useReportesFinancieros = (institucionId: number) => {
       // Calcular deuda por estudiante - SOLO CONCEPTOS ANTES DE MES ACTUAL
       estudiantesActivos.forEach(est => {
         let deudaEst = 0
+        const esBecado100 = est.estado === 'BECADO_100'
+        const esBecado50 = est.estado === 'BECADO_50'
+        
         conceptosAntesdeMesActual.forEach(concepto => {
           if (concepto.carrera_id !== est.carrera_id) return
-          const tienePago = pagosValidos.some(p => p.estudiante_id === est.id && p.concepto_id === concepto.id && p.monto_pagado >= concepto.monto)
-          if (!tienePago) {
-            deudaEst += concepto.monto
+          
+          const montoPago = pagosValidos.find(p => p.estudiante_id === est.id && p.concepto_id === concepto.id)?.monto_pagado || 0
+          const montoOriginal = concepto.monto
+          const aplicaBeca = esConceptoBeca(concepto.tipo)
+          
+          // BECADO_100: conceptos con beca aparecen como pagados automáticamente
+          if (esBecado100 && aplicaBeca) {
+            return
+          }
+          
+          // BECADO_50: solo paga 50% de conceptos con beca
+          let montoAResponsabilidad = montoOriginal
+          if (esBecado50 && aplicaBeca) {
+            montoAResponsabilidad = montoOriginal * 0.5
+          }
+          
+          const deudaDelConcepto = montoAResponsabilidad - montoPago
+          if (deudaDelConcepto > 0) {
+            deudaEst += deudaDelConcepto
           }
         })
-        if (deudaEst > 0) {
+        
+        // BECADO_100 nunca aparece en mora
+        if (deudaEst > 0 && !esBecado100) {
           conceptoPorEstudianteMesActual.set(est.id, deudaEst)
           estudiantesEnMoraMesActual++
         }
       })
 
-      // Recaudable mes actual (hasta antes de vencer el mes)
+      // ✅ ARREGLO: Recaudable mes actual con aplicación de becas
       totalRecaudableMesActual = 0
       estudiantesActivos.forEach(est => {
+        const esBecado50 = est.estado === 'BECADO_50'
         const conceptosDelEstudiante = conceptosAntesdeMesActual.filter(c => c.carrera_id === est.carrera_id)
+        
         conceptosDelEstudiante.forEach(c => {
-          totalRecaudableMesActual += c.monto
+          const aplicaBeca = esConceptoBeca(c.tipo)
+          let montoResponsable = c.monto
+          
+          if (esBecado50 && aplicaBeca) {
+            montoResponsable = c.monto * 0.5
+          }
+          
+          totalRecaudableMesActual += montoResponsable
         })
       })
       
@@ -575,25 +642,33 @@ export const useReportesFinancieros = (institucionId: number) => {
 
       // ========== GASTOS E INSUMOS (solo INSM) ==========
       if (institucionId === 2) {
+        // ✅ ARREGLO: Filtrar gastos por fecha actual (año actual)
+        const fechaInicio = new Date(anioActual, 0, 1).toISOString().split('T')[0]
+        const fechaFin = new Date().toISOString().split('T')[0]
+        
         const { data: gastosData } = await supabase
           .from('gastos')
           .select('monto')
           .eq('institucion_id', 2)
+          .gte('fecha', fechaInicio)
+          .lte('fecha', fechaFin)
 
         if (gastosData) {
           const total = gastosData.reduce((sum, g) => sum + (g.monto || 0), 0)
           setTotalGastos(total)
         }
 
-        const fechaInicio = new Date(anioActual, 0, 1).toISOString().split('T')[0]
-        const fechaFin = new Date().toISOString().split('T')[0]
+        // Ventas de insumos - ya filtrada por período en el hook
         const totalVentasIns = await obtenerTotalVentasPeriodo(institucionId, fechaInicio, fechaFin)
         setTotalVentasInsumos(totalVentasIns)
 
+        // ✅ ARREGLO: Filtrar kiosco por fecha actual y validar concepto
         const { data: cajaGrandeData } = await supabase
           .from('caja_grande')
           .select('monto')
           .eq('institucion_id', 2)
+          .gte('fecha', fechaInicio)
+          .lte('fecha', fechaFin)
 
         if (cajaGrandeData) {
           const total = cajaGrandeData.reduce((sum, c) => sum + (c.monto || 0), 0)

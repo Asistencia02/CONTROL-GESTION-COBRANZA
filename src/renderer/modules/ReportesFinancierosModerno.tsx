@@ -9,7 +9,7 @@ import { Bar, Pie } from 'react-chartjs-2'
 
 ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, Title)
 
-type TabReporte = 'resumen' | 'carrera' | 'mes' | 'mora' | 'proyeccion'
+type TabReporte = 'resumen' | 'carrera' | 'mes' | 'mora' | 'proyeccion' | 'comparativa'
 type VistaResumen = 'anual' | 'mes-actual'
 
 const getEfficiencyClass = (porcentaje: number): string => {
@@ -106,7 +106,7 @@ export const ReportesFinancierosModerno: React.FC = () => {
               <div className="space-y-6">
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                   <div className="p-6 bg-gradient-to-br from-slate-800/80 to-slate-900/40 border border-slate-700/60 rounded-2xl shadow-2xl backdrop-blur-xl hover:shadow-2xl transition-all">
-                    <h2 className="text-xl font-bold text-white mb-1 flex items-center gap-2"><PieChart size={24} className="text-purple-400" />Distribución de Cobranza</h2>
+                    <h2 className="text-xl font-bold text-white mb-1 flex items-center gap-2"><PieChart size={24} className="text-purple-400" />Distribución de Ingresos</h2>
                     <p className="text-xs text-slate-400 mb-4">Meta anual: Dic 2026</p>
                     <div style={{ height: '300px' }}>{chartResumen ? <Pie data={chartResumen} options={{ maintainAspectRatio: false, responsive: true, plugins: { legend: { labels: { color: '#cbd5e1', font: { size: 14, weight: 'bold' } }, padding: 20 } }, tooltip: { titleFont: { size: 14 }, bodyFont: { size: 12 } } }} /> : null}</div>
                   </div>
@@ -122,7 +122,7 @@ export const ReportesFinancierosModerno: React.FC = () => {
 
                     <div className="p-5 bg-gradient-to-br from-green-600/30 to-green-900/20 border border-green-500/40 rounded-xl shadow-lg hover:shadow-xl transition-all">
                       <div className="flex items-center justify-between mb-2">
-                        <p className="text-sm text-green-300 font-bold flex items-center gap-2"><CheckCircle size={18} />PAGADORES AL DÍA</p>
+                        <p className="text-sm text-green-300 font-bold flex items-center gap-2"><CheckCircle size={18} />AL DÍA</p>
                         <span className="text-2xl font-black text-green-400">{resumenEjecutivo.total_estudiantes - resumenEjecutivo.estudiantes_en_mora}</span>
                       </div>
                       <div className="h-2 bg-green-900/50 rounded-full overflow-hidden"><div className="h-full bg-gradient-to-r from-green-500 to-emerald-400" style={{ width: `${((resumenEjecutivo.total_estudiantes - resumenEjecutivo.estudiantes_en_mora) / resumenEjecutivo.total_estudiantes * 100)}%` }} /></div>
@@ -141,13 +141,13 @@ export const ReportesFinancierosModerno: React.FC = () => {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                   <div className="p-5 bg-gradient-to-br from-blue-700/40 to-blue-900/30 border-2 border-blue-500/50 rounded-xl shadow-lg">
-                    <p className="text-xs text-blue-300 font-bold mb-2">RECAUDABLE ANUAL</p>
+                    <p className="text-xs text-blue-300 font-bold mb-2">INGRESOS ESPERADOS</p>
                     <p className="text-2xl font-black text-blue-200 mb-2">{formatoMoneda(resumenEjecutivo.total_recaudable_año)}</p>
                     <div className="flex items-center gap-1 text-blue-400 text-xs"><DollarSign size={14} />Meta: Dic 2026</div>
                   </div>
 
                   <div className="p-5 bg-gradient-to-br from-green-700/40 to-green-900/30 border-2 border-green-500/50 rounded-xl shadow-lg">
-                    <p className="text-xs text-green-300 font-bold mb-2">COBRADO ANUAL</p>
+                    <p className="text-xs text-green-300 font-bold mb-2">INGRESOS RECIBIDOS</p>
                     <p className="text-2xl font-black text-green-200 mb-2">{formatoMoneda(resumenEjecutivo.recaudado_hasta_hoy)}</p>
                     <div className="flex items-center gap-1 text-green-400 text-xs font-bold"><TrendingUp size={14} />{resumenEjecutivo.porcentaje_cobro.toFixed(1)}%</div>
                   </div>
@@ -167,13 +167,13 @@ export const ReportesFinancierosModerno: React.FC = () => {
                       </div>
 
                       <div className="p-5 bg-gradient-to-br from-red-700/40 to-red-900/30 border-2 border-red-500/50 rounded-xl shadow-lg">
-                        <p className="text-xs text-red-300 font-bold mb-2">GASTOS</p>
+                        <p className="text-xs text-red-300 font-bold mb-2">EGRESOS</p>
                         <p className="text-2xl font-black text-red-200 mb-2">{formatoMoneda(totalGastos)}</p>
                         <div className="flex items-center gap-1 text-red-400 text-xs font-bold"><TrendingDown size={14} />-{(totalGastos / (resumenEjecutivo.recaudado_hasta_hoy || 1) * 100).toFixed(1)}%</div>
                       </div>
 
                       <div className="p-5 bg-gradient-to-br from-violet-700/40 to-violet-900/30 border-2 border-violet-500/50 rounded-xl shadow-lg">
-                        <p className="text-xs text-violet-300 font-bold mb-2">NETO TOTAL</p>
+                        <p className="text-xs text-violet-300 font-bold mb-2">SALDO NETO</p>
                         <p className="text-2xl font-black text-violet-200 mb-2">{formatoMoneda(netoTotal)}</p>
                         <div className="flex items-center gap-1 text-violet-400 text-xs font-bold"><DollarSign size={14} />{((netoTotal / (resumenEjecutivo.total_recaudable_año || 1)) * 100).toFixed(1)}% del recaudable</div>
                       </div>
@@ -183,7 +183,7 @@ export const ReportesFinancierosModerno: React.FC = () => {
                   {!esINSM && (
                     <>
                       <div className="p-5 bg-gradient-to-br from-red-700/40 to-red-900/30 border-2 border-red-500/50 rounded-xl shadow-lg">
-                        <p className="text-xs text-red-300 font-bold mb-2">PENDIENTE ANUAL</p>
+                        <p className="text-xs text-red-300 font-bold mb-2">INGRESOS PENDIENTES</p>
                         <p className="text-2xl font-black text-red-200 mb-2">{formatoMoneda(resumenEjecutivo.deuda_actual)}</p>
                         <div className="flex items-center gap-1 text-red-400 text-xs font-bold"><TrendingDown size={14} />{(100 - resumenEjecutivo.porcentaje_cobro).toFixed(1)}%</div>
                       </div>
@@ -207,7 +207,7 @@ export const ReportesFinancierosModerno: React.FC = () => {
 
                 <div className="p-6 bg-gradient-to-r from-slate-800/80 via-slate-800/60 to-slate-800/40 border border-slate-700/50 rounded-2xl shadow-xl backdrop-blur">
                   <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-lg font-bold text-white flex items-center gap-2"><Activity size={20} className="text-cyan-400" />Gestión de Cobranza Anual</h3>
+                    <h3 className="text-lg font-bold text-white flex items-center gap-2"><Activity size={20} className="text-cyan-400" />Gestión de Ingresos Anual</h3>
                     <div className="text-right">
                       <p className="text-xs text-slate-400">Eficiencia</p>
                       <p className="text-3xl font-black text-transparent bg-gradient-to-r from-green-400 to-cyan-400 bg-clip-text">{resumenEjecutivo.porcentaje_cobro.toFixed(1)}%</p>
@@ -241,7 +241,7 @@ export const ReportesFinancierosModerno: React.FC = () => {
 
                     <div className="p-5 bg-gradient-to-br from-green-600/30 to-green-900/20 border border-green-500/40 rounded-xl shadow-lg hover:shadow-xl transition-all">
                       <div className="flex items-center justify-between mb-2">
-                        <p className="text-sm text-green-300 font-bold flex items-center gap-2"><CheckCircle size={18} />PAGADORES AL DÍA</p>
+                        <p className="text-sm text-green-300 font-bold flex items-center gap-2"><CheckCircle size={18} />AL DÍA</p>
                         <span className="text-2xl font-black text-green-400">{resumenEjecutivo.total_estudiantes - resumenEjecutivo.estudiantes_mora_mes_actual}</span>
                       </div>
                       <div className="h-2 bg-green-900/50 rounded-full overflow-hidden"><div className="h-full bg-gradient-to-r from-green-500 to-emerald-400" style={{ width: `${((resumenEjecutivo.total_estudiantes - resumenEjecutivo.estudiantes_mora_mes_actual) / resumenEjecutivo.total_estudiantes * 100)}%` }} /></div>
@@ -260,19 +260,19 @@ export const ReportesFinancierosModerno: React.FC = () => {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                   <div className="p-5 bg-gradient-to-br from-blue-700/40 to-blue-900/30 border-2 border-blue-500/50 rounded-xl shadow-lg">
-                    <p className="text-xs text-blue-300 font-bold mb-2">RECAUDABLE</p>
+                    <p className="text-xs text-blue-300 font-bold mb-2">INGRESOS ESPERADOS</p>
                     <p className="text-2xl font-black text-blue-200 mb-2">{formatoMoneda(resumenEjecutivo.recaudable_mes_actual)}</p>
                     <div className="flex items-center gap-1 text-blue-400 text-xs"><DollarSign size={14} />Hasta {resumenEjecutivo.mes_actual_nombre}</div>
                   </div>
 
                   <div className="p-5 bg-gradient-to-br from-green-700/40 to-green-900/30 border-2 border-green-500/50 rounded-xl shadow-lg">
-                    <p className="text-xs text-green-300 font-bold mb-2">COBRADO</p>
+                    <p className="text-xs text-green-300 font-bold mb-2">INGRESOS RECIBIDOS</p>
                     <p className="text-2xl font-black text-green-200 mb-2">{formatoMoneda(resumenEjecutivo.recaudado_mes_actual)}</p>
                     <div className="flex items-center gap-1 text-green-400 text-xs font-bold"><TrendingUp size={14} />{resumenEjecutivo.porcentaje_cobro_mes_actual.toFixed(1)}%</div>
                   </div>
 
                   <div className="p-5 bg-gradient-to-br from-red-700/40 to-red-900/30 border-2 border-red-500/50 rounded-xl shadow-lg">
-                    <p className="text-xs text-red-300 font-bold mb-2">PENDIENTE</p>
+                    <p className="text-xs text-red-300 font-bold mb-2">INGRESOS PENDIENTES</p>
                     <p className="text-2xl font-black text-red-200 mb-2">{formatoMoneda(resumenEjecutivo.pendiente_mes_actual)}</p>
                     <div className="flex items-center gap-1 text-red-400 text-xs font-bold"><TrendingDown size={14} />{(100 - resumenEjecutivo.porcentaje_cobro_mes_actual).toFixed(1)}%</div>
                   </div>
@@ -314,7 +314,7 @@ export const ReportesFinancierosModerno: React.FC = () => {
               </div>
 
               <div className="p-6 bg-gradient-to-br from-slate-800/80 to-slate-900/40 border border-slate-700/60 rounded-2xl shadow-2xl backdrop-blur-xl">
-                <h2 className="text-xl font-bold text-white mb-1 flex items-center gap-2"><TrendingUp size={24} className="text-amber-400" />Eficiencia de Cobranza %</h2>
+                <h2 className="text-xl font-bold text-white mb-1 flex items-center gap-2"><TrendingUp size={24} className="text-amber-400" />Eficiencia de Recaudación %</h2>
                 <p className="text-xs text-slate-400 mb-4">Porcentaje de cumplimiento por nivel</p>
                 <div style={{ height: '320px' }}><Bar data={chartEficiencia} options={{ indexAxis: 'y', maintainAspectRatio: false, responsive: true, scales: { x: { max: 120, ticks: { color: '#cbd5e1', font: { size: 12, weight: 'bold' } } }, y: { ticks: { color: '#cbd5e1', font: { size: 12 } } } }, plugins: { legend: { labels: { color: '#cbd5e1', font: { size: 12, weight: 'bold' } } } } }} /></div>
               </div>
@@ -425,7 +425,7 @@ export const ReportesFinancierosModerno: React.FC = () => {
                     </div>
                   </div>
                   <div className="p-5 bg-gradient-to-br from-green-600/30 to-green-900/20 border-2 border-green-500/40 rounded-xl">
-                    <p className="text-xs text-green-300 font-bold mb-2 flex items-center gap-1"><CheckCircle size={14} />REALMENTE COBRADO</p>
+                    <p className="text-xs text-green-300 font-bold mb-2 flex items-center gap-1"><CheckCircle size={14} />REALMENTE RECAUDADO</p>
                     <p className="text-3xl font-black text-green-200 mb-3">{formatoMoneda(mes.cobre_real_total)}</p>
                     <div className="bg-green-900/30 rounded p-2 border border-green-500/20">
                       <p className="text-xs text-green-400 font-bold">Eficiencia de Cobro</p>
@@ -480,7 +480,7 @@ export const ReportesFinancierosModerno: React.FC = () => {
                     <p className="text-xs text-orange-400 mt-2">Agosto 2026</p>
                   </div>
                   <div className="p-4 bg-gradient-to-r from-green-900/40 to-green-800/20 rounded-lg border border-green-500/30">
-                    <p className="text-xs text-green-300 font-bold mb-2 flex items-center gap-1"><TrendingUp size={14} />Recaudado hasta Hoy</p>
+                    <p className="text-xs text-green-300 font-bold mb-2 flex items-center gap-1"><TrendingUp size={14} />INGRESOS RECIBIDOS</p>
                     <p className="text-3xl font-black text-green-200">{formatoMoneda(proyeccionAño.recaudado_hasta_hoy)}</p>
                     <p className="text-xs text-green-400 mt-2">Marzo - Agosto</p>
                   </div>
@@ -492,7 +492,7 @@ export const ReportesFinancierosModerno: React.FC = () => {
                 <p className="text-xs text-slate-400 mb-6 pb-4 border-b border-amber-500/30">Si el ritmo continúa igual</p>
                 <div className="space-y-5">
                   <div className="p-4 bg-gradient-to-r from-slate-900/60 to-slate-800/40 rounded-lg border border-slate-700/40">
-                    <p className="text-xs text-slate-400 font-bold mb-2 flex items-center gap-1"><DollarSign size={14} />Total Recaudable</p>
+                    <p className="text-xs text-slate-400 font-bold mb-2 flex items-center gap-1"><DollarSign size={14} />INGRESOS ESPERADOS</p>
                     <p className="text-3xl font-black text-amber-200">{formatoMoneda(proyeccionAño.recaudable_año)}</p>
                     <p className="text-xs text-amber-400 mt-2">Meta anual (Mar-Dic)</p>
                   </div>
@@ -519,6 +519,92 @@ export const ReportesFinancierosModerno: React.FC = () => {
           </div>
         ) : null
 
+      case 'comparativa':
+        return (
+          <div className="space-y-6">
+            <div className="p-6 bg-gradient-to-br from-slate-800/80 to-slate-900/40 border border-slate-700/60 rounded-2xl shadow-2xl backdrop-blur-xl">
+              <h2 className="text-2xl font-bold text-white mb-1 flex items-center gap-2"><BarChart3 size={28} className="text-cyan-400" />Comparativa: Ingresos vs Egresos</h2>
+              <p className="text-xs text-slate-400 mb-6">Análisis mensual de entradas y salidas</p>
+              
+              {esINSM ? (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="p-5 bg-gradient-to-br from-green-600/30 to-green-900/20 border-2 border-green-500/40 rounded-xl">
+                      <p className="text-xs text-green-300 font-bold mb-2 flex items-center gap-1"><TrendingUp size={14} />TOTAL INGRESOS</p>
+                      <p className="text-3xl font-black text-green-200 mb-2">{formatoMoneda((resumenEjecutivo?.recaudado_hasta_hoy || 0) + (totalVentasInsumos || 0) + (totalVentasKiosco || 0))}</p>
+                      <div className="space-y-1 text-xs text-green-400">
+                        <p>📚 Cuotas: {formatoMoneda(resumenEjecutivo?.recaudado_hasta_hoy || 0)}</p>
+                        <p>🛒 Insumos: {formatoMoneda(totalVentasInsumos || 0)}</p>
+                        <p>🍕 Kiosco: {formatoMoneda(totalVentasKiosco || 0)}</p>
+                      </div>
+                    </div>
+
+                    <div className="p-5 bg-gradient-to-br from-red-600/30 to-red-900/20 border-2 border-red-500/40 rounded-xl">
+                      <p className="text-xs text-red-300 font-bold mb-2 flex items-center gap-1"><TrendingDown size={14} />TOTAL EGRESOS</p>
+                      <p className="text-3xl font-black text-red-200 mb-2">{formatoMoneda(totalGastos || 0)}</p>
+                      <div className="space-y-1 text-xs text-red-400">
+                        <p>💸 Gastos Operativos</p>
+                        <p>Hasta {resumenEjecutivo?.mes_actual_nombre}</p>
+                      </div>
+                    </div>
+
+                    <div className={`p-5 rounded-xl border-2 ${netoTotal >= 0 ? 'bg-gradient-to-br from-emerald-600/30 to-emerald-900/20 border-emerald-500/40' : 'bg-gradient-to-br from-orange-600/30 to-orange-900/20 border-orange-500/40'}`}>
+                      <p className={`text-xs font-bold mb-2 flex items-center gap-1 ${netoTotal >= 0 ? 'text-emerald-300' : 'text-orange-300'}`}><Gauge size={14} />SALDO NETO</p>
+                      <p className={`text-3xl font-black mb-2 ${netoTotal >= 0 ? 'text-emerald-200' : 'text-orange-200'}`}>{formatoMoneda(netoTotal)}</p>
+                      <p className={`text-xs ${netoTotal >= 0 ? 'text-emerald-400' : 'text-orange-400'}`}>
+                        {netoTotal >= 0 ? '✅ Superávit' : '⚠️ Déficit'}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="p-6 bg-gradient-to-r from-slate-800/80 via-slate-800/60 to-slate-800/40 border border-slate-700/50 rounded-2xl">
+                    <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2"><BarChart3 size={20} className="text-cyan-400" />Desglose de Ingresos</h3>
+                    <div className="space-y-3">
+                      <div>
+                        <div className="flex justify-between mb-2">
+                          <span className="text-sm font-bold text-slate-300">📚 Cuotas de Estudiantes</span>
+                          <span className="text-sm font-bold text-green-400">{((resumenEjecutivo?.recaudado_hasta_hoy || 0) / ((resumenEjecutivo?.recaudado_hasta_hoy || 0) + (totalVentasInsumos || 0) + (totalVentasKiosco || 0) || 1) * 100).toFixed(1)}%</span>
+                        </div>
+                        <div className="h-2 bg-slate-700/50 rounded-full overflow-hidden border border-slate-600/50">
+                          <div className="h-full bg-gradient-to-r from-green-500 to-emerald-400" style={{ width: `${((resumenEjecutivo?.recaudado_hasta_hoy || 0) / ((resumenEjecutivo?.recaudado_hasta_hoy || 0) + (totalVentasInsumos || 0) + (totalVentasKiosco || 0) || 1) * 100)}%` }} />
+                        </div>
+                        <p className="text-xs text-slate-400 mt-1">{formatoMoneda(resumenEjecutivo?.recaudado_hasta_hoy || 0)}</p>
+                      </div>
+
+                      <div>
+                        <div className="flex justify-between mb-2">
+                          <span className="text-sm font-bold text-slate-300">🛒 Venta de Insumos</span>
+                          <span className="text-sm font-bold text-blue-400">{((totalVentasInsumos || 0) / ((resumenEjecutivo?.recaudado_hasta_hoy || 0) + (totalVentasInsumos || 0) + (totalVentasKiosco || 0) || 1) * 100).toFixed(1)}%</span>
+                        </div>
+                        <div className="h-2 bg-slate-700/50 rounded-full overflow-hidden border border-slate-600/50">
+                          <div className="h-full bg-gradient-to-r from-blue-500 to-cyan-400" style={{ width: `${((totalVentasInsumos || 0) / ((resumenEjecutivo?.recaudado_hasta_hoy || 0) + (totalVentasInsumos || 0) + (totalVentasKiosco || 0) || 1) * 100)}%` }} />
+                        </div>
+                        <p className="text-xs text-slate-400 mt-1">{formatoMoneda(totalVentasInsumos || 0)}</p>
+                      </div>
+
+                      <div>
+                        <div className="flex justify-between mb-2">
+                          <span className="text-sm font-bold text-slate-300">🍕 Ventas Kiosco</span>
+                          <span className="text-sm font-bold text-orange-400">{((totalVentasKiosco || 0) / ((resumenEjecutivo?.recaudado_hasta_hoy || 0) + (totalVentasInsumos || 0) + (totalVentasKiosco || 0) || 1) * 100).toFixed(1)}%</span>
+                        </div>
+                        <div className="h-2 bg-slate-700/50 rounded-full overflow-hidden border border-slate-600/50">
+                          <div className="h-full bg-gradient-to-r from-orange-500 to-yellow-400" style={{ width: `${((totalVentasKiosco || 0) / ((resumenEjecutivo?.recaudado_hasta_hoy || 0) + (totalVentasInsumos || 0) + (totalVentasKiosco || 0) || 1) * 100)}%` }} />
+                        </div>
+                        <p className="text-xs text-slate-400 mt-1">{formatoMoneda(totalVentasKiosco || 0)}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-12 bg-slate-800/50 border border-slate-700/50 rounded-xl">
+                  <AlertCircle size={32} className="text-slate-400 mx-auto mb-2" />
+                  <p className="text-slate-400 font-semibold">Esta comparativa solo está disponible para la institución INSM</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )
+
       default:
         return null
     }
@@ -529,7 +615,7 @@ export const ReportesFinancierosModerno: React.FC = () => {
       <div className="mb-8">
         <div className="flex justify-between items-start mb-4">
           <div>
-            <h1 className="text-5xl font-black text-transparent bg-gradient-to-r from-purple-400 via-pink-400 to-purple-400 bg-clip-text mb-2">📊 Dashboard Financiero</h1>
+            <h1 className="text-5xl font-black text-transparent bg-gradient-to-r from-purple-400 via-pink-400 to-purple-400 bg-clip-text mb-2">📊 Reportes Financieros</h1>
             <p className="text-slate-400 flex items-center gap-2"><Activity size={16} />{institucionActiva.nombre}</p>
           </div>
           <button onClick={refrescar} className="p-3 hover:bg-slate-700/50 rounded-xl transition-all hover:scale-110"><RefreshCw size={24} className="text-cyan-400" /></button>
@@ -542,7 +628,8 @@ export const ReportesFinancierosModerno: React.FC = () => {
           { id: 'carrera', label: 'Por Carrera', icon: Users, color: 'from-blue-600 to-blue-700' },
           { id: 'mes', label: 'Meta Mensual', icon: Target, color: 'from-cyan-600 to-cyan-700' },
           { id: 'mora', label: 'Top Mora', icon: Award, color: 'from-red-600 to-red-700' },
-          { id: 'proyeccion', label: 'Proyección', icon: Zap, color: 'from-amber-600 to-amber-700' }
+          { id: 'proyeccion', label: 'Proyección', icon: Zap, color: 'from-amber-600 to-amber-700' },
+          { id: 'comparativa', label: 'Ingresos vs Egresos', icon: BarChart3, color: 'from-violet-600 to-violet-700' }
         ].map(({ id, label, icon: Icon, color }) => (
           <button
             key={id}
