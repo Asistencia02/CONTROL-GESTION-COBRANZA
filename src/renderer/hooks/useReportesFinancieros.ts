@@ -106,6 +106,8 @@ export const useReportesFinancieros = (institucionId: number) => {
   const [reporteMesAMes, setReporteMesAMes] = useState<ReporteMesAMes[]>([])
   const [topEstudiantesMora, setTopEstudiantesMora] = useState<TopEstudiantesMora[]>([])
   const [proyeccionAño, setProyeccionAño] = useState<ProyeccionAño | null>(null)
+  const [desgloseConceptos, setDesgloseConceptos] = useState<DesgloseConcepto[]>([])
+  const [estudiantesAlDia, setEstudiantesAlDia] = useState<EstudianteAlDia[]>([])
   const [totalGastos, setTotalGastos] = useState(0)
   const [totalVentasInsumos, setTotalVentasInsumos] = useState(0)
   const [totalVentasKiosco, setTotalVentasKiosco] = useState(0)
@@ -657,6 +659,86 @@ export const useReportesFinancieros = (institucionId: number) => {
         setTotalVentasKiosco(0)
       }
 
+      // DESGLOSE POR CONCEPTO
+      const desgloseMap = new Map<string, { esperado: number; cobrado: number; conceptos: number }>()
+      
+      conceptosFiltrados.forEach(c => {
+        const tipo = c.tipo?.toUpperCase() || 'OTRO'
+        const est = desgloseMap.get(tipo) || { esperado: 0, cobrado: 0, conceptos: 0 }
+        const cantEstudiantes = estudiantesActivos.filter(e => e.carrera_id === c.carrera_id).length
+        est.esperado += c.monto * cantEstudiantes
+        est.conceptos += 1
+        desgloseMap.set(tipo, est)
+      })
+      
+      pagosValidos.forEach(p => {
+        const concepto = conceptosFiltrados.find(c => c.id === p.concepto_id)
+        if (!concepto) return
+        const tipo = concepto.tipo?.toUpperCase() || 'OTRO'
+        const est = desgloseMap.get(tipo) || { esperado: 0, cobrado: 0, conceptos: 0 }
+        est.cobrado += p.monto_pagado || 0
+        desgloseMap.set(tipo, est)
+      })
+      
+      const desgloseConceptosArray: DesgloseConcepto[] = Array.from(desgloseMap.entries()).map(([tipo, data]) => ({
+        tipo,
+        total_esperado: data.esperado,
+        total_cobrado: data.cobrado,
+        total_pendiente: Math.max(0, data.esperado - data.cobrado),
+        porcentaje_cobro: data.esperado > 0 ? (data.cobrado / data.esperado) * 100 : 0,
+        cantidad_conceptos: data.conceptos
+      }))
+      
+      setDesgloseConceptos(desgloseConceptosArray)
+      console.log('[REPORTES] Desglose conceptos:', desgloseConceptosArray.length)
+      
+      // ESTUDIANTES AL DÍA
+      const estudianteAlDiaArray: EstudianteAlDia[] = []
+      
+      estudiantesActivos.forEach(est => {
+        let totalResponsable = 0
+        let totalPagado = 0
+        
+        conceptosFiltrados.forEach(concepto => {
+          if (concepto.carrera_id !== est.carrera_id) return
+          
+          const montoPago = pagosValidos.find(p => p.estudiante_id === est.id && p.concepto_id === concepto.id)?.monto_pagado || 0
+          const montoOriginal = concepto.monto
+          const aplicaBeca = esConceptoBeca(concepto.tipo)
+          const esBecado100 = est.estado === 'BECADO_100'
+          const esBecado50 = est.estado === 'BECADO_50'
+          
+          let montoResponsable = montoOriginal
+          
+          if (esBecado100 && aplicaBeca) {
+            return
+          }
+          if (esBecado50 && aplicaBeca) {
+            montoResponsable = montoOriginal * 0.5
+          }
+          
+          totalResponsable += montoResponsable
+          totalPagado += montoPago
+        })
+        
+        // Al día: pagó igual o más de lo responsable
+        if (totalResponsable > 0 && totalPagado >= totalResponsable) {
+          estudianteAlDiaArray.push({
+            id: est.id,
+            dni: est.dni || '',
+            nombre_completo: `${est.nombre || ''} ${est.apellido || ''}`.trim(),
+            carrera: (est as any).carreras?.nombre || 'Sin carrera',
+            total_responsable: totalResponsable,
+            total_pagado: totalPagado,
+            estado_pago: 'AL_DIA',
+            porcentaje_pagado: totalResponsable > 0 ? (totalPagado / totalResponsable) * 100 : 0
+          })
+        }
+      })
+      
+      setEstudiantesAlDia(estudianteAlDiaArray)
+      console.log('[REPORTES] Estudiantes al día:', estudianteAlDiaArray.length)
+
     } catch (err) {
       const mensaje = err instanceof Error ? err.message : 'Error desconocido'
       setError(mensaje)
@@ -678,6 +760,8 @@ export const useReportesFinancieros = (institucionId: number) => {
     reporteMesAMes,
     topEstudiantesMora,
     proyeccionAño,
+    desgloseConceptos,
+    estudiantesAlDia,
     loading,
     error,
     refrescar: cargarReportes,
