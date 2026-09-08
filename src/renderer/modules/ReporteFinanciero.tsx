@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react'
 import { supabase } from '@renderer/lib/supabase'
 import { formatoMoneda } from '@renderer/lib/helpers'
 import { useInstitucion } from '@renderer/hooks/useInstitucion'
+import { useEstudiantes } from '@renderer/hooks/useEstudiantes'
+import { usePagos } from '@renderer/hooks/usePagos'
 import {
   BarChart3,
   RefreshCw,
@@ -10,10 +12,6 @@ import {
   AlertCircle,
   Loader2,
 } from 'lucide-react'
-import { Chart as ChartJS, ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, Title } from 'chart.js'
-import { Bar, Pie } from 'react-chartjs-2'
-
-ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, Title)
 
 type TabReporte = 'resumen' | 'carrera' | 'meta' | 'mora'
 type ModalType = 'aldia' | 'deudores' | null
@@ -58,6 +56,9 @@ const getNivelDeuda = (porcentaje: number) => {
 
 export const ReporteFinanciero: React.FC = () => {
   const { institucionActiva } = useInstitucion()
+  const { estudiantes, cargarEstudiantes } = useEstudiantes()
+  const { pagos, cargarPagos } = usePagos()
+  
   const [loading, setLoading] = useState(true)
   const [resumen, setResumen] = useState<ResumenFinanciero[]>([])
   const [gastos, setGastos] = useState(0)
@@ -68,51 +69,55 @@ export const ReporteFinanciero: React.FC = () => {
   const [alumnosModal, setAlumnosModal] = useState<Alumno[]>([])
   const [loadingModal, setLoadingModal] = useState(false)
 
-  // Cargar alumnos al día
+  // Cargar alumnos al día - usando datos ya cargados
   const cargarAlumnosAlDia = async () => {
     setLoadingModal(true)
     try {
       const mesVencimientoHasta = diaActual > 10 ? mesActual : mesActual - 1
 
-      const { data: estudiantes } = await supabase
-        .from('estudiantes')
-        .select('id, nombre_completo, carrera_id')
-        .match({ institucion_id: institucionActiva.id })
-
-      const { data: conceptos } = await supabase
+      const { data: conceptos, error: conError } = await supabase
         .from('conceptos_pago')
-        .select('id, carrera_id, monto')
-        .match({ institucion_id: institucionActiva.id })
+        .select('id, carrera_id')
+        .eq('institucion_id', institucionActiva.id)
         .gte('mes', 3)
         .lte('mes', mesVencimientoHasta)
+      
+      if (conError) {
+        console.error('Error conceptos:', conError)
+        setAlumnosModal([])
+        return
+      }
 
-      let allPagos: any[] = []
-      let page = 0
-      let hasMore = true
-      while (hasMore) {
-        const from = page * 1000
-        const { data: pagos } = await supabase
-          .from('pagos_multiples_detalle')
-          .select('concepto_id')
-          .range(from, from + 999)
-        if (!pagos?.length) hasMore = false
-        else allPagos = [...allPagos, ...pagos]
-        page++
+      // Obtener IDs de conceptos pagados
+      const conceptoIds = conceptos?.map(c => c.id) || []
+      if (conceptoIds.length === 0) {
+        setAlumnosModal([])
+        return
+      }
+
+      const { data: conceptosPagados, error: pagError } = await supabase
+        .from('pagos_multiples_detalle')
+        .select('concepto_id')
+        .in('concepto_id', conceptoIds)
+      
+      if (pagError) {
+        console.error('Error pagos:', pagError)
+        setAlumnosModal([])
+        return
       }
 
       const { data: carreras } = await supabase.from('carreras').select('id, nombre')
       const carrMap = new Map(carreras?.map(c => [c.id, c.nombre]) || [])
 
-      const conceptosPagados = new Set(allPagos.map(p => p.concepto_id))
-      const conceptosVencidosPagados = conceptos?.filter(c => conceptosPagados.has(c.id)) || []
-
+      const conceptosPagadosSet = new Set(conceptosPagados?.map(p => p.concepto_id) || [])
       const alumnosAlDia: Alumno[] = []
 
+      // Filtrar conceptos que fueron pagados
+      const conceptosConPagos = conceptos?.filter(c => conceptosPagadosSet.has(c.id)) || []
+      const carrerasConPagos = new Set(conceptosConPagos.map(c => c.carrera_id))
+
       estudiantes?.forEach(est => {
-        const conceptosEstudiante = conceptosVencidosPagados.filter(
-          c => c.carrera_id === est.carrera_id
-        )
-        if (conceptosEstudiante.length > 0) {
+        if (carrerasConPagos.has(est.carrera_id)) {
           alumnosAlDia.push({
             id: est.id,
             nombre: est.nombre_completo || `Estudiante ${est.id}`,
@@ -125,7 +130,8 @@ export const ReporteFinanciero: React.FC = () => {
 
       setAlumnosModal(alumnosAlDia)
     } catch (err) {
-      console.error('Error:', err)
+      console.error('Error cargarAlumnosAlDia:', err)
+      setAlumnosModal([])
     } finally {
       setLoadingModal(false)
     }
@@ -137,37 +143,43 @@ export const ReporteFinanciero: React.FC = () => {
     try {
       const mesVencimientoHasta = diaActual > 10 ? mesActual : mesActual - 1
 
-      const { data: estudiantes } = await supabase
-        .from('estudiantes')
-        .select('id, nombre_completo, carrera_id')
-        .match({ institucion_id: institucionActiva.id })
-
-      const { data: conceptos } = await supabase
+      const { data: conceptos, error: conError } = await supabase
         .from('conceptos_pago')
         .select('id, carrera_id, monto')
-        .match({ institucion_id: institucionActiva.id })
+        .eq('institucion_id', institucionActiva.id)
         .gte('mes', 3)
         .lte('mes', mesVencimientoHasta)
+      
+      if (conError) {
+        console.error('Error conceptos:', conError)
+        setAlumnosModal([])
+        return
+      }
 
-      let allPagos: any[] = []
-      let page = 0
-      let hasMore = true
-      while (hasMore) {
-        const from = page * 1000
-        const { data: pagos } = await supabase
-          .from('pagos_multiples_detalle')
-          .select('concepto_id, monto_pagado')
-          .range(from, from + 999)
-        if (!pagos?.length) hasMore = false
-        else allPagos = [...allPagos, ...pagos]
-        page++
+      // Obtener IDs de conceptos
+      const conceptoIds = conceptos?.map(c => c.id) || []
+      if (conceptoIds.length === 0) {
+        setAlumnosModal([])
+        return
+      }
+
+      const { data: conceptosPagados, error: pagError } = await supabase
+        .from('pagos_multiples_detalle')
+        .select('concepto_id, monto_pagado')
+        .in('concepto_id', conceptoIds)
+      
+      if (pagError) {
+        console.error('Error pagos:', pagError)
+        setAlumnosModal([])
+        return
       }
 
       const { data: carreras } = await supabase.from('carreras').select('id, nombre')
       const carrMap = new Map(carreras?.map(c => [c.id, c.nombre]) || [])
 
+      // Mapeo de pagos
       const pagosMap = new Map<number, number>()
-      allPagos.forEach((p: any) => {
+      conceptosPagados?.forEach((p: any) => {
         pagosMap.set(p.concepto_id, (pagosMap.get(p.concepto_id) || 0) + (p.monto_pagado || 0))
       })
 
@@ -201,7 +213,8 @@ export const ReporteFinanciero: React.FC = () => {
 
       setAlumnosModal(deudores.sort((a, b) => b.porcentaje - a.porcentaje))
     } catch (err) {
-      console.error('Error:', err)
+      console.error('Error cargarDeudores:', err)
+      setAlumnosModal([])
     } finally {
       setLoadingModal(false)
     }
@@ -213,44 +226,30 @@ export const ReporteFinanciero: React.FC = () => {
 
       const mesVencimientoHasta = diaActual > 10 ? mesActual : mesActual - 1
 
-      // 1. Obtener datos base
+      // 1. Cargar estudiantes y pagos desde hooks
+      await cargarEstudiantes(institucionActiva.id)
+      await cargarPagos(institucionActiva.id)
+
+      // 2. Obtener datos base
       const { data: instituciones } = await supabase.from('instituciones').select('id, nombre')
       const { data: carreras } = await supabase.from('carreras').select('id, nombre')
       const { data: configCarreras } = await supabase
         .from('configuracion_carreras')
         .select('institucion_id, carrera_id')
-        .match({ institucion_id: institucionActiva.id })
+        .eq('institucion_id', institucionActiva.id)
 
       const instMap = new Map(instituciones?.map(i => [i.id, i.nombre]) || [])
       const carrMap = new Map(carreras?.map(c => [c.id, c.nombre]) || [])
 
-      // 2. Obtener pagos
-      let allPagos: any[] = []
-      let page = 0
-      let hasMore = true
-
-      while (hasMore) {
-        const from = page * 1000
-        const { data: pagosDetalle } = await supabase
-          .from('pagos_multiples_detalle')
-          .select('concepto_id, monto_pagado')
-          .range(from, from + 999)
-
-        if (!pagosDetalle || pagosDetalle.length === 0) {
-          hasMore = false
-        } else {
-          allPagos = [...allPagos, ...pagosDetalle]
-          page++
-        }
-      }
-
       // 3. Obtener conceptos
-      const { data: conceptos } = await supabase
+      const { data: conceptos, error: conError } = await supabase
         .from('conceptos_pago')
         .select('id, institucion_id, carrera_id, monto, mes')
-        .match({ institucion_id: institucionActiva.id })
+        .eq('institucion_id', institucionActiva.id)
 
-      // 4. Ventas
+      if (conError) throw conError
+
+      // 4. Obtener ventas
       let ventasKioscoTotal = 0
       let ventasInsumosTotal = 0
 
@@ -259,46 +258,44 @@ export const ReporteFinanciero: React.FC = () => {
           const { data: ventasKiosco } = await supabase
             .from('venta_kiosco')
             .select('monto')
-            .match({ institucion_id: institucionActiva.id })
+            .eq('institucion_id', institucionActiva.id)
           ventasKioscoTotal = ventasKiosco?.reduce((sum, v) => sum + (v.monto || 0), 0) || 0
-        } catch (err) {}
+        } catch (err) {
+          console.log('Ventas kiosco no disponibles')
+        }
 
         try {
           const { data: ventasInsumos } = await supabase
             .from('ventas_insumos')
             .select('monto')
-            .match({ institucion_id: institucionActiva.id })
+            .eq('institucion_id', institucionActiva.id)
           ventasInsumosTotal = ventasInsumos?.reduce((sum, v) => sum + (v.monto || 0), 0) || 0
-        } catch (err) {}
+        } catch (err) {
+          console.log('Ventas insumos no disponibles')
+        }
       }
 
-      // 5. Gastos
+      // 5. Obtener gastos
       let totalGastos = 0
       try {
         const { data: gastosData } = await supabase
           .from('gastos')
           .select('monto')
-          .match({ mes: mesActual })
+          .eq('mes', mesActual)
         totalGastos = gastosData?.reduce((sum, g) => sum + (g.monto || 0), 0) || 0
       } catch (err) {
-        console.log('[FINANCIERO] Gastos error:', err)
+        console.log('Gastos no disponibles')
       }
 
       setGastos(totalGastos)
 
-      // 6. Estudiantes
-      const { data: estudiantes } = await supabase
-        .from('estudiantes')
-        .select('id, institucion_id, carrera_id')
-        .match({ institucion_id: institucionActiva.id })
-
-      // 7. Mapa de pagos
+      // 6. Crear mapa de pagos desde hook
       const pagosMap = new Map<number, number>()
-      allPagos.forEach((p: any) => {
+      pagos?.forEach((p: any) => {
         pagosMap.set(p.concepto_id, (pagosMap.get(p.concepto_id) || 0) + (p.monto_pagado || 0))
       })
 
-      // 8. Resumen
+      // 7. Resumen
       const resumenMap = new Map<string, ResumenFinanciero>()
 
       configCarreras?.forEach((config: any) => {
@@ -324,7 +321,7 @@ export const ReporteFinanciero: React.FC = () => {
         })
       })
 
-      // 9. Procesar
+      // 8. Procesar conceptos
       conceptos?.forEach((concepto: any) => {
         const key = `${concepto.institucion_id}-${concepto.carrera_id}`
         const item = resumenMap.get(key)
@@ -355,7 +352,7 @@ export const ReporteFinanciero: React.FC = () => {
         item.recaudado_pagos += monto_pagado
       })
 
-      // 10. Ventas
+      // 9. Agregar ventas
       resumenMap.forEach(item => {
         if (institucionActiva.id === 2) {
           item.recaudado_kiosco = ventasKioscoTotal
@@ -363,7 +360,7 @@ export const ReporteFinanciero: React.FC = () => {
         }
       })
 
-      // 11. Finales
+      // 10. Finales
       resumenMap.forEach(item => {
         item.recaudado_total =
           item.recaudado_pagos + item.recaudado_kiosco + item.recaudado_insumos
@@ -384,7 +381,7 @@ export const ReporteFinanciero: React.FC = () => {
 
       setResumen(resumenArray)
     } catch (err) {
-      console.error('ERROR:', err)
+      console.error('ERROR en cargarDatos:', err)
     } finally {
       setLoading(false)
     }
@@ -517,7 +514,7 @@ export const ReporteFinanciero: React.FC = () => {
             </button>
           </div>
 
-          {/* Capacidad vs Recaudado */}
+          {/* Ingresos Esperados vs Reales */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div className="p-6 bg-gradient-to-br from-slate-800/80 to-slate-900/40 border border-slate-700/60 rounded-2xl">
               <h2 className="text-lg font-bold text-white mb-4">💎 INGRESOS ESPERADOS</h2>
