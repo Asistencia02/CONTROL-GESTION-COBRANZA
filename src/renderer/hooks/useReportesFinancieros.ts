@@ -171,22 +171,8 @@ export const useReportesFinancieros = (institucionId: number) => {
         (!c.mes || !c.año)
       )
 
-      const conceptosVencidos = (conceptos || []).filter(c => {
-        if (c.tipo?.toUpperCase() === 'INSCRIPCION' && (!c.mes || !c.año)) {
-          return true
-        }
-        if (c.mes && c.año) {
-          if (c.mes < PRIMER_MES_ACADEMICO || c.mes > ULTIMO_MES_ACADEMICO) return false
-          
-          if (c.año < anioActual) return true
-          if (c.año === anioActual) {
-            if (c.mes === mesActual && diaActual < PRIMER_DIA_VENCIMIENTO) return false
-            if (c.mes < mesActual) return true
-            if (c.mes === mesActual && diaActual >= PRIMER_DIA_VENCIMIENTO) return true
-          }
-        }
-        return false
-      })
+      // IMPORTANTE: INCLUIR TODOS LOS CONCEPTOS SIN FILTRO DE FECHA
+      const conceptosVencidos = conceptos || []
 
       const conceptosFiltrados = conceptosVencidos
 
@@ -825,5 +811,3 @@ export const useReportesFinancieros = (institucionId: number) => {
     totalVentasKiosco,
   }
 }
-
-
