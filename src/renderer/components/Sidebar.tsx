@@ -132,6 +132,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const itemsVisibles = NAV_ITEMS.filter(item => {
     if (item.id === 'testing') return false
     if (item.id === 'dashboard') return modulosPermitidos.includes('dashboard')
+    if (item.id === 'estudiantes' && esAdmin) return true  // ADMIN siempre puede ver estudiantes
     return modulosPermitidos.includes(item.id)
   })
 
