@@ -667,27 +667,33 @@ export const useReportesFinancieros = (institucionId: number) => {
       desgloseMap.set('CUOTA', { esperado: 0, cobrado: 0, conceptos: new Set<number>() })
       desgloseMap.set('SEGURO', { esperado: 0, cobrado: 0, conceptos: new Set<number>() })
       
-      // Calcular esperado por tipo de concepto
-      // INSCRIPCIÓN: una sola vez por estudiante (tomar monto del primer concepto de inscripción)
-      const inscripcionMonto = inscripciones[0]?.monto || 0
-      if (inscripcionMonto > 0) {
-        const inscripcionEst = desgloseMap.get('INSCRIPCION')!
-        inscripcionEst.esperado = inscripcionMonto * estudiantesActivos.length
-        inscripciones.forEach(c => inscripcionEst.conceptos.add(c.id))
-      }
-      
-      // CUOTA y SEGURO: por cada estudiante de su carrera
-      conceptosVencidos.forEach(c => {
-        const tipo = c.tipo?.toUpperCase() || 'OTRO'
-        if (tipo !== 'INSCRIPCION') {
-          if (!desgloseMap.has(tipo)) {
-            desgloseMap.set(tipo, { esperado: 0, cobrado: 0, conceptos: new Set<number>() })
-          }
-          const est = desgloseMap.get(tipo)!
-          const cantEstudiantes = estudiantesActivos.filter(e => e.carrera_id === c.carrera_id).length
-          est.esperado += c.monto * cantEstudiantes
-          est.conceptos.add(c.id)
+      // INSCRIPCIÓN: cada estudiante tiene UNA inscripción (monto diferente por carrera)
+      // Sumar inscripción de cada estudiante por su carrera
+      estudiantesActivos.forEach(est => {
+        const inscripcionCarrera = inscripciones.find(c => c.carrera_id === est.carrera_id)
+        if (inscripcionCarrera) {
+          const inscripcionEst = desgloseMap.get('INSCRIPCION')!
+          inscripcionEst.esperado += inscripcionCarrera.monto
+          inscripcionEst.conceptos.add(inscripcionCarrera.id)
         }
+      })
+      
+      // CUOTA: múltiples conceptos, se suman por cada estudiante de su carrera
+      const cuotas = conceptosVencidos.filter(c => c.tipo?.toUpperCase() === 'CUOTA')
+      cuotas.forEach(c => {
+        const cuotaEst = desgloseMap.get('CUOTA')!
+        const cantEstudiantes = estudiantesActivos.filter(e => e.carrera_id === c.carrera_id).length
+        cuotaEst.esperado += c.monto * cantEstudiantes
+        cuotaEst.conceptos.add(c.id)
+      })
+      
+      // SEGURO: múltiples conceptos, se suman por cada estudiante de su carrera
+      const seguros = conceptosVencidos.filter(c => c.tipo?.toUpperCase() === 'SEGURO')
+      seguros.forEach(c => {
+        const seguroEst = desgloseMap.get('SEGURO')!
+        const cantEstudiantes = estudiantesActivos.filter(e => e.carrera_id === c.carrera_id).length
+        seguroEst.esperado += c.monto * cantEstudiantes
+        seguroEst.conceptos.add(c.id)
       })
       
       // Calcular cobrado por tipo de concepto
