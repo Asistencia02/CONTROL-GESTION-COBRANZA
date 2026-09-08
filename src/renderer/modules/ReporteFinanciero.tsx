@@ -82,7 +82,7 @@ export const ReporteFinanciero: React.FC = () => {
       const { data: conceptos } = await supabase
         .from('conceptos_pago')
         .select('id, carrera_id, monto')
-        .eq('institucion_id', institucionActiva.id)
+        .match({ institucion_id: institucionActiva.id })
         .gte('mes', 3)
         .lte('mes', mesVencimientoHasta)
 
@@ -145,7 +145,7 @@ export const ReporteFinanciero: React.FC = () => {
       const { data: conceptos } = await supabase
         .from('conceptos_pago')
         .select('id, carrera_id, monto')
-        .eq('institucion_id', institucionActiva.id)
+        .match({ institucion_id: institucionActiva.id })
         .gte('mes', 3)
         .lte('mes', mesVencimientoHasta)
 
@@ -219,7 +219,7 @@ export const ReporteFinanciero: React.FC = () => {
       const { data: configCarreras } = await supabase
         .from('configuracion_carreras')
         .select('institucion_id, carrera_id')
-        .eq('institucion_id', institucionActiva.id)
+        .match({ institucion_id: institucionActiva.id })
 
       const instMap = new Map(instituciones?.map(i => [i.id, i.nombre]) || [])
       const carrMap = new Map(carreras?.map(c => [c.id, c.nombre]) || [])
@@ -248,7 +248,7 @@ export const ReporteFinanciero: React.FC = () => {
       const { data: conceptos } = await supabase
         .from('conceptos_pago')
         .select('id, institucion_id, carrera_id, monto, mes')
-        .eq('institucion_id', institucionActiva.id)
+        .match({ institucion_id: institucionActiva.id })
 
       // 4. Ventas
       let ventasKioscoTotal = 0
@@ -259,7 +259,7 @@ export const ReporteFinanciero: React.FC = () => {
           const { data: ventasKiosco } = await supabase
             .from('venta_kiosco')
             .select('monto')
-            .eq('institucion_id', institucionActiva.id)
+            .match({ institucion_id: institucionActiva.id })
           ventasKioscoTotal = ventasKiosco?.reduce((sum, v) => sum + (v.monto || 0), 0) || 0
         } catch (err) {}
 
@@ -267,7 +267,7 @@ export const ReporteFinanciero: React.FC = () => {
           const { data: ventasInsumos } = await supabase
             .from('ventas_insumos')
             .select('monto')
-            .eq('institucion_id', institucionActiva.id)
+            .match({ institucion_id: institucionActiva.id })
           ventasInsumosTotal = ventasInsumos?.reduce((sum, v) => sum + (v.monto || 0), 0) || 0
         } catch (err) {}
       }
