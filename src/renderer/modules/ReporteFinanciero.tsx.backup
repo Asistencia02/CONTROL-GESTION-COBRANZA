@@ -120,8 +120,7 @@ export const ReporteFinanciero: React.FC = () => {
         if (carrerasConPagos.has(est.carrera_id)) {
           alumnosAlDia.push({
             id: est.id,
-            nombre: est.nombre || '',
-            apellido: est.apellido || ',
+            nombre: est.nombre_completo || `Estudiante ${est.id}`,
             deuda: 0,
             porcentaje: 100,
             carrera: carrMap.get(est.carrera_id) || `Carrera ${est.carrera_id}`,
@@ -204,8 +203,7 @@ export const ReporteFinanciero: React.FC = () => {
 
           deudores.push({
             id: est.id,
-            nombre: est.nombre || '',
-            apellido: est.apellido || ',
+            nombre: est.nombre_completo || `Estudiante ${est.id}`,
             deuda: deudaTotal,
             porcentaje,
             carrera: carrMap.get(est.carrera_id) || `Carrera ${est.carrera_id}`,
