@@ -321,6 +321,9 @@ export const useReportesFinancieros = (institucionId: number) => {
       let estudiantesEnMoraMesActual = 0
       
       const numeroMesesAcademicos = Math.max(0, mesActual - PRIMER_MES_ACADEMICO + 1)
+      const cuotasTotales = conceptosVencidos.filter(c => c.tipo?.toUpperCase() === 'CUOTA')
+      const segurosTotales = conceptosVencidos.filter(c => c.tipo?.toUpperCase() === 'SEGURO')
+      console.log('[DEBUG CONCEPTOS] Cuotas totales:', cuotasTotales.length, 'Seguros totales:', segurosTotales.length, 'Inscripciones:', inscripciones.length)
       console.log('[DEBUG MES ACTUAL] diaActual:', diaActual, 'mesActual:', mesActual, 'numeroMesesAcademicos:', numeroMesesAcademicos, 'recaudable_año:', totalRecaudable)
 
       estudiantesPorCarrera.forEach((cantEstudiantes, carreraId) => {
