@@ -10,8 +10,6 @@ import { VentasModerno } from '@renderer/modules/VentasModerno'
 import { ConfiguracionModerno } from '@renderer/modules/ConfiguracionModerno'
 import { GastosModerno } from '@renderer/modules/GastosModerno'
 import { ReportesFinancierosModerno } from '@renderer/modules/ReportesFinancierosModerno'
-import { ReporteCompleto } from '@renderer/modules/ReporteCompleto'
-import { ReporteFinanciero } from '@renderer/modules/ReporteFinanciero'
 import { CierreModerno } from '@renderer/modules/CierreModerno'
 import { VentaKioscoModerno } from '@renderer/modules/VentaKioscoModerno'
 import { KioscoConfiguracionModerno } from '@renderer/modules/KioscoConfiguracionModerno'
@@ -19,7 +17,7 @@ import { Sincronizacion } from '@renderer/modules/Sincronizacion'
 import { supabase } from '@renderer/lib/supabase'
 import '@renderer/lib/verificarVariables' // Verificar variables de entorno
 
-type ModuleId = 'dashboard' | 'cobranzas' | 'deudas' | 'ventas' | 'ventakiosco' | 'gastos' | 'reportes' | 'reportesejecutivos' | 'reportefinanciero' | 'cierre' | 'configuracion' | 'kioscoconfig' | 'sincronizacion' | 'admin'
+type ModuleId = 'dashboard' | 'cobranzas' | 'deudas' | 'ventas' | 'ventakiosco' | 'gastos' | 'reportes' | 'cierre' | 'configuracion' | 'kioscoconfig' | 'sincronizacion' | 'admin'
 
 const checkConnection = async (): Promise<boolean> => {
   try {
@@ -93,18 +91,6 @@ export const App: React.FC = () => {
       )
     }
 
-    // Validar acceso a reportesejecutivos (solo admin)
-    if ((activeModule === 'reportesejecutivos' || activeModule === 'reportefinanciero') && usuarioActual?.rol !== 'ADMIN') {
-      return (
-        <div className="flex items-center justify-center h-screen">
-          <div className="text-center">
-            <h2 className="text-2xl font-bold text-slate-300 mb-2">Acceso Denegado</h2>
-            <p className="text-slate-500">Solo administradores pueden acceder a Reportes Ejecutivos</p>
-          </div>
-        </div>
-      )
-    }
-
     switch (activeModule) {
       case 'dashboard': return <DashboardModerno />
       case 'cobranzas': return <Cobranzas />
@@ -113,8 +99,6 @@ export const App: React.FC = () => {
       case 'ventakiosco': return <VentaKioscoModerno />
       case 'gastos': return <GastosModerno />
       case 'reportes': return <ReportesFinancierosModerno />
-      case 'reportesejecutivos': return <ReporteCompleto />
-      case 'reportefinanciero': return <ReporteFinanciero />
       case 'cierre': return <CierreModerno />
       case 'kioscoconfig': return <KioscoConfiguracionModerno />
       case 'sincronizacion': return <Sincronizacion />
