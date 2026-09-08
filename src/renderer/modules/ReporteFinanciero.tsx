@@ -37,9 +37,11 @@ interface ResumenFinanciero {
 interface Alumno {
   id: number
   nombre: string
+  apellido: string
   deuda: number
   porcentaje: number
   carrera: string
+  conceptos?: Array<{ nombre: string; monto: number }>
 }
 
 const getEfficiencyClass = (porcentaje: number): string => {
@@ -69,62 +71,51 @@ export const ReporteFinanciero: React.FC = () => {
   const [alumnosModal, setAlumnosModal] = useState<Alumno[]>([])
   const [loadingModal, setLoadingModal] = useState(false)
 
-  // Cargar alumnos al día - usando datos ya cargados
+  // Cargar alumnos al día
   const cargarAlumnosAlDia = async () => {
     setLoadingModal(true)
     try {
       const mesVencimientoHasta = diaActual > 10 ? mesActual : mesActual - 1
 
-      const { data: conceptos, error: conError } = await supabase
+      const { data: conceptos } = await supabase
         .from('conceptos_pago')
-        .select('id, carrera_id')
+        .select('id, carrera_id, nombre, monto')
         .eq('institucion_id', institucionActiva.id)
         .gte('mes', 3)
         .lte('mes', mesVencimientoHasta)
-      
-      if (conError) {
-        console.error('Error conceptos:', conError)
-        setAlumnosModal([])
-        return
-      }
 
-      // Obtener IDs de conceptos pagados
-      const conceptoIds = conceptos?.map(c => c.id) || []
-      if (conceptoIds.length === 0) {
-        setAlumnosModal([])
-        return
-      }
-
-      const { data: conceptosPagados, error: pagError } = await supabase
+      const { data: conceptosPagados } = await supabase
         .from('pagos_multiples_detalle')
-        .select('concepto_id')
-        .in('concepto_id', conceptoIds)
-      
-      if (pagError) {
-        console.error('Error pagos:', pagError)
-        setAlumnosModal([])
-        return
-      }
+        .select('concepto_id, monto_pagado')
+        .in('concepto_id', conceptos?.map(c => c.id) || [])
 
       const { data: carreras } = await supabase.from('carreras').select('id, nombre')
       const carrMap = new Map(carreras?.map(c => [c.id, c.nombre]) || [])
 
-      const conceptosPagadosSet = new Set(conceptosPagados?.map(p => p.concepto_id) || [])
-      const alumnosAlDia: Alumno[] = []
+      const conceptosPagadosMap = new Map<number, { nombre: string; monto: number }>()
+      conceptosPagados?.forEach((p: any) => {
+        const concepto = conceptos?.find(c => c.id === p.concepto_id)
+        if (concepto) {
+          conceptosPagadosMap.set(p.concepto_id, { nombre: concepto.nombre, monto: p.monto_pagado })
+        }
+      })
 
-      // Filtrar conceptos que fueron pagados
-      const conceptosConPagos = conceptos?.filter(c => conceptosPagadosSet.has(c.id)) || []
-      const carrerasConPagos = new Set(conceptosConPagos.map(c => c.carrera_id))
+      const alumnosAlDia: Alumno[] = []
+      const conceptosPagadosIds = new Set(conceptosPagados?.map(p => p.concepto_id) || [])
 
       estudiantes?.forEach(est => {
-        if (carrerasConPagos.has(est.carrera_id)) {
+        const conceptosEstudiante = conceptos?.filter(c => c.carrera_id === est.carrera_id) || []
+        const pagos = conceptosEstudiante.filter(c => conceptosPagadosIds.has(c.id))
+        
+        if (pagos.length > 0) {
           alumnosAlDia.push({
             id: est.id,
             nombre: est.nombre || '',
-            apellido: est.apellido || ',
+            apellido: est.apellido || '',
             deuda: 0,
             porcentaje: 100,
             carrera: carrMap.get(est.carrera_id) || `Carrera ${est.carrera_id}`,
+            conceptos: pagos.map(p => ({ nombre: p.nombre, monto: conceptosPagadosMap.get(p.id)?.monto || 0 })),
           })
         }
       })
@@ -144,41 +135,21 @@ export const ReporteFinanciero: React.FC = () => {
     try {
       const mesVencimientoHasta = diaActual > 10 ? mesActual : mesActual - 1
 
-      const { data: conceptos, error: conError } = await supabase
+      const { data: conceptos } = await supabase
         .from('conceptos_pago')
-        .select('id, carrera_id, monto')
+        .select('id, carrera_id, nombre, monto')
         .eq('institucion_id', institucionActiva.id)
         .gte('mes', 3)
         .lte('mes', mesVencimientoHasta)
-      
-      if (conError) {
-        console.error('Error conceptos:', conError)
-        setAlumnosModal([])
-        return
-      }
 
-      // Obtener IDs de conceptos
-      const conceptoIds = conceptos?.map(c => c.id) || []
-      if (conceptoIds.length === 0) {
-        setAlumnosModal([])
-        return
-      }
-
-      const { data: conceptosPagados, error: pagError } = await supabase
+      const { data: conceptosPagados } = await supabase
         .from('pagos_multiples_detalle')
         .select('concepto_id, monto_pagado')
-        .in('concepto_id', conceptoIds)
-      
-      if (pagError) {
-        console.error('Error pagos:', pagError)
-        setAlumnosModal([])
-        return
-      }
+        .in('concepto_id', conceptos?.map(c => c.id) || [])
 
       const { data: carreras } = await supabase.from('carreras').select('id, nombre')
       const carrMap = new Map(carreras?.map(c => [c.id, c.nombre]) || [])
 
-      // Mapeo de pagos
       const pagosMap = new Map<number, number>()
       conceptosPagados?.forEach((p: any) => {
         pagosMap.set(p.concepto_id, (pagosMap.get(p.concepto_id) || 0) + (p.monto_pagado || 0))
@@ -191,12 +162,16 @@ export const ReporteFinanciero: React.FC = () => {
 
         let deudaTotal = 0
         let capacidadTotal = 0
+        const conceptosDebe: Array<{ nombre: string; monto: number }> = []
 
         conceptosEstudiante.forEach(c => {
           const pagado = pagosMap.get(c.id) || 0
           const pendiente = Math.max(0, (c.monto || 0) - pagado)
           deudaTotal += pendiente
           capacidadTotal += c.monto || 0
+          if (pendiente > 0) {
+            conceptosDebe.push({ nombre: c.nombre, monto: pendiente })
+          }
         })
 
         if (deudaTotal > 0) {
@@ -205,10 +180,11 @@ export const ReporteFinanciero: React.FC = () => {
           deudores.push({
             id: est.id,
             nombre: est.nombre || '',
-            apellido: est.apellido || ',
+            apellido: est.apellido || '',
             deuda: deudaTotal,
             porcentaje,
             carrera: carrMap.get(est.carrera_id) || `Carrera ${est.carrera_id}`,
+            conceptos: conceptosDebe,
           })
         }
       })
@@ -228,11 +204,9 @@ export const ReporteFinanciero: React.FC = () => {
 
       const mesVencimientoHasta = diaActual > 10 ? mesActual : mesActual - 1
 
-      // 1. Cargar estudiantes y pagos desde hooks
       await cargarEstudiantes(institucionActiva.id)
       await cargarPagos(institucionActiva.id)
 
-      // 2. Obtener datos base
       const { data: instituciones } = await supabase.from('instituciones').select('id, nombre')
       const { data: carreras } = await supabase.from('carreras').select('id, nombre')
       const { data: configCarreras } = await supabase
@@ -243,7 +217,6 @@ export const ReporteFinanciero: React.FC = () => {
       const instMap = new Map(instituciones?.map(i => [i.id, i.nombre]) || [])
       const carrMap = new Map(carreras?.map(c => [c.id, c.nombre]) || [])
 
-      // 3. Obtener conceptos
       const { data: conceptos, error: conError } = await supabase
         .from('conceptos_pago')
         .select('id, institucion_id, carrera_id, monto, mes')
@@ -251,7 +224,6 @@ export const ReporteFinanciero: React.FC = () => {
 
       if (conError) throw conError
 
-      // 4. Obtener ventas
       let ventasKioscoTotal = 0
       let ventasInsumosTotal = 0
 
@@ -277,7 +249,6 @@ export const ReporteFinanciero: React.FC = () => {
         }
       }
 
-      // 5. Obtener gastos
       let totalGastos = 0
       try {
         const { data: gastosData } = await supabase
@@ -291,13 +262,11 @@ export const ReporteFinanciero: React.FC = () => {
 
       setGastos(totalGastos)
 
-      // 6. Crear mapa de pagos desde hook
       const pagosMap = new Map<number, number>()
       pagos?.forEach((p: any) => {
         pagosMap.set(p.concepto_id, (pagosMap.get(p.concepto_id) || 0) + (p.monto_pagado || 0))
       })
 
-      // 7. Resumen
       const resumenMap = new Map<string, ResumenFinanciero>()
 
       configCarreras?.forEach((config: any) => {
@@ -323,7 +292,6 @@ export const ReporteFinanciero: React.FC = () => {
         })
       })
 
-      // 8. Procesar conceptos
       conceptos?.forEach((concepto: any) => {
         const key = `${concepto.institucion_id}-${concepto.carrera_id}`
         const item = resumenMap.get(key)
@@ -354,7 +322,6 @@ export const ReporteFinanciero: React.FC = () => {
         item.recaudado_pagos += monto_pagado
       })
 
-      // 9. Agregar ventas
       resumenMap.forEach(item => {
         if (institucionActiva.id === 2) {
           item.recaudado_kiosco = ventasKioscoTotal
@@ -362,7 +329,6 @@ export const ReporteFinanciero: React.FC = () => {
         }
       })
 
-      // 10. Finales
       resumenMap.forEach(item => {
         item.recaudado_total =
           item.recaudado_pagos + item.recaudado_kiosco + item.recaudado_insumos
@@ -412,7 +378,6 @@ export const ReporteFinanciero: React.FC = () => {
     )
   }
 
-  // Totales
   const totalRecaudado = resumen.reduce((sum, r) => sum + r.recaudado_total, 0)
   const totalCapacidad = resumen.reduce((sum, r) => sum + r.capacidad_teorica, 0)
   const totalDeuda = resumen.reduce((sum, r) => sum + r.deuda_vencida, 0)
@@ -696,16 +661,26 @@ export const ReporteFinanciero: React.FC = () => {
             ) : alumnosModal.length === 0 ? (
               <p className="text-slate-400 text-center py-8">No hay alumnos al día</p>
             ) : (
-              <div className="space-y-2">
+              <div className="space-y-3">
                 {alumnosModal.map((alumno, idx) => (
-                  <div key={idx} className="p-3 bg-gradient-to-r from-slate-900/50 to-slate-800/30 border border-slate-700/30 rounded-lg hover:border-green-500/50 transition-all">
-                    <div className="flex justify-between items-start">
+                  <div key={idx} className="p-4 bg-gradient-to-r from-slate-900/50 to-slate-800/30 border border-slate-700/30 rounded-lg hover:border-green-500/50 transition-all">
+                    <div className="flex justify-between items-start mb-2">
                       <div>
-                        <p className="text-sm font-bold text-green-400">{alumno.nombre}</p>
+                        <p className="text-sm font-bold text-green-400">{alumno.nombre} {alumno.apellido}</p>
                         <p className="text-xs text-slate-400">{alumno.carrera}</p>
                       </div>
-                      <span className="px-2 py-1 bg-green-500/20 text-green-400 rounded text-xs font-bold">100%</span>
+                      <span className="px-2 py-1 bg-green-500/20 text-green-400 rounded text-xs font-bold">100% Pago</span>
                     </div>
+                    {alumno.conceptos && alumno.conceptos.length > 0 && (
+                      <div className="text-xs text-slate-300 mt-2 pt-2 border-t border-slate-600">
+                        <p className="font-semibold text-green-300 mb-1">✓ Conceptos pagados:</p>
+                        <ul className="list-disc list-inside space-y-0.5">
+                          {alumno.conceptos.map((c, i) => (
+                            <li key={i} className="text-slate-300">{c.nombre} - {formatoMoneda(c.monto)}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -750,18 +725,18 @@ export const ReporteFinanciero: React.FC = () => {
             ) : alumnosModal.length === 0 ? (
               <p className="text-slate-400 text-center py-8">No hay alumnos con mora</p>
             ) : (
-              <div className="space-y-2">
+              <div className="space-y-3">
                 {alumnosModal.map((alumno, idx) => {
                   const nivel = getNivelDeuda(alumno.porcentaje)
                   return (
-                    <div key={idx} className="p-3 bg-gradient-to-r from-slate-900/50 to-slate-800/30 border border-slate-700/30 rounded-lg hover:border-red-500/50 transition-all">
-                      <div className="flex justify-between items-start">
+                    <div key={idx} className="p-4 bg-gradient-to-r from-slate-900/50 to-slate-800/30 border border-slate-700/30 rounded-lg hover:border-red-500/50 transition-all">
+                      <div className="flex justify-between items-start mb-2">
                         <div>
-                          <p className="text-sm font-bold text-slate-200">{alumno.nombre}</p>
+                          <p className="text-sm font-bold text-slate-200">{alumno.nombre} {alumno.apellido}</p>
                           <p className="text-xs text-slate-400">{alumno.carrera}</p>
                         </div>
                         <div className="text-right">
-                          <p className="text-xs text-slate-400 mb-1">Deuda</p>
+                          <p className="text-xs text-slate-400 mb-1">Deuda Total</p>
                           <p className="text-sm font-bold text-red-400 mb-1">{formatoMoneda(alumno.deuda)}</p>
                           <span className={`inline-block px-2 py-1 rounded text-xs font-bold flex items-center gap-1 ${nivel.color}`}>
                             {nivel.icon}
@@ -769,6 +744,16 @@ export const ReporteFinanciero: React.FC = () => {
                           </span>
                         </div>
                       </div>
+                      {alumno.conceptos && alumno.conceptos.length > 0 && (
+                        <div className="text-xs text-slate-300 mt-2 pt-2 border-t border-slate-600">
+                          <p className="font-semibold text-red-300 mb-1">✗ Conceptos adeudados:</p>
+                          <ul className="list-disc list-inside space-y-0.5">
+                            {alumno.conceptos.map((c, i) => (
+                              <li key={i} className="text-slate-300">{c.nombre} - {formatoMoneda(c.monto)}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
                     </div>
                   )
                 })}
