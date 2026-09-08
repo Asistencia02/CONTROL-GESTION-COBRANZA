@@ -316,33 +316,34 @@ export const useReportesFinancieros = (institucionId: number) => {
       const pendiente = Math.max(0, totalRecaudable - totalRecaudado)
 
       // RESUMEN EJECUTIVO - PARTE MES ACTUAL
-      // Marzo=1, Abril=2, Mayo=3, Junio=4, Julio=5, Agosto=6, Septiembre=7
+      // FIX: Sumar TODAS las cuotas/seguros UNA SOLA VEZ, luego multiplicar por meses * estudiantes
       let totalRecaudableMesActual = 0
       let estudiantesEnMoraMesActual = 0
       
       const numeroMesesAcademicos = Math.max(0, mesActual - PRIMER_MES_ACADEMICO + 1)
 
       estudiantesPorCarrera.forEach((cantEstudiantes, carreraId) => {
+        // INSCRIPCION: 1 por estudiante
         const inscripcionCarrera = inscripciones.find(c => c.carrera_id === carreraId)
         if (inscripcionCarrera) {
           totalRecaudableMesActual += inscripcionCarrera.monto * cantEstudiantes
         }
         
+        // CUOTAS: sumar TODAS y multiplicar UNA SOLA VEZ
         const cuotasCarrera = conceptosVencidos.filter(c => 
           c.carrera_id === carreraId && 
           c.tipo?.toUpperCase() === 'CUOTA'
         )
-        cuotasCarrera.forEach(c => {
-          totalRecaudableMesActual += c.monto * cantEstudiantes * numeroMesesAcademicos
-        })
+        const sumaCuotasCarrera = cuotasCarrera.reduce((sum, c) => sum + c.monto, 0)
+        totalRecaudableMesActual += sumaCuotasCarrera * cantEstudiantes * numeroMesesAcademicos
         
+        // SEGUROS: sumar TODAS y multiplicar UNA SOLA VEZ
         const segurosCarrera = conceptosVencidos.filter(c => 
           c.carrera_id === carreraId && 
           c.tipo?.toUpperCase() === 'SEGURO'
         )
-        segurosCarrera.forEach(c => {
-          totalRecaudableMesActual += c.monto * cantEstudiantes * numeroMesesAcademicos
-        })
+        const sumaSegurosCarrera = segurosCarrera.reduce((sum, c) => sum + c.monto, 0)
+        totalRecaudableMesActual += sumaSegurosCarrera * cantEstudiantes * numeroMesesAcademicos
       })
 
       estudiantesActivos.forEach(est => {
@@ -741,7 +742,7 @@ export const useReportesFinancieros = (institucionId: number) => {
         let totalResponsable = 0
         let totalPagado = 0
         
-        conceptosFiltrados.forEach(concepto => {
+        conceptosVencidosMoraLocal.forEach(concepto => {
           if (concepto.carrera_id !== est.carrera_id) return
           
           const montoPago = pagosValidos.find(p => p.estudiante_id === est.id && p.concepto_id === concepto.id)?.monto_pagado || 0
@@ -811,4 +812,3 @@ export const useReportesFinancieros = (institucionId: number) => {
     totalVentasKiosco,
   }
 }
-
