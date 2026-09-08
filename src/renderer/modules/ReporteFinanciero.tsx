@@ -72,35 +72,32 @@ export const ReporteFinanciero: React.FC = () => {
   const [loadingModal, setLoadingModal] = useState(false)
 
   // ============ CARGAR ALUMNOS AL DÍA ============
-  // Lógica CORRECTA: Alumno al día = tiene INSCRIPCIÓN (mes 3) + CUOTA (mes_vencimiento) AMBAS PAGADAS
+  // Lógica CORRECTA: Alumno AL DÍA = tiene TODOS los conceptos vencidos (mes 3 a mes_vencimiento) COMPLETAMENTE PAGADOS
   const cargarAlumnosAlDia = async () => {
     setLoadingModal(true)
     try {
       const mesVencimientoHasta = diaActual > 10 ? mesActual : mesActual - 1
 
-      // 1. Traer conceptos INSCRIPCIÓN (mes=3) y CUOTA (mes=mesVencimientoHasta)
-      const { data: conceptosRequeridos } = await supabase
+      // 1. Traer todos los conceptos vencidos (mes 3 a mes_vencimiento)
+      const { data: conceptosVencidos } = await supabase
         .from('conceptos_pago')
         .select('id, tipo, mes, carrera_id, nombre, monto')
         .eq('institucion_id', institucionActiva.id)
-        .in('tipo', ['INSCRIPCION', 'CUOTA'])
+        .gte('mes', 3)
+        .lte('mes', mesVencimientoHasta)
 
-      if (!conceptosRequeridos) {
+      if (!conceptosVencidos || conceptosVencidos.length === 0) {
         setAlumnosModal([])
         return
       }
 
-      // Filtrar solo INSCRIPCIÓN mes 3 y CUOTA mes vencimiento
-      const inscripciones = conceptosRequeridos.filter(c => c.tipo === 'INSCRIPCION' && c.mes === 3)
-      const cuotas = conceptosRequeridos.filter(c => c.tipo === 'CUOTA' && c.mes === mesVencimientoHasta)
-
-      const idsPorVerificar = [...inscripciones.map(i => i.id), ...cuotas.map(c => c.id)]
+      const idsConceptos = conceptosVencidos.map(c => c.id)
 
       // 2. Traer pagos
       const { data: conceptosPagados } = await supabase
         .from('pagos_multiples_detalle')
         .select('concepto_id, monto_pagado')
-        .in('concepto_id', idsPorVerificar)
+        .in('concepto_id', idsConceptos)
 
       // 3. Mapeo de pagos
       const pagosMap = new Map<number, number>()
@@ -114,25 +111,24 @@ export const ReporteFinanciero: React.FC = () => {
 
       const alumnosAlDia: Alumno[] = []
 
-      // 5. Verificar cada alumno
+      // 5. Para cada alumno, verificar si tiene TODO pagado
       estudiantes?.forEach(est => {
-        // Buscar INSCRIPCIÓN de su carrera mes 3
-        const inscripcion = inscripciones.find(i => i.carrera_id === est.carrera_id)
-        // Buscar CUOTA de su carrera en mes vencimiento
-        const cuota = cuotas.find(c => c.carrera_id === est.carrera_id)
+        // Conceptos vencidos de su carrera
+        const conceptosEstudiante = conceptosVencidos.filter(c => c.carrera_id === est.carrera_id)
 
-        if (!inscripcion || !cuota) return
+        let capacidadTotal = 0
+        let pagadoTotal = 0
+        const conceptosPagadosList: Array<{ nombre: string; monto: number }> = []
 
-        // Verificar si AMBAS están COMPLETAMENTE pagadas
-        const inscripcionPagada = (pagosMap.get(inscripcion.id) || 0) >= (inscripcion.monto || 0)
-        const cuotaPagada = (pagosMap.get(cuota.id) || 0) >= (cuota.monto || 0)
+        conceptosEstudiante.forEach(c => {
+          const pagado = pagosMap.get(c.id) || 0
+          capacidadTotal += c.monto || 0
+          pagadoTotal += pagado
+          conceptosPagadosList.push({ nombre: c.nombre, monto: pagado })
+        })
 
-        if (inscripcionPagada && cuotaPagada) {
-          const conceptosAlDia = [
-            { nombre: inscripcion.nombre, monto: pagosMap.get(inscripcion.id) || 0 },
-            { nombre: cuota.nombre, monto: pagosMap.get(cuota.id) || 0 },
-          ]
-
+        // AL DÍA si tiene TODO pagado (pagado_total >= capacidad_total)
+        if (pagadoTotal >= capacidadTotal && capacidadTotal > 0) {
           alumnosAlDia.push({
             id: est.id,
             nombre: est.nombre || '',
@@ -140,7 +136,7 @@ export const ReporteFinanciero: React.FC = () => {
             deuda: 0,
             porcentaje: 100,
             carrera: carrMap.get(est.carrera_id) || `Carrera ${est.carrera_id}`,
-            conceptos: conceptosAlDia,
+            conceptos: conceptosPagadosList,
           })
         }
       })
@@ -154,14 +150,14 @@ export const ReporteFinanciero: React.FC = () => {
     }
   }
 
-  // ============ CARGAR DEUDORES ============
-  // Lógica CORRECTA: Conceptos vencidos hasta mes_vencimiento (considerando corte día 10)
+  // ============ CARGAR DEUDORES (CON MORA) ============
+  // Lógica CORRECTA: Trae alumnos con CUALQUIER concepto vencido pendiente (mes 3 a mes_vencimiento)
   const cargarDeudores = async () => {
     setLoadingModal(true)
     try {
       const mesVencimientoHasta = diaActual > 10 ? mesActual : mesActual - 1
 
-      // 1. Traer conceptos vencidos: desde mes 3 hasta mes vencimiento
+      // 1. Traer todos los conceptos vencidos (mes 3 a mes_vencimiento)
       const { data: conceptosVencidos } = await supabase
         .from('conceptos_pago')
         .select('id, tipo, mes, carrera_id, nombre, monto')
@@ -194,7 +190,7 @@ export const ReporteFinanciero: React.FC = () => {
 
       const deudores: Alumno[] = []
 
-      // 5. Calcular deuda por alumno
+      // 5. Calcular deuda por alumno: solo si tiene ALGÚN concepto pendiente
       estudiantes?.forEach(est => {
         // Conceptos vencidos de su carrera
         const conceptosEstudiante = conceptosVencidos.filter(c => c.carrera_id === est.carrera_id)
@@ -215,7 +211,7 @@ export const ReporteFinanciero: React.FC = () => {
           }
         })
 
-        // Solo agregar si tiene deuda vencida
+        // CON MORA si tiene CUALQUIER concepto pendiente
         if (deudaTotal > 0) {
           const porcentaje = capacidadTotal > 0 ? (deudaTotal / capacidadTotal) * 100 : 0
 
