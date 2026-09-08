@@ -662,22 +662,35 @@ export const useReportesFinancieros = (institucionId: number) => {
       // DESGLOSE POR CONCEPTO
       const desgloseMap = new Map<string, { esperado: number; cobrado: number; conceptos: Set<number> }>()
       
+      // Calcular esperado por tipo de concepto
       conceptosFiltrados.forEach(c => {
         const tipo = c.tipo?.toUpperCase() || 'OTRO'
-        const est = desgloseMap.get(tipo) || { esperado: 0, cobrado: 0, conceptos: new Set<number>() }
-        const cantEstudiantes = estudiantesActivos.filter(e => e.carrera_id === c.carrera_id).length
-        est.esperado += c.monto * cantEstudiantes
+        if (!desgloseMap.has(tipo)) {
+          desgloseMap.set(tipo, { esperado: 0, cobrado: 0, conceptos: new Set<number>() })
+        }
+        const est = desgloseMap.get(tipo)!
+        
+        if (tipo === 'INSCRIPCION') {
+          // Inscripción se cobra una sola vez por estudiante (no multiplicar por cantidad de carreras)
+          est.esperado += c.monto * estudiantesActivos.length
+        } else {
+          // Cuotas y seguros se cobran por cada estudiante de su carrera
+          const cantEstudiantes = estudiantesActivos.filter(e => e.carrera_id === c.carrera_id).length
+          est.esperado += c.monto * cantEstudiantes
+        }
         est.conceptos.add(c.id)
-        desgloseMap.set(tipo, est)
       })
       
+      // Calcular cobrado por tipo de concepto
       pagosValidos.forEach(p => {
         const concepto = conceptosFiltrados.find(c => c.id === p.concepto_id)
         if (!concepto) return
         const tipo = concepto.tipo?.toUpperCase() || 'OTRO'
-        const est = desgloseMap.get(tipo) || { esperado: 0, cobrado: 0, conceptos: new Set<number>() }
+        if (!desgloseMap.has(tipo)) {
+          desgloseMap.set(tipo, { esperado: 0, cobrado: 0, conceptos: new Set<number>() })
+        }
+        const est = desgloseMap.get(tipo)!
         est.cobrado += p.monto_pagado || 0
-        desgloseMap.set(tipo, est)
       })
       
       const desgloseConceptosArray: DesgloseConcepto[] = Array.from(desgloseMap.entries()).map(([tipo, data]) => ({
