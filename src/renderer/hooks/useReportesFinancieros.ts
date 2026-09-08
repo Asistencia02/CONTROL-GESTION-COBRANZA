@@ -421,6 +421,7 @@ export const useReportesFinancieros = (institucionId: number) => {
       const totalRecaudadoMesActual = pagosValidosMesActual.reduce((sum, p) => sum + (p.monto_pagado || 0), 0)
       const porcentajeCobroMesActual = totalRecaudableMesActual > 0 ? (totalRecaudadoMesActual / totalRecaudableMesActual) * 100 : 0
       const pendienteMesActual = Math.max(0, totalRecaudableMesActual - totalRecaudadoMesActual)
+      console.log('[DEBUG CALCULO MES ACTUAL] totalRecaudableMesActual:', totalRecaudableMesActual, 'totalRecaudadoMesActual:', totalRecaudadoMesActual)
 
       setResumenEjecutivo({
         total_recaudable_año: totalRecaudable,
