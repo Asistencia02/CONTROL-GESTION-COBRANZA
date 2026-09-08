@@ -595,6 +595,36 @@ export const ReportesFinancierosModerno: React.FC = () => {
                     </div>
                   </div>
                 </div>
+              ) : institucionActiva.id === 1 ? (
+                // ISIP: Solo Ingresos (Cuotas) vs Egresos (sin Insumos ni Kiosco)
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="p-5 bg-gradient-to-br from-green-600/30 to-green-900/20 border-2 border-green-500/40 rounded-xl">
+                      <p className="text-xs text-green-300 font-bold mb-2 flex items-center gap-1"><TrendingUp size={14} />TOTAL INGRESOS</p>
+                      <p className="text-3xl font-black text-green-200 mb-2">{formatoMoneda(resumenEjecutivo?.recaudado_hasta_hoy || 0)}</p>
+                      <div className="space-y-1 text-xs text-green-400">
+                        <p>📚 Cuotas: {formatoMoneda(resumenEjecutivo?.recaudado_hasta_hoy || 0)}</p>
+                      </div>
+                    </div>
+
+                    <div className="p-5 bg-gradient-to-br from-red-600/30 to-red-900/20 border-2 border-red-500/40 rounded-xl">
+                      <p className="text-xs text-red-300 font-bold mb-2 flex items-center gap-1"><TrendingDown size={14} />TOTAL EGRESOS</p>
+                      <p className="text-3xl font-black text-red-200 mb-2">{formatoMoneda(totalGastos || 0)}</p>
+                      <div className="space-y-1 text-xs text-red-400">
+                        <p>💸 Gastos Operativos</p>
+                        <p>Hasta {resumenEjecutivo?.mes_actual_nombre}</p>
+                      </div>
+                    </div>
+
+                    <div className={`p-5 rounded-xl border-2 ${(resumenEjecutivo?.recaudado_hasta_hoy || 0) - (totalGastos || 0) >= 0 ? 'bg-gradient-to-br from-emerald-600/30 to-emerald-900/20 border-emerald-500/40' : 'bg-gradient-to-br from-orange-600/30 to-orange-900/20 border-orange-500/40'}`}>
+                      <p className={`text-xs font-bold mb-2 flex items-center gap-1 ${(resumenEjecutivo?.recaudado_hasta_hoy || 0) - (totalGastos || 0) >= 0 ? 'text-emerald-300' : 'text-orange-300'}`}><Gauge size={14} />SALDO NETO</p>
+                      <p className={`text-3xl font-black mb-2 ${(resumenEjecutivo?.recaudado_hasta_hoy || 0) - (totalGastos || 0) >= 0 ? 'text-emerald-200' : 'text-orange-200'}`}>{formatoMoneda((resumenEjecutivo?.recaudado_hasta_hoy || 0) - (totalGastos || 0))}</p>
+                      <p className={`text-xs ${(resumenEjecutivo?.recaudado_hasta_hoy || 0) - (totalGastos || 0) >= 0 ? 'text-emerald-400' : 'text-orange-400'}`}>
+                        {(resumenEjecutivo?.recaudado_hasta_hoy || 0) - (totalGastos || 0) >= 0 ? '✅ Superávit' : '⚠️ Déficit'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
               ) : (
                 <div className="text-center py-12 bg-slate-800/50 border border-slate-700/50 rounded-xl">
                   <AlertCircle size={32} className="text-slate-400 mx-auto mb-2" />

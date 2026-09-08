@@ -198,46 +198,61 @@ export const useReportesFinancieros = (institucionId: number) => {
       }, {} as Record<string, number>)
       console.log('[REPORTES] Desglose vencidos (sin inscripción):', desglose)
 
-      // ========== PAGOS - BUSCAR EN AMBAS TABLAS ==========
-      // 1. Pagos individuales
-      const { data: pagos, error: errPagos } = await supabase
-        .from('pagos')
-        .select('id, estudiante_id, concepto_id, monto_pagado, estado')
-        .eq('institucion_id', institucionId)
-        .neq('estado', 'ANULADO')
+      // ========== PAGOS - BUSCAR EN AMBAS TABLAS CON PAGINACIÓN COMPLETA ==========
+      let todosPagos: any[] = []
+      
+      // 1. Pagos individuales con paginación
+      let pagina1 = 0
+      let tieneRangoMas1 = true
+      while (tieneRangoMas1) {
+        const desde = pagina1 * 1000
+        const hasta = desde + 999
+        const { data: pagosBloques, error: err1 } = await supabase
+          .from('pagos')
+          .select('id, estudiante_id, concepto_id, monto_pagado, estado')
+          .eq('institucion_id', institucionId)
+          .neq('estado', 'ANULADO')
+          .range(desde, hasta)
+        if (err1) throw err1
+        if (!pagosBloques || pagosBloques.length === 0) {
+          tieneRangoMas1 = false
+        } else {
+          todosPagos = [...todosPagos, ...pagosBloques]
+          pagina1++
+        }
+      }
 
-      if (errPagos) throw errPagos
+      // 2. Pagos múltiples con paginación
+      let pagina2 = 0
+      let tieneRangoMas2 = true
+      while (tieneRangoMas2) {
+        const desde = pagina2 * 1000
+        const hasta = desde + 999
+        const { data: pagosMulBloques, error: err2 } = await supabase
+          .from('pagos_multiples_detalle')
+          .select(`id, concepto_id, monto_pagado, pagos_multiples!inner(estudiante_id, estado, institucion_id)`)
+          .eq('pagos_multiples.institucion_id', institucionId)
+          .neq('pagos_multiples.estado', 'ANULADO')
+          .range(desde, hasta)
+        if (err2) throw err2
+        if (!pagosMulBloques || pagosMulBloques.length === 0) {
+          tieneRangoMas2 = false
+        } else {
+          pagosMulBloques.forEach((p: any) => {
+            todosPagos.push({
+              id: p.id,
+              estudiante_id: p.pagos_multiples?.estudiante_id,
+              concepto_id: p.concepto_id,
+              monto_pagado: p.monto_pagado,
+              estado: p.pagos_multiples?.estado || 'PAGADO'
+            })
+          })
+          pagina2++
+        }
+      }
 
-      // 2. Pagos múltiples - convertir a mismo formato
-      const { data: pagosMultiples, error: errPagosMultiples } = await supabase
-        .from('pagos_multiples_detalle')
-        .select(`
-          id,
-          concepto_id,
-          monto_pagado,
-          pagos_multiples!inner(
-            estudiante_id,
-            estado,
-            institucion_id
-          )
-        `)
-        .eq('pagos_multiples.institucion_id', institucionId)
-        .neq('pagos_multiples.estado', 'ANULADO')
-
-      if (errPagosMultiples) throw errPagosMultiples
-
-      // Convertir pagos múltiples al mismo formato
-      const pagosMultiplesFormato = (pagosMultiples || []).map((p: any) => ({
-        id: p.id,
-        estudiante_id: p.pagos_multiples?.estudiante_id,
-        concepto_id: p.concepto_id,
-        monto_pagado: p.monto_pagado,
-        estado: p.pagos_multiples?.estado || 'PAGADO'
-      }))
-
-      // Combinar ambas tablas
-      const pagosValidos = [...(pagos || []), ...pagosMultiplesFormato]
-      console.log('[REPORTES] Pagos válidos:', pagosValidos.length, '(', (pagos?.length || 0), 'individuales +', pagosMultiplesFormato.length, 'múltiples)')
+      const pagosValidos = todosPagos
+      console.log('[REPORTES] Pagos válidos (TODOS - CON PAGINACIÓN):', pagosValidos.length)
 
       // ========== CALCULAR VENCIDOS ANTES DE DÍA 10 DEL MES ACTUAL ==========
       // Si día < 10: mes actual NO vence hasta día 10
@@ -640,12 +655,15 @@ export const useReportesFinancieros = (institucionId: number) => {
         fecha_calculo: new Date().toISOString(),
       })
 
-      // ========== GASTOS E INSUMOS (solo INSM) ==========
+      // ========== GASTOS E INGRESOS POR INSTITUCIÓN ==========
+      // INSM (id=2): Cuotas + Insumos + Kiosco - Gastos
+      // ISIP (id=1): Cuotas - Gastos (sin Insumos ni Kiosco)
+      
+      const fechaInicio = new Date(anioActual, 0, 1).toISOString().split('T')[0]
+      const fechaFin = new Date().toISOString().split('T')[0]
+      
       if (institucionId === 2) {
-        // ✅ ARREGLO: Filtrar gastos por fecha actual (año actual)
-        const fechaInicio = new Date(anioActual, 0, 1).toISOString().split('T')[0]
-        const fechaFin = new Date().toISOString().split('T')[0]
-        
+        // INSM: Gastos operativos
         const { data: gastosData } = await supabase
           .from('gastos')
           .select('monto')
@@ -658,11 +676,11 @@ export const useReportesFinancieros = (institucionId: number) => {
           setTotalGastos(total)
         }
 
-        // Ventas de insumos - ya filtrada por período en el hook
+        // Ventas de insumos
         const totalVentasIns = await obtenerTotalVentasPeriodo(institucionId, fechaInicio, fechaFin)
         setTotalVentasInsumos(totalVentasIns)
 
-        // ✅ ARREGLO: Filtrar kiosco por fecha actual y validar concepto
+        // Ventas kiosco
         const { data: cajaGrandeData } = await supabase
           .from('caja_grande')
           .select('monto')
@@ -674,6 +692,22 @@ export const useReportesFinancieros = (institucionId: number) => {
           const total = cajaGrandeData.reduce((sum, c) => sum + (c.monto || 0), 0)
           setTotalVentasKiosco(total)
         }
+      } else if (institucionId === 1) {
+        // ISIP: Solo gastos operativos (sin insumos ni kiosco)
+        const { data: gastosDataISIP } = await supabase
+          .from('gastos')
+          .select('monto')
+          .eq('institucion_id', 1)
+          .gte('fecha', fechaInicio)
+          .lte('fecha', fechaFin)
+
+        if (gastosDataISIP) {
+          const total = gastosDataISIP.reduce((sum, g) => sum + (g.monto || 0), 0)
+          setTotalGastos(total)
+        }
+        // ISIP no tiene insumos ni kiosco
+        setTotalVentasInsumos(0)
+        setTotalVentasKiosco(0)
       }
 
     } catch (err) {
