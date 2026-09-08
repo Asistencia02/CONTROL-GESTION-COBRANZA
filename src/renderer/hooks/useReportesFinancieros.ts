@@ -321,6 +321,7 @@ export const useReportesFinancieros = (institucionId: number) => {
       let estudiantesEnMoraMesActual = 0
       
       const numeroMesesAcademicos = Math.max(0, mesActual - PRIMER_MES_ACADEMICO + 1)
+      console.log('[DEBUG MES ACTUAL] diaActual:', diaActual, 'mesActual:', mesActual, 'numeroMesesAcademicos:', numeroMesesAcademicos, 'recaudable_año:', totalRecaudable)
 
       estudiantesPorCarrera.forEach((cantEstudiantes, carreraId) => {
         // INSCRIPCION: 1 por estudiante
