@@ -5,19 +5,10 @@ import { useInstitucion } from '@renderer/hooks/useInstitucion'
 import {
   BarChart3,
   RefreshCw,
-  DollarSign,
-  TrendingUp,
-  AlertCircle,
-  CheckCircle,
-  Users,
-  Target,
-  Zap,
-  Activity,
-  PieChart,
-  TrendingDown,
   X,
   AlertTriangle,
-  AlertCircle as AlertMed,
+  AlertCircle,
+  Loader2,
 } from 'lucide-react'
 import { Chart as ChartJS, ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, Title } from 'chart.js'
 import { Bar, Pie } from 'react-chartjs-2'
@@ -59,16 +50,15 @@ const getEfficiencyClass = (porcentaje: number): string => {
   return 'bg-red-500/30 text-red-300'
 }
 
-const getNivelDeuda = (porcentaje: number): { label: string; color: string; icon: React.ReactNode } => {
+const getNivelDeuda = (porcentaje: number) => {
   if (porcentaje >= 80) return { label: 'CRÍTICA', color: 'text-red-400 bg-red-500/20', icon: <AlertTriangle size={16} /> }
-  if (porcentaje >= 50) return { label: 'MEDIA', color: 'text-orange-400 bg-orange-500/20', icon: <AlertMed size={16} /> }
+  if (porcentaje >= 50) return { label: 'MEDIA', color: 'text-orange-400 bg-orange-500/20', icon: <AlertCircle size={16} /> }
   return { label: 'BAJA', color: 'text-yellow-400 bg-yellow-500/20', icon: <AlertCircle size={16} /> }
 }
 
 export const ReporteFinanciero: React.FC = () => {
   const { institucionActiva } = useInstitucion()
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
   const [resumen, setResumen] = useState<ResumenFinanciero[]>([])
   const [gastos, setGastos] = useState(0)
   const [mesActual] = useState(new Date().getMonth() + 1)
@@ -76,11 +66,150 @@ export const ReporteFinanciero: React.FC = () => {
   const [tabActiva, setTabActiva] = useState<TabReporte>('resumen')
   const [modal, setModal] = useState<ModalType>(null)
   const [alumnosModal, setAlumnosModal] = useState<Alumno[]>([])
+  const [loadingModal, setLoadingModal] = useState(false)
+
+  // Cargar alumnos al día
+  const cargarAlumnosAlDia = async () => {
+    setLoadingModal(true)
+    try {
+      const mesVencimientoHasta = diaActual > 10 ? mesActual : mesActual - 1
+
+      const { data: estudiantes } = await supabase
+        .from('estudiantes')
+        .select('id, nombre_completo, carrera_id')
+        .eq('institucion_id', institucionActiva.id)
+
+      const { data: conceptos } = await supabase
+        .from('conceptos_pago')
+        .select('id, carrera_id, monto')
+        .eq('institucion_id', institucionActiva.id)
+        .gte('mes', 3)
+        .lte('mes', mesVencimientoHasta)
+
+      let allPagos: any[] = []
+      let page = 0
+      let hasMore = true
+      while (hasMore) {
+        const from = page * 1000
+        const { data: pagos } = await supabase
+          .from('pagos_multiples_detalle')
+          .select('concepto_id')
+          .range(from, from + 999)
+        if (!pagos?.length) hasMore = false
+        else allPagos = [...allPagos, ...pagos]
+        page++
+      }
+
+      const { data: carreras } = await supabase.from('carreras').select('id, nombre')
+      const carrMap = new Map(carreras?.map(c => [c.id, c.nombre]) || [])
+
+      const conceptosPagados = new Set(allPagos.map(p => p.concepto_id))
+      const conceptosVencidosPagados = conceptos?.filter(c => conceptosPagados.has(c.id)) || []
+
+      const alumnosAlDia: Alumno[] = []
+
+      estudiantes?.forEach(est => {
+        const conceptosEstudiante = conceptosVencidosPagados.filter(
+          c => c.carrera_id === est.carrera_id
+        )
+        if (conceptosEstudiante.length > 0) {
+          alumnosAlDia.push({
+            id: est.id,
+            nombre: est.nombre_completo || `Estudiante ${est.id}`,
+            deuda: 0,
+            porcentaje: 100,
+            carrera: carrMap.get(est.carrera_id) || `Carrera ${est.carrera_id}`,
+          })
+        }
+      })
+
+      setAlumnosModal(alumnosAlDia)
+    } catch (err) {
+      console.error('Error:', err)
+    } finally {
+      setLoadingModal(false)
+    }
+  }
+
+  // Cargar deudores
+  const cargarDeudores = async () => {
+    setLoadingModal(true)
+    try {
+      const mesVencimientoHasta = diaActual > 10 ? mesActual : mesActual - 1
+
+      const { data: estudiantes } = await supabase
+        .from('estudiantes')
+        .select('id, nombre_completo, carrera_id')
+        .eq('institucion_id', institucionActiva.id)
+
+      const { data: conceptos } = await supabase
+        .from('conceptos_pago')
+        .select('id, carrera_id, monto')
+        .eq('institucion_id', institucionActiva.id)
+        .gte('mes', 3)
+        .lte('mes', mesVencimientoHasta)
+
+      let allPagos: any[] = []
+      let page = 0
+      let hasMore = true
+      while (hasMore) {
+        const from = page * 1000
+        const { data: pagos } = await supabase
+          .from('pagos_multiples_detalle')
+          .select('concepto_id, monto_pagado')
+          .range(from, from + 999)
+        if (!pagos?.length) hasMore = false
+        else allPagos = [...allPagos, ...pagos]
+        page++
+      }
+
+      const { data: carreras } = await supabase.from('carreras').select('id, nombre')
+      const carrMap = new Map(carreras?.map(c => [c.id, c.nombre]) || [])
+
+      const pagosMap = new Map<number, number>()
+      allPagos.forEach((p: any) => {
+        pagosMap.set(p.concepto_id, (pagosMap.get(p.concepto_id) || 0) + (p.monto_pagado || 0))
+      })
+
+      const deudores: Alumno[] = []
+
+      estudiantes?.forEach(est => {
+        const conceptosEstudiante = conceptos?.filter(c => c.carrera_id === est.carrera_id) || []
+
+        let deudaTotal = 0
+        let capacidadTotal = 0
+
+        conceptosEstudiante.forEach(c => {
+          const pagado = pagosMap.get(c.id) || 0
+          const pendiente = Math.max(0, (c.monto || 0) - pagado)
+          deudaTotal += pendiente
+          capacidadTotal += c.monto || 0
+        })
+
+        if (deudaTotal > 0) {
+          const porcentaje = capacidadTotal > 0 ? (deudaTotal / capacidadTotal) * 100 : 0
+
+          deudores.push({
+            id: est.id,
+            nombre: est.nombre_completo || `Estudiante ${est.id}`,
+            deuda: deudaTotal,
+            porcentaje,
+            carrera: carrMap.get(est.carrera_id) || `Carrera ${est.carrera_id}`,
+          })
+        }
+      })
+
+      setAlumnosModal(deudores.sort((a, b) => b.porcentaje - a.porcentaje))
+    } catch (err) {
+      console.error('Error:', err)
+    } finally {
+      setLoadingModal(false)
+    }
+  }
 
   const cargarDatos = async () => {
     try {
       setLoading(true)
-      setError(null)
 
       const mesVencimientoHasta = diaActual > 10 ? mesActual : mesActual - 1
 
@@ -95,18 +224,17 @@ export const ReporteFinanciero: React.FC = () => {
       const instMap = new Map(instituciones?.map(i => [i.id, i.nombre]) || [])
       const carrMap = new Map(carreras?.map(c => [c.id, c.nombre]) || [])
 
-      // 2. Obtener pagos (paginado)
+      // 2. Obtener pagos
       let allPagos: any[] = []
       let page = 0
       let hasMore = true
 
       while (hasMore) {
         const from = page * 1000
-        const to = from + 999
         const { data: pagosDetalle } = await supabase
           .from('pagos_multiples_detalle')
-          .select('concepto_id, monto_pagado, created_at')
-          .range(from, to)
+          .select('concepto_id, monto_pagado')
+          .range(from, from + 999)
 
         if (!pagosDetalle || pagosDetalle.length === 0) {
           hasMore = false
@@ -116,13 +244,13 @@ export const ReporteFinanciero: React.FC = () => {
         }
       }
 
-      // 3. Obtener conceptos de esta institución
+      // 3. Obtener conceptos
       const { data: conceptos } = await supabase
         .from('conceptos_pago')
-        .select('id, institucion_id, carrera_id, monto, mes, año, dias_vencimiento')
+        .select('id, institucion_id, carrera_id, monto, mes')
         .eq('institucion_id', institucionActiva.id)
 
-      // 4. Obtener ventas kiosco e insumos
+      // 4. Ventas
       let ventasKioscoTotal = 0
       let ventasInsumosTotal = 0
 
@@ -133,9 +261,7 @@ export const ReporteFinanciero: React.FC = () => {
             .select('monto')
             .eq('institucion_id', institucionActiva.id)
           ventasKioscoTotal = ventasKiosco?.reduce((sum, v) => sum + (v.monto || 0), 0) || 0
-        } catch (err) {
-          console.log('[FINANCIERO] Ventas kiosco no disponibles')
-        }
+        } catch (err) {}
 
         try {
           const { data: ventasInsumos } = await supabase
@@ -143,12 +269,10 @@ export const ReporteFinanciero: React.FC = () => {
             .select('monto')
             .eq('institucion_id', institucionActiva.id)
           ventasInsumosTotal = ventasInsumos?.reduce((sum, v) => sum + (v.monto || 0), 0) || 0
-        } catch (err) {
-          console.log('[FINANCIERO] Ventas insumos no disponibles')
-        }
+        } catch (err) {}
       }
 
-      // 5. Obtener gastos
+      // 5. Gastos
       let totalGastos = 0
       try {
         const { data: gastosData } = await supabase
@@ -156,25 +280,23 @@ export const ReporteFinanciero: React.FC = () => {
           .select('monto')
           .eq('mes', mesActual)
         totalGastos = gastosData?.reduce((sum, g) => sum + (g.monto || 0), 0) || 0
-      } catch (err) {
-        console.log('[FINANCIERO] Gastos no disponibles')
-      }
+      } catch (err) {}
 
       setGastos(totalGastos)
 
-      // 6. Obtener estudiantes
+      // 6. Estudiantes
       const { data: estudiantes } = await supabase
         .from('estudiantes')
-        .select('id, nombre_completo, institucion_id, carrera_id')
+        .select('id, institucion_id, carrera_id')
         .eq('institucion_id', institucionActiva.id)
 
-      // 7. Crear mapa de pagos
+      // 7. Mapa de pagos
       const pagosMap = new Map<number, number>()
       allPagos.forEach((p: any) => {
         pagosMap.set(p.concepto_id, (pagosMap.get(p.concepto_id) || 0) + (p.monto_pagado || 0))
       })
 
-      // 8. Calcular resumen por carrera
+      // 8. Resumen
       const resumenMap = new Map<string, ResumenFinanciero>()
 
       configCarreras?.forEach((config: any) => {
@@ -200,19 +322,20 @@ export const ReporteFinanciero: React.FC = () => {
         })
       })
 
-      // 9. Procesar conceptos
+      // 9. Procesar
       conceptos?.forEach((concepto: any) => {
         const key = `${concepto.institucion_id}-${concepto.carrera_id}`
         const item = resumenMap.get(key)
         if (!item) return
 
         const alumnosCarrera = estudiantes?.filter(
-          e => e.institucion_id === concepto.institucion_id && e.carrera_id === concepto.carrera_id
+          e => e.carrera_id === concepto.carrera_id
         ) || []
         item.alumnos_totales = new Set(alumnosCarrera.map(a => a.id)).size
-        item.capacidad_teorica += concepto.monto * item.alumnos_totales
 
         if (concepto.mes >= 3 && concepto.mes <= mesVencimientoHasta) {
+          item.capacidad_teorica += concepto.monto * item.alumnos_totales
+
           const montoPendiente = concepto.monto - (pagosMap.get(concepto.id) || 0)
           if (montoPendiente > 0) {
             item.deuda_vencida += montoPendiente
@@ -230,7 +353,7 @@ export const ReporteFinanciero: React.FC = () => {
         item.recaudado_pagos += monto_pagado
       })
 
-      // 10. Agregar ventas
+      // 10. Ventas
       resumenMap.forEach(item => {
         if (institucionActiva.id === 2) {
           item.recaudado_kiosco = ventasKioscoTotal
@@ -238,7 +361,7 @@ export const ReporteFinanciero: React.FC = () => {
         }
       })
 
-      // 11. Calcular totales
+      // 11. Finales
       resumenMap.forEach(item => {
         item.recaudado_total =
           item.recaudado_pagos + item.recaudado_kiosco + item.recaudado_insumos
@@ -259,8 +382,7 @@ export const ReporteFinanciero: React.FC = () => {
 
       setResumen(resumenArray)
     } catch (err) {
-      console.error('[FINANCIERO] ERROR:', err)
-      setError(err instanceof Error ? err.message : 'Error desconocido')
+      console.error('ERROR:', err)
     } finally {
       setLoading(false)
     }
@@ -283,7 +405,7 @@ export const ReporteFinanciero: React.FC = () => {
       <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex items-center justify-center p-4">
         <div className="text-center">
           <BarChart3 size={64} className="text-slate-500 mx-auto mb-4" />
-          <h2 className="text-2xl font-bold text-slate-300">Sin datos disponibles</h2>
+          <h2 className="text-2xl font-bold text-slate-300">Sin datos</h2>
         </div>
       </div>
     )
@@ -343,7 +465,10 @@ export const ReporteFinanciero: React.FC = () => {
           {/* KPIs */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-3">
             <button
-              onClick={() => setModal('aldia')}
+              onClick={() => {
+                setModal('aldia')
+                cargarAlumnosAlDia()
+              }}
               className="p-4 bg-gradient-to-br from-blue-700/40 to-blue-900/30 border-2 border-blue-500/50 rounded-xl hover:shadow-lg transition-all cursor-pointer"
             >
               <p className="text-xs text-blue-300 font-bold mb-1">ALUMNOS TOTALES</p>
@@ -351,40 +476,40 @@ export const ReporteFinanciero: React.FC = () => {
             </button>
 
             <button
-              onClick={() => setModal('aldia')}
+              onClick={() => {
+                setModal('aldia')
+                cargarAlumnosAlDia()
+              }}
               className="p-4 bg-gradient-to-br from-green-700/40 to-green-900/30 border-2 border-green-500/50 rounded-xl hover:shadow-lg transition-all cursor-pointer"
             >
               <p className="text-xs text-green-300 font-bold mb-1">AL DÍA</p>
               <p className="text-3xl font-black text-green-200">{totalAlDia}</p>
-              <p className="text-xs text-green-400 mt-1">{((totalAlDia / totalAlumnos) * 100).toFixed(1)}%</p>
+              <p className="text-xs text-green-400 mt-1">{totalAlumnos > 0 ? ((totalAlDia / totalAlumnos) * 100).toFixed(1) : '0'}%</p>
             </button>
 
             <button
-              onClick={() => setModal('deudores')}
+              onClick={() => {
+                setModal('deudores')
+                cargarDeudores()
+              }}
               className="p-4 bg-gradient-to-br from-red-700/40 to-red-900/30 border-2 border-red-500/50 rounded-xl hover:shadow-lg transition-all cursor-pointer"
             >
               <p className="text-xs text-red-300 font-bold mb-1">CON MORA</p>
               <p className="text-3xl font-black text-red-200">{totalAlVencidos}</p>
-              <p className="text-xs text-red-400 mt-1">{((totalAlVencidos / totalAlumnos) * 100).toFixed(1)}%</p>
+              <p className="text-xs text-red-400 mt-1">{totalAlumnos > 0 ? ((totalAlVencidos / totalAlumnos) * 100).toFixed(1) : '0'}%</p>
             </button>
 
-            <button
-              className="p-4 bg-gradient-to-br from-green-700/40 to-green-900/30 border-2 border-green-500/50 rounded-xl"
-            >
+            <button className="p-4 bg-gradient-to-br from-green-700/40 to-green-900/30 border-2 border-green-500/50 rounded-xl">
               <p className="text-xs text-green-300 font-bold mb-1">INGRESOS</p>
               <p className="text-2xl font-black text-green-200">{formatoMoneda(totalRecaudado)}</p>
             </button>
 
-            <button
-              className="p-4 bg-gradient-to-br from-orange-700/40 to-orange-900/30 border-2 border-orange-500/50 rounded-xl"
-            >
+            <button className="p-4 bg-gradient-to-br from-orange-700/40 to-orange-900/30 border-2 border-orange-500/50 rounded-xl">
               <p className="text-xs text-orange-300 font-bold mb-1">EGRESOS</p>
               <p className="text-2xl font-black text-orange-200">{formatoMoneda(gastos)}</p>
             </button>
 
-            <button
-              className="p-4 bg-gradient-to-br from-violet-700/40 to-violet-900/30 border-2 border-violet-500/50 rounded-xl"
-            >
+            <button className="p-4 bg-gradient-to-br from-violet-700/40 to-violet-900/30 border-2 border-violet-500/50 rounded-xl">
               <p className="text-xs text-violet-300 font-bold mb-1">NETO</p>
               <p className="text-2xl font-black text-violet-200">{formatoMoneda(netFinanciero)}</p>
             </button>
@@ -401,7 +526,7 @@ export const ReporteFinanciero: React.FC = () => {
             <div className="p-6 bg-gradient-to-br from-slate-800/80 to-slate-900/40 border border-slate-700/60 rounded-2xl">
               <h2 className="text-xl font-bold text-white mb-4">Mora Hasta Mes Actual</h2>
               <p className="text-4xl font-black text-red-300 mb-2">{formatoMoneda(totalDeuda)}</p>
-              <p className="text-sm text-slate-400">{((totalDeuda / totalCapacidad) * 100).toFixed(1)}% de capacidad</p>
+              <p className="text-sm text-slate-400">{totalCapacidad > 0 ? ((totalDeuda / totalCapacidad) * 100).toFixed(1) : '0'}% de capacidad</p>
             </div>
           </div>
 
@@ -460,7 +585,7 @@ export const ReporteFinanciero: React.FC = () => {
         </div>
       )}
 
-      {/* META MENSUAL TAB - Copiado de Reportes */}
+      {/* META MENSUAL TAB */}
       {tabActiva === 'meta' && (
         <div className="space-y-6">
           {resumen.map((carrera, idx) => (
@@ -477,7 +602,7 @@ export const ReporteFinanciero: React.FC = () => {
                 <div>
                   <p className="text-xs text-slate-400 font-bold mb-1">⚠️ Estudiantes en Mora</p>
                   <p className="text-3xl font-black text-red-400">{carrera.alumnos_vencidos}</p>
-                  <p className="text-xs text-red-400 mt-1">{((carrera.alumnos_vencidos / carrera.alumnos_totales) * 100).toFixed(1)}%</p>
+                  <p className="text-xs text-red-400 mt-1">{carrera.alumnos_totales > 0 ? ((carrera.alumnos_vencidos / carrera.alumnos_totales) * 100).toFixed(1) : '0'}%</p>
                 </div>
               </div>
 
@@ -522,7 +647,7 @@ export const ReporteFinanciero: React.FC = () => {
                   <p className="text-xs text-red-300 font-bold mb-2">DEUDA VENCIDA</p>
                   <p className="text-2xl font-black text-red-200">{formatoMoneda(carrera.deuda_vencida)}</p>
                   <p className="text-xs text-red-400 mt-2">
-                    {((carrera.deuda_vencida / carrera.capacidad_teorica) * 100).toFixed(1)}% del esperado
+                    {carrera.capacidad_teorica > 0 ? ((carrera.deuda_vencida / carrera.capacidad_teorica) * 100).toFixed(1) : '0'}% del esperado
                   </p>
                 </div>
 
@@ -550,17 +675,35 @@ export const ReporteFinanciero: React.FC = () => {
       {/* MODAL - ALUMNOS AL DÍA */}
       {modal === 'aldia' && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-800 border border-slate-700 rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-auto p-6">
+          <div className="bg-slate-800 border border-slate-700 rounded-2xl max-w-3xl w-full max-h-[90vh] overflow-auto p-6">
             <div className="flex justify-between items-center mb-4">
-              <h2 className="text-2xl font-bold text-white">✅ Alumnos al Día ({totalAlDia})</h2>
+              <h2 className="text-2xl font-bold text-white">✅ Alumnos al Día ({alumnosModal.length})</h2>
               <button onClick={() => setModal(null)} className="text-slate-400 hover:text-white">
                 <X size={24} />
               </button>
             </div>
-            <div className="space-y-2 text-sm text-slate-300">
-              <p className="text-slate-400">Lista de alumnos con pagos al día</p>
-              {/* Aquí irían los detalles de alumnos */}
-            </div>
+
+            {loadingModal ? (
+              <div className="flex justify-center py-8">
+                <Loader2 size={32} className="text-cyan-400 animate-spin" />
+              </div>
+            ) : alumnosModal.length === 0 ? (
+              <p className="text-slate-400 text-center py-8">No hay alumnos al día</p>
+            ) : (
+              <div className="space-y-2">
+                {alumnosModal.map((alumno, idx) => (
+                  <div key={idx} className="p-3 bg-gradient-to-r from-slate-900/50 to-slate-800/30 border border-slate-700/30 rounded-lg hover:border-green-500/50 transition-all">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <p className="text-sm font-bold text-green-400">{alumno.nombre}</p>
+                        <p className="text-xs text-slate-400">{alumno.carrera}</p>
+                      </div>
+                      <span className="px-2 py-1 bg-green-500/20 text-green-400 rounded text-xs font-bold">100%</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -568,35 +711,63 @@ export const ReporteFinanciero: React.FC = () => {
       {/* MODAL - DEUDORES */}
       {modal === 'deudores' && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-800 border border-slate-700 rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-auto p-6">
+          <div className="bg-slate-800 border border-slate-700 rounded-2xl max-w-3xl w-full max-h-[90vh] overflow-auto p-6">
             <div className="flex justify-between items-center mb-4">
-              <h2 className="text-2xl font-bold text-white">⚠️ Alumnos con Mora ({totalAlVencidos})</h2>
+              <h2 className="text-2xl font-bold text-white">⚠️ Alumnos con Mora ({alumnosModal.length})</h2>
               <button onClick={() => setModal(null)} className="text-slate-400 hover:text-white">
                 <X size={24} />
               </button>
             </div>
 
-            <div className="space-y-2 mb-4">
-              <div className="text-xs text-slate-400">Niveles de deuda:</div>
-              <div className="flex gap-3">
-                <div className="flex items-center gap-2">
+            <div className="space-y-2 mb-4 pb-4 border-b border-slate-700/50">
+              <div className="text-xs text-slate-400 font-bold mb-2">Niveles de deuda:</div>
+              <div className="flex gap-3 flex-wrap">
+                <div className="flex items-center gap-2 text-xs">
                   <AlertTriangle size={16} className="text-red-400" />
                   <span className="text-red-400">CRÍTICA &gt;80%</span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <AlertMed size={16} className="text-orange-400" />
+                <div className="flex items-center gap-2 text-xs">
+                  <AlertCircle size={16} className="text-orange-400" />
                   <span className="text-orange-400">MEDIA 50-80%</span>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 text-xs">
                   <AlertCircle size={16} className="text-yellow-400" />
                   <span className="text-yellow-400">BAJA 10-50%</span>
                 </div>
               </div>
             </div>
 
-            <div className="space-y-2 text-sm text-slate-300">
-              {/* Aquí irían los deudores clasificados */}
-            </div>
+            {loadingModal ? (
+              <div className="flex justify-center py-8">
+                <Loader2 size={32} className="text-cyan-400 animate-spin" />
+              </div>
+            ) : alumnosModal.length === 0 ? (
+              <p className="text-slate-400 text-center py-8">No hay alumnos con mora</p>
+            ) : (
+              <div className="space-y-2">
+                {alumnosModal.map((alumno, idx) => {
+                  const nivel = getNivelDeuda(alumno.porcentaje)
+                  return (
+                    <div key={idx} className="p-3 bg-gradient-to-r from-slate-900/50 to-slate-800/30 border border-slate-700/30 rounded-lg hover:border-red-500/50 transition-all">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <p className="text-sm font-bold text-slate-200">{alumno.nombre}</p>
+                          <p className="text-xs text-slate-400">{alumno.carrera}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-xs text-slate-400 mb-1">Deuda</p>
+                          <p className="text-sm font-bold text-red-400 mb-1">{formatoMoneda(alumno.deuda)}</p>
+                          <span className={`inline-block px-2 py-1 rounded text-xs font-bold flex items-center gap-1 ${nivel.color}`}>
+                            {nivel.icon}
+                            {nivel.label} ({alumno.porcentaje.toFixed(1)}%)
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
           </div>
         </div>
       )}
