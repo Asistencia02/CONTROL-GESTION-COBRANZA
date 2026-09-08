@@ -654,7 +654,7 @@ case 'desglose':
               </tr>
             </thead>
             <tbody>
-              {desgloseConceptos.map((d, i) => (
+              {(desgloseConceptos || []).map((d, i) => (
                 <tr key={i} className="border-b border-slate-700/30 hover:bg-slate-900/40 transition-colors">
                   <td className="px-4 py-4 font-bold text-slate-200">{d.tipo}</td>
                   <td className="px-4 py-4 text-right text-blue-400 font-bold">{formatoMoneda(d.total_esperado)}</td>
@@ -723,7 +723,7 @@ case 'aldia':
               </tr>
             </thead>
             <tbody>
-              {estudiantesAlDia.map((e, i) => (
+              {(estudiantesAlDia || []).map((e, i) => (
                 <tr key={i} className="border-b border-slate-700/30 hover:bg-slate-900/40 transition-colors">
                   <td className="px-4 py-4 font-bold text-slate-200">{e.nombre_completo}</td>
                   <td className="px-4 py-4 text-slate-400">{e.carrera}</td>
