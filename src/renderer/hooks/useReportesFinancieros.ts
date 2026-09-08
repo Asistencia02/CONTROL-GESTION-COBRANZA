@@ -512,11 +512,9 @@ export const useReportesFinancieros = (institucionId: number) => {
             
             const inscripcionDeberia = inscripcionesCarrera.reduce((sum, c) => sum + ((c?.monto || 0) * estCarrera), 0)
             const cuotasDeberia = conceptosVencidosCarrera
-              .filter(c => c?.tipo?.toUpperCase() === 'CUOTA')
-              .reduce((sum, c) => sum + ((c?.monto || 0) * estCarrera), 0)
+              .filter(c => c?.tipo?.toUpperCase() === 'CUOTA' && (!c.mes || c.mes <= mesActual)).reduce((sum, c) => sum + ((c?.monto || 0) * estCarrera), 0)
             const seguroDeberia = conceptosVencidosCarrera
-              .filter(c => c?.tipo?.toUpperCase() === 'SEGURO')
-              .reduce((sum, c) => sum + ((c?.monto || 0) * estCarrera), 0)
+              .filter(c => c?.tipo?.toUpperCase() === 'SEGURO' && (!c.mes || c.mes <= mesActual)).reduce((sum, c) => sum + ((c?.monto || 0) * estCarrera), 0)
             
             const totalDeberia = inscripcionDeberia + cuotasDeberia + seguroDeberia
 
@@ -819,6 +817,7 @@ export const useReportesFinancieros = (institucionId: number) => {
     totalVentasKiosco,
   }
 }
+
 
 
 
