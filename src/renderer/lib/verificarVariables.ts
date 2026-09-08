@@ -2,9 +2,11 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY, INSTITUCION_ID } from './env'
 
 /**
  * VERIFICAR VARIABLES DE ENTORNO EN VERCEL
- * Abre F12 → Console y pega esto
+ * Descomenta el código abajo si necesitas debuggear
  */
 
+// Descomentar para debuggear en producción:
+/*
 console.group('🔍 VERIFICACIÓN DE VARIABLES DE ENTORNO')
 
 console.log('📍 Ambiente:', import.meta.env.MODE)
@@ -47,5 +49,6 @@ if (faltantes.length > 0) {
 console.groupEnd()
 
 console.groupEnd()
+*/
 
 export {}
