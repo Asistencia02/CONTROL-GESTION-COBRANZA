@@ -77,7 +77,7 @@ export const ReporteFinanciero: React.FC = () => {
       const { data: estudiantes } = await supabase
         .from('estudiantes')
         .select('id, nombre_completo, carrera_id')
-        .eq('institucion_id', institucionActiva.id)
+        .match({ institucion_id: institucionActiva.id })
 
       const { data: conceptos } = await supabase
         .from('conceptos_pago')
@@ -140,7 +140,7 @@ export const ReporteFinanciero: React.FC = () => {
       const { data: estudiantes } = await supabase
         .from('estudiantes')
         .select('id, nombre_completo, carrera_id')
-        .eq('institucion_id', institucionActiva.id)
+        .match({ institucion_id: institucionActiva.id })
 
       const { data: conceptos } = await supabase
         .from('conceptos_pago')
@@ -278,9 +278,11 @@ export const ReporteFinanciero: React.FC = () => {
         const { data: gastosData } = await supabase
           .from('gastos')
           .select('monto')
-          .eq('mes', mesActual)
+          .match({ mes: mesActual })
         totalGastos = gastosData?.reduce((sum, g) => sum + (g.monto || 0), 0) || 0
-      } catch (err) {}
+      } catch (err) {
+        console.log('[FINANCIERO] Gastos error:', err)
+      }
 
       setGastos(totalGastos)
 
@@ -288,7 +290,7 @@ export const ReporteFinanciero: React.FC = () => {
       const { data: estudiantes } = await supabase
         .from('estudiantes')
         .select('id, institucion_id, carrera_id')
-        .eq('institucion_id', institucionActiva.id)
+        .match({ institucion_id: institucionActiva.id })
 
       // 7. Mapa de pagos
       const pagosMap = new Map<number, number>()
