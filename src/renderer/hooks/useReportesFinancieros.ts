@@ -662,23 +662,32 @@ export const useReportesFinancieros = (institucionId: number) => {
       // DESGLOSE POR CONCEPTO
       const desgloseMap = new Map<string, { esperado: number; cobrado: number; conceptos: Set<number> }>()
       
+      // Inicializar map con los tipos
+      desgloseMap.set('INSCRIPCION', { esperado: 0, cobrado: 0, conceptos: new Set<number>() })
+      desgloseMap.set('CUOTA', { esperado: 0, cobrado: 0, conceptos: new Set<number>() })
+      desgloseMap.set('SEGURO', { esperado: 0, cobrado: 0, conceptos: new Set<number>() })
+      
       // Calcular esperado por tipo de concepto
-      conceptosFiltrados.forEach(c => {
+      // INSCRIPCIÓN: una sola vez por estudiante (tomar monto del primer concepto de inscripción)
+      const inscripcionMonto = inscripciones[0]?.monto || 0
+      if (inscripcionMonto > 0) {
+        const inscripcionEst = desgloseMap.get('INSCRIPCION')!
+        inscripcionEst.esperado = inscripcionMonto * estudiantesActivos.length
+        inscripciones.forEach(c => inscripcionEst.conceptos.add(c.id))
+      }
+      
+      // CUOTA y SEGURO: por cada estudiante de su carrera
+      conceptosVencidos.forEach(c => {
         const tipo = c.tipo?.toUpperCase() || 'OTRO'
-        if (!desgloseMap.has(tipo)) {
-          desgloseMap.set(tipo, { esperado: 0, cobrado: 0, conceptos: new Set<number>() })
-        }
-        const est = desgloseMap.get(tipo)!
-        
-        if (tipo === 'INSCRIPCION') {
-          // Inscripción se cobra una sola vez por estudiante (no multiplicar por cantidad de carreras)
-          est.esperado += c.monto * estudiantesActivos.length
-        } else {
-          // Cuotas y seguros se cobran por cada estudiante de su carrera
+        if (tipo !== 'INSCRIPCION') {
+          if (!desgloseMap.has(tipo)) {
+            desgloseMap.set(tipo, { esperado: 0, cobrado: 0, conceptos: new Set<number>() })
+          }
+          const est = desgloseMap.get(tipo)!
           const cantEstudiantes = estudiantesActivos.filter(e => e.carrera_id === c.carrera_id).length
           est.esperado += c.monto * cantEstudiantes
+          est.conceptos.add(c.id)
         }
-        est.conceptos.add(c.id)
       })
       
       // Calcular cobrado por tipo de concepto
@@ -693,14 +702,16 @@ export const useReportesFinancieros = (institucionId: number) => {
         est.cobrado += p.monto_pagado || 0
       })
       
-      const desgloseConceptosArray: DesgloseConcepto[] = Array.from(desgloseMap.entries()).map(([tipo, data]) => ({
-        tipo,
-        total_esperado: data.esperado,
-        total_cobrado: data.cobrado,
-        total_pendiente: Math.max(0, data.esperado - data.cobrado),
-        porcentaje_cobro: data.esperado > 0 ? (data.cobrado / data.esperado) * 100 : 0,
-        cantidad_conceptos: data.conceptos.size
-      }))
+      const desgloseConceptosArray: DesgloseConcepto[] = Array.from(desgloseMap.entries())
+        .filter(([, data]) => data.esperado > 0)
+        .map(([tipo, data]) => ({
+          tipo,
+          total_esperado: data.esperado,
+          total_cobrado: data.cobrado,
+          total_pendiente: Math.max(0, data.esperado - data.cobrado),
+          porcentaje_cobro: data.esperado > 0 ? (data.cobrado / data.esperado) * 100 : 0,
+          cantidad_conceptos: data.conceptos.size
+        }))
       
       setDesgloseConceptos(desgloseConceptosArray)
       console.log('[REPORTES] Desglose conceptos (institucion_id=' + institucionId + '):', desgloseConceptosArray)
