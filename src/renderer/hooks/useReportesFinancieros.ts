@@ -546,7 +546,7 @@ export const useReportesFinancieros = (institucionId: number) => {
         }
       }
 
-      setReporteMesAMes(reporteMeses)
+      console.log("[REPORTES MES A MES]", reporteMeses); setReporteMesAMes(reporteMeses)
 
       const morosos: TopEstudiantesMora[] = []
       estudiantesActivos.forEach(est => {
@@ -819,6 +819,7 @@ export const useReportesFinancieros = (institucionId: number) => {
     totalVentasKiosco,
   }
 }
+
 
 
 
