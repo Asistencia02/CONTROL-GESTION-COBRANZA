@@ -769,7 +769,15 @@ export const useReportesFinancieros = (institucionId: number) => {
           totalPagado += montoPago
         })
         
-        if (totalResponsable > 0 && totalPagado >= totalResponsable) {
+                // FIX: Validar que CADA concepto esté pagado completamente, no solo suma global
+        let tieneDeudaEnAlgunConcepto = false
+        conceptosVencidosMoraLocal.forEach(concepto => {
+          if (concepto.carrera_id !== est.carrera_id) return
+          const montoPago = pagosValidos.find(p => p.estudiante_id === est.id && p.concepto_id === concepto.id)?.monto_pagado || 0
+          const deudaDelConcepto = concepto.monto - montoPago
+          if (deudaDelConcepto > 0) tieneDeudaEnAlgunConcepto = true
+        })
+        if (totalResponsable > 0 && !tieneDeudaEnAlgunConcepto) {
           estudianteAlDiaArray.push({
             id: est.id,
             dni: est.dni || '',
@@ -817,6 +825,7 @@ export const useReportesFinancieros = (institucionId: number) => {
     totalVentasKiosco,
   }
 }
+
 
 
 
