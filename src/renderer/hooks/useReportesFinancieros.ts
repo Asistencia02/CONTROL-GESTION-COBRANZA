@@ -74,7 +74,7 @@ export interface DesgloseConcepto {
   total_cobrado: number
   total_pendiente: number
   porcentaje_cobro: number
-  cantidad_conceptos: number
+  cantidad_conceptos: Set<number>
 }
 
 export interface EstudianteAlDia {
@@ -660,14 +660,14 @@ export const useReportesFinancieros = (institucionId: number) => {
       }
 
       // DESGLOSE POR CONCEPTO
-      const desgloseMap = new Map<string, { esperado: number; cobrado: number; conceptos: number }>()
+      const desgloseMap = new Map<string, { esperado: number; cobrado: number; conceptos: Set<number> }>()
       
       conceptosFiltrados.forEach(c => {
         const tipo = c.tipo?.toUpperCase() || 'OTRO'
-        const est = desgloseMap.get(tipo) || { esperado: 0, cobrado: 0, conceptos: 0 }
+        const est = desgloseMap.get(tipo) || { esperado: 0, cobrado: 0, conceptos: new Set<number>() }
         const cantEstudiantes = estudiantesActivos.filter(e => e.carrera_id === c.carrera_id).length
         est.esperado += c.monto * cantEstudiantes
-        est.conceptos += 1
+        est.conceptos.add(c.id)
         desgloseMap.set(tipo, est)
       })
       
@@ -675,7 +675,7 @@ export const useReportesFinancieros = (institucionId: number) => {
         const concepto = conceptosFiltrados.find(c => c.id === p.concepto_id)
         if (!concepto) return
         const tipo = concepto.tipo?.toUpperCase() || 'OTRO'
-        const est = desgloseMap.get(tipo) || { esperado: 0, cobrado: 0, conceptos: 0 }
+        const est = desgloseMap.get(tipo) || { esperado: 0, cobrado: 0, conceptos: new Set<number>() }
         est.cobrado += p.monto_pagado || 0
         desgloseMap.set(tipo, est)
       })
@@ -686,11 +686,11 @@ export const useReportesFinancieros = (institucionId: number) => {
         total_cobrado: data.cobrado,
         total_pendiente: Math.max(0, data.esperado - data.cobrado),
         porcentaje_cobro: data.esperado > 0 ? (data.cobrado / data.esperado) * 100 : 0,
-        cantidad_conceptos: data.conceptos
+        cantidad_conceptos: data.conceptos.size
       }))
       
       setDesgloseConceptos(desgloseConceptosArray)
-      console.log('[REPORTES] Desglose conceptos:', desgloseConceptosArray.length)
+      console.log('[REPORTES] Desglose conceptos (institucion_id=' + institucionId + '):', desgloseConceptosArray)
       
       // ESTUDIANTES AL DÍA
       const estudianteAlDiaArray: EstudianteAlDia[] = []
@@ -770,6 +770,7 @@ export const useReportesFinancieros = (institucionId: number) => {
     totalVentasKiosco,
   }
 }
+
 
 
 
