@@ -123,7 +123,7 @@ export const ReportesFinancierosModerno: React.FC = () => {
                     <div className="p-5 bg-gradient-to-br from-green-600/30 to-green-900/20 border border-green-500/40 rounded-xl shadow-lg hover:shadow-xl transition-all">
                       <div className="flex items-center justify-between mb-2">
                         <p className="text-sm text-green-300 font-bold flex items-center gap-2"><CheckCircle size={18} />AL DÍA</p>
-                        <span className="text-2xl font-black text-green-400">{resumenEjecutivo.total_estudiantes - resumenEjecutivo.estudiantes_en_mora}</span>
+                        <span className="text-2xl font-black text-green-400">{estudiantesAlDia.length}</span>
                       </div>
                       <div className="h-2 bg-green-900/50 rounded-full overflow-hidden"><div className="h-full bg-gradient-to-r from-green-500 to-emerald-400" style={{ width: `${((resumenEjecutivo.total_estudiantes - resumenEjecutivo.estudiantes_en_mora) / resumenEjecutivo.total_estudiantes * 100)}%` }} /></div>
                     </div>
@@ -242,7 +242,7 @@ export const ReportesFinancierosModerno: React.FC = () => {
                     <div className="p-5 bg-gradient-to-br from-green-600/30 to-green-900/20 border border-green-500/40 rounded-xl shadow-lg hover:shadow-xl transition-all">
                       <div className="flex items-center justify-between mb-2">
                         <p className="text-sm text-green-300 font-bold flex items-center gap-2"><CheckCircle size={18} />AL DÍA</p>
-                        <span className="text-2xl font-black text-green-400">{resumenEjecutivo.total_estudiantes - resumenEjecutivo.estudiantes_mora_mes_actual}</span>
+                        <span className="text-2xl font-black text-green-400">{estudiantesAlDia.length}</span>
                       </div>
                       <div className="h-2 bg-green-900/50 rounded-full overflow-hidden"><div className="h-full bg-gradient-to-r from-green-500 to-emerald-400" style={{ width: `${((resumenEjecutivo.total_estudiantes - resumenEjecutivo.estudiantes_mora_mes_actual) / resumenEjecutivo.total_estudiantes * 100)}%` }} /></div>
                     </div>
@@ -794,5 +794,6 @@ case 'aldia':
 }
 
 export default ReportesFinancierosModerno
+
 
 
