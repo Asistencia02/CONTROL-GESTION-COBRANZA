@@ -520,32 +520,37 @@ export const ReporteFinanciero: React.FC = () => {
           {/* Capacidad vs Recaudado */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div className="p-6 bg-gradient-to-br from-slate-800/80 to-slate-900/40 border border-slate-700/60 rounded-2xl">
-              <h2 className="text-xl font-bold text-white mb-4">Capacidad Teórica</h2>
+              <h2 className="text-lg font-bold text-white mb-4">💎 INGRESOS ESPERADOS</h2>
               <p className="text-4xl font-black text-blue-300 mb-2">{formatoMoneda(totalCapacidad)}</p>
-              <p className="text-sm text-slate-400">Ingresos esperados hasta mes {mesVencimientoHasta}</p>
+              <p className="text-sm text-slate-400">Hasta mes {mesVencimientoHasta}</p>
             </div>
 
             <div className="p-6 bg-gradient-to-br from-slate-800/80 to-slate-900/40 border border-slate-700/60 rounded-2xl">
-              <h2 className="text-xl font-bold text-white mb-4">Mora Hasta Mes Actual</h2>
-              <p className="text-4xl font-black text-red-300 mb-2">{formatoMoneda(totalDeuda)}</p>
-              <p className="text-sm text-slate-400">{totalCapacidad > 0 ? ((totalDeuda / totalCapacidad) * 100).toFixed(1) : '0'}% de capacidad</p>
+              <h2 className="text-lg font-bold text-white mb-4">✅ INGRESOS REALES</h2>
+              <p className="text-4xl font-black text-green-300 mb-2">{formatoMoneda(totalRecaudado)}</p>
+              <p className="text-sm text-slate-400">Recaudado a mes actual</p>
             </div>
           </div>
 
-          {/* Progreso */}
-          <div className="p-6 bg-gradient-to-r from-slate-800/80 via-slate-800/60 to-slate-800/40 border border-slate-700/50 rounded-2xl">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-bold text-white">Eficiencia de Cobranza</h3>
-              <p className="text-3xl font-black text-green-400">{porcentajeCobranza.toFixed(1)}%</p>
+          {/* Mora Total */}
+          <div className="p-6 bg-gradient-to-br from-slate-800/80 to-slate-900/40 border border-slate-700/60 rounded-2xl">
+            <h2 className="text-lg font-bold text-white mb-4">📉 MORA TOTAL HASTA MES ACTUAL</h2>
+            <p className="text-4xl font-black text-red-300 mb-2">{formatoMoneda(totalDeuda)}</p>
+            <p className="text-sm text-slate-400">{totalCapacidad > 0 ? ((totalDeuda / totalCapacidad) * 100).toFixed(1) : '0'}% de ingresos esperados</p>
+          </div>
+
+          {/* Proyección Anual */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="p-6 bg-gradient-to-br from-slate-800/80 to-slate-900/40 border border-slate-700/60 rounded-2xl">
+              <h2 className="text-lg font-bold text-white mb-4">📅 INGRESO ESPERADO HASTA FIN DE AÑO</h2>
+              <p className="text-4xl font-black text-purple-300 mb-2">{formatoMoneda(totalCapacidad * (12 / mesVencimientoHasta))}</p>
+              <p className="text-sm text-slate-400">Proyección: {mesVencimientoHasta} meses registrados x 12 meses</p>
             </div>
-            <div className="relative h-8 bg-slate-700/50 rounded-full overflow-hidden border border-slate-600/50">
-              <div
-                className="h-full bg-gradient-to-r from-green-500 via-emerald-400 to-cyan-400"
-                style={{ width: `${Math.min(porcentajeCobranza, 100)}%` }}
-              />
-              <div className="absolute inset-0 flex items-center justify-end pr-4">
-                <span className="text-sm font-bold text-white">{porcentajeCobranza.toFixed(1)}%</span>
-              </div>
+
+            <div className="p-6 bg-gradient-to-br from-slate-800/80 to-slate-900/40 border border-slate-700/60 rounded-2xl">
+              <h2 className="text-lg font-bold text-white mb-4">📊 PROYECCIÓN DE INGRESOS</h2>
+              <p className="text-4xl font-black text-cyan-300 mb-2">{formatoMoneda(totalRecaudado * (12 / mesVencimientoHasta))}</p>
+              <p className="text-sm text-slate-400">Según % de cobro actual ({porcentajeCobranza.toFixed(1)}%)</p>
             </div>
           </div>
         </div>
