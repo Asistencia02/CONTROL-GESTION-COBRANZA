@@ -641,6 +641,7 @@ case 'desglose':
     <div className="space-y-6">
       <div className="p-6 bg-gradient-to-br from-slate-800/80 to-slate-900/40 border border-slate-700/60 rounded-2xl shadow-2xl backdrop-blur-xl">
         <h2 className="text-2xl font-bold text-white mb-2 flex items-center gap-2"><PieChart size={28} className="text-pink-400" />Desglose por Concepto</h2>
+        <p className="text-sm text-pink-400 font-bold mb-4">?? Año Completo</p>
         <p className="text-xs text-slate-400 mb-6">Esperado vs Cobrado por tipo de concepto</p>
         <div className="overflow-x-auto">
           <table className="w-full">
@@ -794,6 +795,7 @@ case 'aldia':
 }
 
 export default ReportesFinancierosModerno
+
 
 
 
