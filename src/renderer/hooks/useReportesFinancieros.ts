@@ -339,7 +339,7 @@ export const useReportesFinancieros = (institucionId: number) => {
           c.tipo?.toUpperCase() === 'CUOTA'
         )
         const sumaCuotasCarrera = cuotasCarrera.reduce((sum, c) => sum + c.monto, 0)
-        totalRecaudableMesActual += sumaCuotasCarrera * cantEstudiantes * numeroMesesAcademicos
+        totalRecaudableMesActual += sumaCuotasCarrera * cantEstudiantes
         
         // SEGUROS: sumar TODAS y multiplicar UNA SOLA VEZ
         const segurosCarrera = conceptosVencidos.filter(c => 
@@ -347,7 +347,7 @@ export const useReportesFinancieros = (institucionId: number) => {
           c.tipo?.toUpperCase() === 'SEGURO'
         )
         const sumaSegurosCarrera = segurosCarrera.reduce((sum, c) => sum + c.monto, 0)
-        totalRecaudableMesActual += sumaSegurosCarrera * cantEstudiantes * numeroMesesAcademicos
+        totalRecaudableMesActual += sumaSegurosCarrera * cantEstudiantes
       })
 
       estudiantesActivos.forEach(est => {
@@ -817,4 +817,5 @@ export const useReportesFinancieros = (institucionId: number) => {
     totalVentasKiosco,
   }
 }
+
 
