@@ -685,10 +685,10 @@ export const useReportesFinancieros = (institucionId: number) => {
         // INSM: Gastos operativos
         const { data: gastosData } = await supabase
           .from('gastos')
-          .select('monto')
+          .select('monto, fecha_gasto')
           .eq('institucion_id', 2)
-          .gte('fecha', fechaInicio)
-          .lte('fecha', fechaFin)
+          .gte('fecha_gasto', fechaInicio)
+          .lte('fecha_gasto', fechaFin)
 
         if (gastosData) {
           const total = gastosData.reduce((sum, g) => sum + (g.monto || 0), 0)
@@ -702,10 +702,10 @@ export const useReportesFinancieros = (institucionId: number) => {
         // Ventas kiosco
         const { data: cajaGrandeData } = await supabase
           .from('caja_grande')
-          .select('monto')
+          .select('monto, fecha_gasto')
           .eq('institucion_id', 2)
-          .gte('fecha', fechaInicio)
-          .lte('fecha', fechaFin)
+          .gte('fecha_gasto', fechaInicio)
+          .lte('fecha_gasto', fechaFin)
 
         if (cajaGrandeData) {
           const total = cajaGrandeData.reduce((sum, c) => sum + (c.monto || 0), 0)
@@ -715,10 +715,10 @@ export const useReportesFinancieros = (institucionId: number) => {
         // ISIP: Solo gastos operativos (sin insumos ni kiosco)
         const { data: gastosDataISIP } = await supabase
           .from('gastos')
-          .select('monto')
+          .select('monto, fecha_gasto')
           .eq('institucion_id', 1)
-          .gte('fecha', fechaInicio)
-          .lte('fecha', fechaFin)
+          .gte('fecha_gasto', fechaInicio)
+          .lte('fecha_gasto', fechaFin)
 
         if (gastosDataISIP) {
           const total = gastosDataISIP.reduce((sum, g) => sum + (g.monto || 0), 0)
@@ -758,6 +758,7 @@ export const useReportesFinancieros = (institucionId: number) => {
     totalVentasKiosco,
   }
 }
+
 
 
 
