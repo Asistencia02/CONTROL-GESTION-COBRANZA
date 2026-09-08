@@ -3,7 +3,6 @@ import { supabase } from '@renderer/lib/supabase'
 import { useVentasInsumos } from '@renderer/hooks/useVentasInsumos'
 
 export interface ResumenEjecutivo {
-  // ANUAL (TODO sin filtro de vencimiento)
   total_recaudable_año: number
   recaudado_hasta_hoy: number
   deuda_actual: number
@@ -12,15 +11,12 @@ export interface ResumenEjecutivo {
   estudiantes_en_mora: number
   porcentaje_en_mora: number
   extra_por_recargo: number
-  
-  // HASTA MES ACTUAL (solo conceptos vencidos - actualiza mes a mes)
   recaudable_mes_actual: number
   recaudado_mes_actual: number
   pendiente_mes_actual: number
   porcentaje_cobro_mes_actual: number
   estudiantes_mora_mes_actual: number
   porcentaje_mora_mes_actual: number
-  
   mes_actual_nombre: string
   fecha_reporte: string
 }
@@ -80,6 +76,7 @@ export interface DesgloseConcepto {
   porcentaje_cobro: number
   cantidad_conceptos: number
 }
+
 export interface EstudianteAlDia {
   id: number
   dni: string
@@ -92,11 +89,10 @@ export interface EstudianteAlDia {
 }
 
 // ========== CONSTANTES ==========
-const PRIMER_MES_ACADEMICO = 3  // Marzo
-const ULTIMO_MES_ACADEMICO = 8  // Agosto
+const PRIMER_MES_ACADEMICO = 3
+const ULTIMO_MES_ACADEMICO = 8
 const PRIMER_DIA_VENCIMIENTO = 10
 
-// Función helper para determinar si un concepto debe aplicar beca
 const esConceptoBeca = (tipo: string): boolean => {
   if (!tipo) return true
   const tipoLower = tipo.toLowerCase()
@@ -127,15 +123,13 @@ export const useReportesFinancieros = (institucionId: number) => {
       const mesActual = today.getMonth() + 1
       const anioActual = today.getFullYear()
       
-      // Día de vencimiento: 10 - si es antes del día 10, el mes aún no vence
       const mesVencidoActual = diaActual >= PRIMER_DIA_VENCIMIENTO ? mesActual : mesActual - 1
       const anioVencidoActual = mesVencidoActual < mesActual ? anioActual : anioActual
 
       const mesesNombre = ['', 'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
-      const mesActualNombre = mesesNombre[mesActual]
+      const mesActualNombre = mesesNombre[mesActual] || 'Mes Desconocido'
 
-      // ========== OBTENER DATOS BASE ==========
-      // Estudiantes activos
+      // OBTENER DATOS BASE
       const { data: estudiantes, error: errEst } = await supabase
         .from('estudiantes')
         .select('id, nombre, apellido, dni, carrera_id, estado, carreras(nombre)')
@@ -147,7 +141,6 @@ export const useReportesFinancieros = (institucionId: number) => {
 
       const estudiantesActivos = estudiantes || []
       
-      // Agrupar estudiantes por carrera - necesario para RECAUDABLE y PROYECCIÓN
       const estudiantesPorCarrera = new Map<number, number>()
       estudiantesActivos.forEach(est => {
         estudiantesPorCarrera.set(est.carrera_id, (estudiantesPorCarrera.get(est.carrera_id) || 0) + 1)
@@ -163,7 +156,6 @@ export const useReportesFinancieros = (institucionId: number) => {
         return
       }
 
-      // Obtener TODOS los conceptos de la institución (no filtrar por carrera aquí)
       const { data: conceptos, error: errConc } = await supabase
         .from('conceptos_pago')
         .select('id, nombre, tipo, monto, mes, año, carrera_id')
@@ -173,29 +165,21 @@ export const useReportesFinancieros = (institucionId: number) => {
       if (errConc) throw errConc
 
       console.log('[REPORTES] TODOS los conceptos:', conceptos?.length)
-      console.log('[REPORTES] Por carrera:', conceptos?.reduce((acc: any, c: any) => { acc[c.carrera_id] = (acc[c.carrera_id] || 0) + 1; return acc }, {}))
 
-      // INSCRIPCION (sin mes/año)
       const inscripciones = (conceptos || []).filter(c => 
         c.tipo?.toUpperCase() === 'INSCRIPCION' && 
         (!c.mes || !c.año)
       )
 
-      // CUOTAS + SEGURO (ambos con mes/año - SOLO meses académicos 3-8)
-      // IMPORTANTE: Si día < 10, NO incluir mes actual
       const conceptosVencidos = (conceptos || []).filter(c => {
-        // Incluir INSCRIPCION sin mes/año
         if (c.tipo?.toUpperCase() === 'INSCRIPCION' && (!c.mes || !c.año)) {
           return true
         }
-        // Para CUOTA y SEGURO, aplicar filtro de mes/año
         if (c.mes && c.año) {
-          // Excluir enero y febrero - solo contar marzo a agosto
           if (c.mes < PRIMER_MES_ACADEMICO || c.mes > ULTIMO_MES_ACADEMICO) return false
           
           if (c.año < anioActual) return true
           if (c.año === anioActual) {
-            // Si está en mes actual Y día < 10, NO incluir mes actual
             if (c.mes === mesActual && diaActual < PRIMER_DIA_VENCIMIENTO) return false
             if (c.mes < mesActual) return true
             if (c.mes === mesActual && diaActual >= PRIMER_DIA_VENCIMIENTO) return true
@@ -206,21 +190,9 @@ export const useReportesFinancieros = (institucionId: number) => {
 
       const conceptosFiltrados = [...inscripciones, ...conceptosVencidos]
 
-      console.log('[REPORTES] Conceptos - Inscripciones:', inscripciones.length, '| Vencidos (sin inscripción):', conceptosVencidos.filter(c => c.tipo?.toUpperCase() !== 'INSCRIPCION').length)
-      if (inscripciones.length > 0) console.log('[REPORTES] Inscripción carrera_id:', inscripciones[0].carrera_id)
-      const conceptosVencidosSinInsc = conceptosVencidos.filter(c => c.tipo?.toUpperCase() !== 'INSCRIPCION')
-      if (conceptosVencidosSinInsc.length > 0) console.log('[REPORTES] Vencidos (cuota+seguro) carrera_ids:', conceptosVencidosSinInsc.slice(0, 3).map((c: any) => c.carrera_id))
-      const desglose = conceptosVencidosSinInsc.reduce((acc, c) => {
-        const tipo = c.tipo?.toUpperCase() || 'OTRO'
-        acc[tipo] = (acc[tipo] || 0) + 1
-        return acc
-      }, {} as Record<string, number>)
-      console.log('[REPORTES] Desglose vencidos (sin inscripción):', desglose)
-
-      // ========== PAGOS - BUSCAR EN AMBAS TABLAS CON PAGINACIÓN COMPLETA ==========
+      // PAGOS - CON PAGINACIÓN
       let todosPagos: any[] = []
       
-      // 1. Pagos individuales con paginación
       let pagina1 = 0
       let tieneRangoMas1 = true
       while (tieneRangoMas1) {
@@ -241,7 +213,6 @@ export const useReportesFinancieros = (institucionId: number) => {
         }
       }
 
-      // 2. Pagos múltiples con paginación
       let pagina2 = 0
       let tieneRangoMas2 = true
       while (tieneRangoMas2) {
@@ -271,11 +242,8 @@ export const useReportesFinancieros = (institucionId: number) => {
       }
 
       const pagosValidos = todosPagos
-      console.log('[REPORTES] Pagos válidos (TODOS - CON PAGINACIÓN):', pagosValidos.length)
+      console.log('[REPORTES] Pagos válidos:', pagosValidos.length)
 
-      // ========== CALCULAR VENCIDOS ANTES DE DÍA 10 DEL MES ACTUAL ==========
-      // Si día < 10: mes actual NO vence hasta día 10
-      // Si día >= 10: mes actual ya vence
       const conceptosVencidosMoraLocal = conceptosVencidos.filter(c => {
         if (c.mes && c.año) {
           if (c.mes < PRIMER_MES_ACADEMICO || c.mes > ULTIMO_MES_ACADEMICO) return false
@@ -284,35 +252,29 @@ export const useReportesFinancieros = (institucionId: number) => {
         }
         return false
       })
-      console.log('[MORA] Conceptos vencidos para mora: cuota+seguro:', conceptosVencidosMoraLocal.filter(c => c.tipo?.toUpperCase() !== 'INSCRIPCION').length, '| Total:', conceptosVencidosMoraLocal.length, '| diaActual:', diaActual, 'mesVencidoActual:', mesVencidoActual)
 
-      // ========== CALCULAR RESUMEN EJECUTIVO - PARTE ANUAL ==========
-      // ✅ ARREGLO: Aplicar lógica de becas igual que en useDeudas
+      // RESUMEN EJECUTIVO - PARTE ANUAL
       let totalRecaudable = 0
       let totalRecaudado = 0
       let estudiantesEnMora = 0
       const conceptoPorEstudiante = new Map<number, number>()
 
-      // Calcular deuda por estudiante - USAR conceptosVencidos COMPLETO (sin filtro día 10)
       estudiantesActivos.forEach(est => {
         let deudaEst = 0
         const esBecado100 = est.estado === 'BECADO_100'
         const esBecado50 = est.estado === 'BECADO_50'
         
         conceptosVencidos.forEach(concepto => {
-          // SOLO conceptos de la carrera del estudiante
           if (concepto.carrera_id !== est.carrera_id) return
           
           const montoPago = pagosValidos.find(p => p.estudiante_id === est.id && p.concepto_id === concepto.id)?.monto_pagado || 0
           const montoOriginal = concepto.monto
           const aplicaBeca = esConceptoBeca(concepto.tipo)
           
-          // BECADO_100: conceptos con beca aparecen como pagados automáticamente
           if (esBecado100 && aplicaBeca) {
             return
           }
           
-          // BECADO_50: solo paga 50% de conceptos con beca
           let montoAResponsabilidad = montoOriginal
           if (esBecado50 && aplicaBeca) {
             montoAResponsabilidad = montoOriginal * 0.5
@@ -324,14 +286,12 @@ export const useReportesFinancieros = (institucionId: number) => {
           }
         })
         
-        // BECADO_100 nunca aparece en mora
         if (deudaEst > 0 && !esBecado100) {
           conceptoPorEstudiante.set(est.id, deudaEst)
           estudiantesEnMora++
         }
       })
 
-      // ✅ ARREGLO: Calcular recaudable aplicando becas
       totalRecaudable = 0
       estudiantesActivos.forEach(est => {
         const esBecado50 = est.estado === 'BECADO_50'
@@ -348,20 +308,16 @@ export const useReportesFinancieros = (institucionId: number) => {
           totalRecaudable += montoResponsable
         })
       })
-      totalRecaudado = pagosValidos.reduce((sum, p) => sum + p.monto_pagado, 0)
+      totalRecaudado = pagosValidos.reduce((sum, p) => sum + (p.monto_pagado || 0), 0)
 
       const porcentajeCobro = totalRecaudable > 0 ? (totalRecaudado / totalRecaudable) * 100 : 0
       const pendiente = Math.max(0, totalRecaudable - totalRecaudado)
 
-      // ========== CALCULAR RESUMEN EJECUTIVO - PARTE MES ACTUAL ==========
-      // SOLO conceptos vencidos ANTES del mes actual (no incluir mes actual todavía)
-      // NO incluir INSCRIPCIÓN porque no tiene vencimiento de mes
+      // RESUMEN EJECUTIVO - PARTE MES ACTUAL
       const conceptosAntesdeMesActual = conceptosFiltrados.filter(c => {
-        // EXCLUIR inscripción sin mes/año - no tiene "vencimiento anterior"
         if (c.tipo?.toUpperCase() === 'INSCRIPCION' && (!c.mes || !c.año)) {
           return false
         }
-        // Solo incluir CUOTA y SEGURO de meses ANTERIORES - excluir enero y febrero
         if (c.mes && c.año) {
           if (c.mes < PRIMER_MES_ACADEMICO || c.mes > ULTIMO_MES_ACADEMICO) return false
           if (c.año < anioActual) return true
@@ -372,9 +328,7 @@ export const useReportesFinancieros = (institucionId: number) => {
 
       let totalRecaudableMesActual = 0
       let estudiantesEnMoraMesActual = 0
-      const conceptoPorEstudianteMesActual = new Map<number, number>()
 
-      // Calcular deuda por estudiante - SOLO CONCEPTOS ANTES DE MES ACTUAL
       estudiantesActivos.forEach(est => {
         let deudaEst = 0
         const esBecado100 = est.estado === 'BECADO_100'
@@ -387,12 +341,10 @@ export const useReportesFinancieros = (institucionId: number) => {
           const montoOriginal = concepto.monto
           const aplicaBeca = esConceptoBeca(concepto.tipo)
           
-          // BECADO_100: conceptos con beca aparecen como pagados automáticamente
           if (esBecado100 && aplicaBeca) {
             return
           }
           
-          // BECADO_50: solo paga 50% de conceptos con beca
           let montoAResponsabilidad = montoOriginal
           if (esBecado50 && aplicaBeca) {
             montoAResponsabilidad = montoOriginal * 0.5
@@ -404,14 +356,11 @@ export const useReportesFinancieros = (institucionId: number) => {
           }
         })
         
-        // BECADO_100 nunca aparece en mora
         if (deudaEst > 0 && !esBecado100) {
-          conceptoPorEstudianteMesActual.set(est.id, deudaEst)
           estudiantesEnMoraMesActual++
         }
       })
 
-      // ✅ ARREGLO: Recaudable mes actual con aplicación de becas
       totalRecaudableMesActual = 0
       estudiantesActivos.forEach(est => {
         const esBecado50 = est.estado === 'BECADO_50'
@@ -429,7 +378,6 @@ export const useReportesFinancieros = (institucionId: number) => {
         })
       })
       
-      // Pagos para conceptos antes de mes actual
       const pagosValidosMesActual = pagosValidos.filter(p => {
         const concepto = conceptosFiltrados.find(c => c.id === p.concepto_id)
         if (!concepto) return false
@@ -441,7 +389,7 @@ export const useReportesFinancieros = (institucionId: number) => {
         }
         return false
       })
-      const totalRecaudadoMesActual = pagosValidosMesActual.reduce((sum, p) => sum + p.monto_pagado, 0)
+      const totalRecaudadoMesActual = pagosValidosMesActual.reduce((sum, p) => sum + (p.monto_pagado || 0), 0)
       const porcentajeCobroMesActual = totalRecaudableMesActual > 0 ? (totalRecaudadoMesActual / totalRecaudableMesActual) * 100 : 0
       const pendienteMesActual = Math.max(0, totalRecaudableMesActual - totalRecaudadoMesActual)
 
@@ -463,10 +411,8 @@ export const useReportesFinancieros = (institucionId: number) => {
         mes_actual_nombre: mesActualNombre,
         fecha_reporte: new Date().toISOString(),
       })
-      console.log('[REPORTES] ANUAL - Recaudable:', totalRecaudable, '| Recaudado:', totalRecaudado, '| En mora:', estudiantesEnMora)
-      console.log('[REPORTES] HASTA', mesActualNombre, '- Recaudable:', totalRecaudableMesActual, '| Recaudado:', totalRecaudadoMesActual, '| En mora:', estudiantesEnMoraMesActual)
 
-      // ========== REPORTES POR CARRERA ==========
+      // REPORTES POR CARRERA
       const carreras = new Map<number, any>()
       estudiantesActivos.forEach(est => {
         if (!carreras.has(est.carrera_id)) {
@@ -476,17 +422,17 @@ export const useReportesFinancieros = (institucionId: number) => {
             estudiantes: [],
           })
         }
-        carreras.get(est.carrera_id).estudiantes.push(est.id)
+        carreras.get(est.carrera_id)!.estudiantes.push(est.id)
       })
 
       const reportePorCar: ReportePorCarrera[] = Array.from(carreras.values()).map(carr => {
-        const estCarrera = carr.estudiantes
+        const estCarrera = carr.estudiantes || []
         let recaudadoCarrera = 0
         let enMoraCarrera = 0
 
         pagosValidos.forEach(pago => {
           if (estCarrera.includes(pago.estudiante_id)) {
-            recaudadoCarrera += pago.monto_pagado
+            recaudadoCarrera += pago.monto_pagado || 0
           }
         })
 
@@ -496,7 +442,6 @@ export const useReportesFinancieros = (institucionId: number) => {
           }
         })
 
-        // CORREGIDO: Solo conceptos de esta carrera
         const recaudableCarrera = conceptosFiltrados
           .filter(c => c.carrera_id === carr.carrera_id)
           .reduce((sum, c) => sum + (c.monto * estCarrera.length), 0)
@@ -518,68 +463,71 @@ export const useReportesFinancieros = (institucionId: number) => {
 
       setReportePorCarrera(reportePorCar)
 
-      // ========== REPORTES MES A MES ==========
-      const reporteMeses: ReporteMesAMes[] = reportePorCar.map(carr => {
-        const estCarrera = carr.total_estudiantes
-        
-        // ✅ FILTRAR CONCEPTOS POR CARRERA
-        const inscripcionesCarrera = inscripciones.filter(c => c.carrera_id === carr.carrera_id)
-        const conceptosVencidosCarrera = conceptosVencidos.filter(c => c.carrera_id === carr.carrera_id)
-        console.log('[REPORTES] Carrera', carr.carrera_id, '- Inscripciones:', inscripcionesCarrera.length, 'Vencidos:', conceptosVencidosCarrera.length)
-        
-        // Separar por tipo - SOLO DE ESTA CARRERA
-        const inscripcionDeberia = inscripcionesCarrera.reduce((sum, c) => sum + (c.monto * estCarrera), 0)
-        
-        const cuotasDeberia = conceptosVencidosCarrera
-          .filter(c => c.tipo?.toUpperCase() === 'CUOTA')
-          .reduce((sum, c) => sum + (c.monto * estCarrera), 0)
-        
-        const seguroDeberia = conceptosVencidosCarrera
-          .filter(c => c.tipo?.toUpperCase() === 'SEGURO')
-          .reduce((sum, c) => sum + (c.monto * estCarrera), 0)
-        
-        const totalDeberia = inscripcionDeberia + cuotasDeberia + seguroDeberia
+      // REPORTES MES A MES - CON VALIDACIONES DEFENSIVAS
+      const reporteMeses: ReporteMesAMes[] = []
+      
+      if (reportePorCar && reportePorCar.length > 0) {
+        for (const carr of reportePorCar) {
+          try {
+            if (!carr || !carr.carrera_id) continue
+            
+            const estCarrera = carr.total_estudiantes || 0
+            if (estCarrera === 0) continue
+            
+            const inscripcionesCarrera = inscripciones.filter(c => c && c.carrera_id === carr.carrera_id)
+            const conceptosVencidosCarrera = conceptosVencidos.filter(c => c && c.carrera_id === carr.carrera_id)
+            
+            const inscripcionDeberia = inscripcionesCarrera.reduce((sum, c) => sum + ((c?.monto || 0) * estCarrera), 0)
+            const cuotasDeberia = conceptosVencidosCarrera
+              .filter(c => c?.tipo?.toUpperCase() === 'CUOTA')
+              .reduce((sum, c) => sum + ((c?.monto || 0) * estCarrera), 0)
+            const seguroDeberia = conceptosVencidosCarrera
+              .filter(c => c?.tipo?.toUpperCase() === 'SEGURO')
+              .reduce((sum, c) => sum + ((c?.monto || 0) * estCarrera), 0)
+            
+            const totalDeberia = inscripcionDeberia + cuotasDeberia + seguroDeberia
 
-        // Lo que realmente se cobró - SOLO DE ESTA CARRERA
-        const conceptosFiltradosCarrera = [...inscripcionesCarrera, ...conceptosVencidosCarrera]
-        const conceptosIds = conceptosFiltradosCarrera.map(c => c.id)
-        const pagosCarrera = pagosValidos.filter(p => conceptosIds.includes(p.concepto_id))
-        const cobradoReal = pagosCarrera.reduce((sum, p) => sum + p.monto_pagado, 0)
+            const conceptosFiltradosCarrera = [...inscripcionesCarrera, ...conceptosVencidosCarrera]
+            const conceptosIds = conceptosFiltradosCarrera.map(c => c?.id).filter(Boolean)
+            const pagosCarrera = pagosValidos.filter(p => conceptosIds.includes(p.concepto_id))
+            const cobradoReal = pagosCarrera.reduce((sum, p) => sum + (p.monto_pagado || 0), 0)
 
-        return {
-          carrera: carr.carrera,
-          cantidad_estudiantes: estCarrera,
-          mes_actual: mesActual,
-          mes_nombre: new Date(anioActual, mesActual - 1).toLocaleString('es-AR', { month: 'long' }),
-          inscripcion_deberia: inscripcionDeberia,
-          cuotas_deberia: cuotasDeberia,
-          seguro_deberia: seguroDeberia,
-          deberia_cobrar_total: totalDeberia,
-          cobre_real_total: cobradoReal,
-          diferencia: cobradoReal - totalDeberia,
-          estado_diferencia: cobradoReal >= totalDeberia ? 'SUPERADO' : 'FALTA',
-          porcentaje_cumplimiento: totalDeberia > 0 ? (cobradoReal / totalDeberia) * 100 : 0,
+            reporteMeses.push({
+              carrera: carr.carrera || 'Sin nombre',
+              cantidad_estudiantes: estCarrera,
+              mes_actual: mesActual,
+              mes_nombre: mesActualNombre,
+              inscripcion_deberia: inscripcionDeberia,
+              cuotas_deberia: cuotasDeberia,
+              seguro_deberia: seguroDeberia,
+              deberia_cobrar_total: totalDeberia,
+              cobre_real_total: cobradoReal,
+              diferencia: cobradoReal - totalDeberia,
+              estado_diferencia: cobradoReal >= totalDeberia ? 'SUPERADO' : 'FALTA',
+              porcentaje_cumplimiento: totalDeberia > 0 ? (cobradoReal / totalDeberia) * 100 : 0,
+            })
+          } catch (errCarrera) {
+            console.error('[REPORTES] Error procesando carrera:', carr?.carrera_id, errCarrera)
+            continue
+          }
         }
-      })
+      }
 
       setReporteMesAMes(reporteMeses)
 
-      // ========== TOP 20 EN MORA ==========
-      // Ya calculado: conceptosVencidosMoraLocal (conceptos vencidos antes de día 10)
+      // TOP 20 EN MORA
       const morosos: TopEstudiantesMora[] = []
       estudiantesActivos.forEach(est => {
-        // Calcular deuda NUEVA - SOLO con conceptos vencidos antes de mes actual
         let deudaMora = 0
         conceptosVencidosMoraLocal.forEach(c => {
           if (c.carrera_id !== est.carrera_id) return
-          const tienePago = pagosValidos.some(p => p.estudiante_id === est.id && p.concepto_id === c.id && p.monto_pagado >= c.monto)
+          const tienePago = pagosValidos.some(p => p.estudiante_id === est.id && p.concepto_id === c.id && (p.monto_pagado || 0) >= (c.monto || 0))
           if (!tienePago) {
-            deudaMora += c.monto
+            deudaMora += c.monto || 0
           }
         })
         
         if (deudaMora > 0) {
-          // Agrupar conceptos vencidos ANTES de mes actual por mes
           const conceptosPorMes = new Map<string, any[]>()
           
           conceptosVencidosMoraLocal.forEach(c => {
@@ -591,22 +539,20 @@ export const useReportesFinancieros = (institucionId: number) => {
             conceptosPorMes.get(mesKey)!.push(c)
           })
           
-          // Contar SOLO meses que tienen al menos 1 concepto sin pagar
           let mesesConDeuda = 0
           let conceptosAdeudadosTotal = 0
           
-          conceptosPorMes.forEach((conceptosDelMes, mesKey) => {
+          conceptosPorMes.forEach((conceptosDelMes) => {
             let tieneDeudaEnMes = false
             
             conceptosDelMes.forEach(c => {
-              const tienePago = pagosValidos.some(p => p.estudiante_id === est.id && p.concepto_id === c.id && p.monto_pagado >= c.monto)
+              const tienePago = pagosValidos.some(p => p.estudiante_id === est.id && p.concepto_id === c.id && (p.monto_pagado || 0) >= (c.monto || 0))
               if (!tienePago) {
                 tieneDeudaEnMes = true
                 conceptosAdeudadosTotal++
               }
             })
             
-            // Solo contar el mes si tiene al menos 1 concepto sin pagar
             if (tieneDeudaEnMes) {
               mesesConDeuda++
             }
@@ -615,7 +561,7 @@ export const useReportesFinancieros = (institucionId: number) => {
           morosos.push({
             ranking: 0,
             dni: est.dni || '',
-            nombre_completo: `${est.nombre || ''} ${est.apellido || ''}`,
+            nombre_completo: `${est.nombre || ''} ${est.apellido || ''}`.trim(),
             carrera: (est as any).carreras?.nombre || 'Sin carrera',
             deuda_monto: deudaMora,
             meses_adeudados: mesesConDeuda.toString(),
@@ -629,10 +575,7 @@ export const useReportesFinancieros = (institucionId: number) => {
 
       setTopEstudiantesMora(morosos.slice(0, 20))
 
-      // ========== PROYECCIÓN ==========
-      // ✅ CORREGIDO: Proyectar usando porcentaje de cobro actual
-      
-      // Calcular conceptos por vencer (septiembre-diciembre)
+      // PROYECCIÓN
       const conceptosPorVencer = (conceptos || []).filter(c => {
         if (c.tipo?.toUpperCase() === 'INSCRIPCION' && (!c.mes || !c.año)) return false
         if (c.mes && c.año) {
@@ -642,26 +585,19 @@ export const useReportesFinancieros = (institucionId: number) => {
         return false
       })
       
-      // Contar estudiantes NO becados (solo los que pagan)
-      const estudiantesNoBecados = estudiantesActivos.filter(e => e.estado !== 'BECADO_100' && e.estado !== 'BECADO_50').length
-      
-      // Total recaudable anual = lo vencido + lo por vencer POR CARRERA (SIN becados)
       let recaudablePorVencer = 0
-      Array.from(estudiantesPorCarrera.entries()).forEach(([carreraId, cantEstudiantes]) => {
-        // Solo NO becados de esta carrera
+      Array.from(estudiantesPorCarrera.entries()).forEach(([carreraId]) => {
         const estudiantesNoBecadosCarrera = estudiantesActivos.filter(e => 
           e.carrera_id === carreraId && e.estado !== 'BECADO_100' && e.estado !== 'BECADO_50'
         ).length
         
-        // Conceptos por vencer de esta carrera
         const conceptosPorVencerCarrera = conceptosPorVencer.filter(c => c.carrera_id === carreraId)
-        const sumaConceptosPorVencer = conceptosPorVencerCarrera.reduce((sum, c) => sum + c.monto, 0)
+        const sumaConceptosPorVencer = conceptosPorVencerCarrera.reduce((sum, c) => sum + (c.monto || 0), 0)
         
         recaudablePorVencer += sumaConceptosPorVencer * estudiantesNoBecadosCarrera
       })
       const recaudableAnualTotal = totalRecaudable + recaudablePorVencer
       
-      // Proyección anual = recaudable total × porcentaje de cobro actual
       const porcentajeCobroActual = totalRecaudable > 0 ? (totalRecaudado / totalRecaudable) * 100 : 0
       const proyeccionTotal = recaudableAnualTotal * (porcentajeCobroActual / 100)
 
@@ -674,15 +610,11 @@ export const useReportesFinancieros = (institucionId: number) => {
         fecha_calculo: new Date().toISOString(),
       })
 
-      // ========== GASTOS E INGRESOS POR INSTITUCIÓN ==========
-      // INSM (id=2): Cuotas + Insumos + Kiosco - Gastos
-      // ISIP (id=1): Cuotas - Gastos (sin Insumos ni Kiosco)
-      
+      // GASTOS E INGRESOS POR INSTITUCIÓN
       const fechaInicio = new Date(anioActual, 0, 1).toISOString().split('T')[0]
       const fechaFin = new Date().toISOString().split('T')[0]
       
       if (institucionId === 2) {
-        // INSM: Gastos operativos
         const { data: gastosData } = await supabase
           .from('gastos')
           .select('monto, fecha_gasto')
@@ -690,16 +622,14 @@ export const useReportesFinancieros = (institucionId: number) => {
           .gte('fecha_gasto', fechaInicio)
           .lte('fecha_gasto', fechaFin)
 
-        if (gastosData) {
+        if (gastosData && gastosData.length > 0) {
           const total = gastosData.reduce((sum, g) => sum + (g.monto || 0), 0)
           setTotalGastos(total)
         }
 
-        // Ventas de insumos
         const totalVentasIns = await obtenerTotalVentasPeriodo(institucionId, fechaInicio, fechaFin)
-        setTotalVentasInsumos(totalVentasIns)
+        setTotalVentasInsumos(totalVentasIns || 0)
 
-        // Ventas kiosco
         const { data: cajaGrandeData } = await supabase
           .from('caja_grande')
           .select('monto, fecha_gasto')
@@ -707,12 +637,11 @@ export const useReportesFinancieros = (institucionId: number) => {
           .gte('fecha_gasto', fechaInicio)
           .lte('fecha_gasto', fechaFin)
 
-        if (cajaGrandeData) {
+        if (cajaGrandeData && cajaGrandeData.length > 0) {
           const total = cajaGrandeData.reduce((sum, c) => sum + (c.monto || 0), 0)
           setTotalVentasKiosco(total)
         }
       } else if (institucionId === 1) {
-        // ISIP: Solo gastos operativos (sin insumos ni kiosco)
         const { data: gastosDataISIP } = await supabase
           .from('gastos')
           .select('monto, fecha_gasto')
@@ -720,11 +649,10 @@ export const useReportesFinancieros = (institucionId: number) => {
           .gte('fecha_gasto', fechaInicio)
           .lte('fecha_gasto', fechaFin)
 
-        if (gastosDataISIP) {
+        if (gastosDataISIP && gastosDataISIP.length > 0) {
           const total = gastosDataISIP.reduce((sum, g) => sum + (g.monto || 0), 0)
           setTotalGastos(total)
         }
-        // ISIP no tiene insumos ni kiosco
         setTotalVentasInsumos(0)
         setTotalVentasKiosco(0)
       }
@@ -758,8 +686,3 @@ export const useReportesFinancieros = (institucionId: number) => {
     totalVentasKiosco,
   }
 }
-
-
-
-
-
