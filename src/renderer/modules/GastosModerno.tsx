@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useInstitucion } from '@renderer/hooks/useInstitucion'
 import { useGastos } from '@renderer/hooks/useGastos'
+import { useAuth } from '@renderer/hooks/useAuth'
 import { formatoMoneda } from '@renderer/lib/helpers'
 import { TrendingDown, Plus, AlertCircle, PieChart, RefreshCw } from 'lucide-react'
 
@@ -9,6 +10,7 @@ type TabGasto = 'registro' | 'historial' | 'resumen'
 export const GastosModerno: React.FC = () => {
   const { institucionActiva } = useInstitucion()
   const { gastos, cargarGastos, agregarGasto, loading, totalPorCategoria } = useGastos()
+  const { usuarioActual } = useAuth()
 
   const [formData, setFormData] = useState({
     categoria: 'Servicios' as string,
@@ -38,6 +40,9 @@ export const GastosModerno: React.FC = () => {
 
     setRegistrando(true)
     try {
+      const usuarioNombre = usuarioActual?.nombre_completo || 'SISTEMA'
+      const notasConUsuario = `[${usuarioNombre}]`
+      
       await agregarGasto({
         institucion_id: institucionActiva.id,
         categoria: formData.categoria,
@@ -46,7 +51,7 @@ export const GastosModerno: React.FC = () => {
         metodo_pago: formData.metodo_pago,
         comprobante_numero: null,
         fecha_gasto: new Date().toISOString().split('T')[0],
-        notas: null
+        notas: notasConUsuario
       })
 
       setSuccessMessage(`✓ Gasto registrado: ${formData.descripcion}`)
@@ -69,6 +74,12 @@ export const GastosModerno: React.FC = () => {
       Otros: '📦'
     }
     return iconos[categoria] || '📦'
+  }
+
+  const extractUserFromGasto = (gasto: any): string => {
+    if (!gasto.notas) return 'DESCONOCIDO'
+    const match = gasto.notas.match(/\[([^\]]+)\]/)
+    return match ? match[1] : 'DESCONOCIDO'
   }
 
   const totalGastos = gastos.reduce((sum, g) => sum + g.monto, 0)
@@ -301,6 +312,7 @@ export const GastosModerno: React.FC = () => {
                         <th className="px-4 py-3 text-left text-slate-300 font-bold">Descripción</th>
                         <th className="px-4 py-3 text-right text-slate-300 font-bold">Monto</th>
                         <th className="px-4 py-3 text-center text-slate-300 font-bold">Método</th>
+                        <th className="px-4 py-3 text-left text-slate-300 font-bold">👤 Usuario</th>
                         <th className="px-4 py-3 text-left text-slate-300 font-bold">Fecha</th>
                       </tr>
                     </thead>
@@ -322,7 +334,12 @@ export const GastosModerno: React.FC = () => {
                               {gasto.metodo_pago === 'CHEQUE' && '✓'}
                             </span>
                           </td>
-                          <td className="px-4 py-3 text-slate-400">{gasto.fecha_gasto}</td>
+                          <td className="px-4 py-3">
+                            <span className="px-2 py-1 bg-purple-500/20 text-purple-300 rounded text-xs font-semibold">
+                              {extractUserFromGasto(gasto)}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-slate-400 text-xs">{gasto.fecha_gasto}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -356,3 +373,5 @@ export const GastosModerno: React.FC = () => {
     </div>
   )
 }
+
+export default GastosModerno
