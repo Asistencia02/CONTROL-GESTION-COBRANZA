@@ -13,11 +13,12 @@ import { ReportesFinancierosModerno } from '@renderer/modules/ReportesFinanciero
 import { CierreModerno } from '@renderer/modules/CierreModerno'
 import { VentaKioscoModerno } from '@renderer/modules/VentaKioscoModerno'
 import { KioscoConfiguracionModerno } from '@renderer/modules/KioscoConfiguracionModerno'
+import { GestionEstudiantesModerno } from '@renderer/modules/GestionEstudiantesModerno'
 import { Sincronizacion } from '@renderer/modules/Sincronizacion'
 import { supabase } from '@renderer/lib/supabase'
 import '@renderer/lib/verificarVariables' // Verificar variables de entorno
 
-type ModuleId = 'dashboard' | 'cobranzas' | 'deudas' | 'ventas' | 'ventakiosco' | 'gastos' | 'reportes' | 'cierre' | 'configuracion' | 'kioscoconfig' | 'sincronizacion' | 'admin'
+type ModuleId = 'dashboard' | 'cobranzas' | 'deudas' | 'ventas' | 'ventakiosco' | 'gastos' | 'reportes' | 'cierre' | 'configuracion' | 'kioscoconfig' | 'sincronizacion' | 'estudiantes' | 'admin'
 
 const checkConnection = async (): Promise<boolean> => {
   try {
@@ -98,6 +99,7 @@ export const App: React.FC = () => {
       case 'ventas': return <VentasModerno />
       case 'ventakiosco': return <VentaKioscoModerno />
       case 'gastos': return <GastosModerno />
+      case 'estudiantes': return <GestionEstudiantesModerno />
       case 'reportes': return <ReportesFinancierosModerno />
       case 'cierre': return <CierreModerno />
       case 'kioscoconfig': return <KioscoConfiguracionModerno />

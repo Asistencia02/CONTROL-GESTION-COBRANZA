@@ -14,6 +14,7 @@ import {
   TestTube,
   Download,
   X,
+  Users,
 } from 'lucide-react'
 import { InstitucionSwitcher } from './InstitucionSwitcher'
 
@@ -71,6 +72,12 @@ const NAV_ITEMS: NavItem[] = [
     label: 'Gastos',
     icon: <TrendingDown size={20} />,
     color: 'from-blue-500 to-cyan-500',
+  },
+  {
+    id: 'estudiantes',
+    label: 'Gestión Estudiantes',
+    icon: <Users size={20} />,
+    color: 'from-purple-500 to-pink-500',
   },
   {
     id: 'reportes',
