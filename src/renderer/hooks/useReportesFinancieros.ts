@@ -336,7 +336,8 @@ export const useReportesFinancieros = (institucionId: number) => {
         // CUOTAS: sumar TODAS y multiplicar UNA SOLA VEZ
         const cuotasCarrera = conceptosVencidos.filter(c => 
           c.carrera_id === carreraId && 
-          c.tipo?.toUpperCase() === 'CUOTA'
+          c.tipo?.toUpperCase() === "CUOTA" &&
+          (!c.mes || c.mes <= mesActual)
         )
         const sumaCuotasCarrera = cuotasCarrera.reduce((sum, c) => sum + c.monto, 0)
         totalRecaudableMesActual += sumaCuotasCarrera * cantEstudiantes
@@ -344,7 +345,8 @@ export const useReportesFinancieros = (institucionId: number) => {
         // SEGUROS: sumar TODAS y multiplicar UNA SOLA VEZ
         const segurosCarrera = conceptosVencidos.filter(c => 
           c.carrera_id === carreraId && 
-          c.tipo?.toUpperCase() === 'SEGURO'
+          c.tipo?.toUpperCase() === "SEGURO" &&
+          (!c.mes || c.mes <= mesActual)
         )
         const sumaSegurosCarrera = segurosCarrera.reduce((sum, c) => sum + c.monto, 0)
         totalRecaudableMesActual += sumaSegurosCarrera * cantEstudiantes
@@ -817,5 +819,6 @@ export const useReportesFinancieros = (institucionId: number) => {
     totalVentasKiosco,
   }
 }
+
 
 
