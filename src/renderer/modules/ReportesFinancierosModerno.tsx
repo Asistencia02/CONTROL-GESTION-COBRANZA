@@ -9,7 +9,7 @@ import { Bar, Pie } from 'react-chartjs-2'
 
 ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, Title)
 
-type TabReporte = 'resumen' | 'carrera' | 'mes' | 'mora' | 'proyeccion' | 'comparativa'
+type TabReporte = 'resumen' | 'carrera' | 'mes' | 'mora' | 'proyeccion' | 'comparativa' | 'desglose' | 'aldia'
 type VistaResumen = 'anual' | 'mes-actual'
 
 const getEfficiencyClass = (porcentaje: number): string => {
@@ -27,7 +27,7 @@ const getRankingClass = (ranking: number): string => {
 
 export const ReportesFinancierosModerno: React.FC = () => {
   const { institucionActiva } = useInstitucion()
-  const { resumenEjecutivo, reportePorCarrera, reporteMesAMes, topEstudiantesMora, proyeccionAño, loading, error, refrescar, totalGastos, totalVentasInsumos, totalVentasKiosco } = useReportesFinancieros(institucionActiva.id)
+  const { resumenEjecutivo, reportePorCarrera, reporteMesAMes, topEstudiantesMora, proyeccionAño, desgloseConceptos, estudiantesAlDia, loading, error, refrescar, totalGastos, totalVentasInsumos, totalVentasKiosco } = useReportesFinancieros(institucionActiva.id)
   const { configuraciones, cargarConfiguracionesPorInstitucion } = useConfiguracion()
   const [tabActiva, setTabActiva] = useState<TabReporte>('resumen')
   const [vistaResumen, setVistaResumen] = useState<VistaResumen>('anual')
@@ -635,6 +635,116 @@ export const ReportesFinancierosModerno: React.FC = () => {
           </div>
         )
 
+      // NUEVO CASO: DESGLOSE
+case 'desglose':
+  return (
+    <div className="space-y-6">
+      <div className="p-6 bg-gradient-to-br from-slate-800/80 to-slate-900/40 border border-slate-700/60 rounded-2xl shadow-2xl backdrop-blur-xl">
+        <h2 className="text-2xl font-bold text-white mb-2 flex items-center gap-2"><PieChart size={28} className="text-pink-400" />Desglose por Concepto</h2>
+        <p className="text-xs text-slate-400 mb-6">Esperado vs Cobrado por tipo de concepto</p>
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b-2 border-slate-700 bg-gradient-to-r from-slate-900/50 to-slate-800/50">
+                <th className="px-4 py-4 text-left font-bold text-white">📚 Concepto</th>
+                <th className="px-4 py-4 text-right font-bold text-blue-400">💰 Total Esperado</th>
+                <th className="px-4 py-4 text-right font-bold text-green-400">✅ Total Cobrado</th>
+                <th className="px-4 py-4 text-right font-bold text-red-400">⏳ Total Pendiente</th>
+                <th className="px-4 py-4 text-center font-bold text-amber-400">📊 % Cobrado</th>
+              </tr>
+            </thead>
+            <tbody>
+              {desgloseConceptos.map((d, i) => (
+                <tr key={i} className="border-b border-slate-700/30 hover:bg-slate-900/40 transition-colors">
+                  <td className="px-4 py-4 font-bold text-slate-200">{d.tipo}</td>
+                  <td className="px-4 py-4 text-right text-blue-400 font-bold">{formatoMoneda(d.total_esperado)}</td>
+                  <td className="px-4 py-4 text-right text-green-400 font-bold">{formatoMoneda(d.total_cobrado)}</td>
+                  <td className="px-4 py-4 text-right text-red-400 font-bold">{formatoMoneda(d.total_pendiente)}</td>
+                  <td className="px-4 py-4 text-center"><span className={'px-3 py-1 rounded-lg font-bold text-sm ' + getEfficiencyClass(d.porcentaje_cobro)}>{d.porcentaje_cobro.toFixed(1)}%</span></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {desgloseConceptos.length > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {desgloseConceptos.map((d, i) => (
+            <div key={i} className="p-6 bg-gradient-to-br from-slate-800/80 to-slate-900/40 border border-slate-700/60 rounded-2xl shadow-2xl backdrop-blur-xl">
+              <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+                {d.tipo === 'INSCRIPCIÓN' && '💎'}
+                {d.tipo === 'CUOTA' && '📅'}
+                {d.tipo === 'SEGURO' && '🛡️'}
+                {d.tipo}
+              </h3>
+              <div className="space-y-3">
+                <div className="p-3 bg-gradient-to-r from-blue-900/40 to-blue-800/20 rounded-lg border border-blue-500/30">
+                  <p className="text-xs text-blue-300 font-bold mb-1">Esperado</p>
+                  <p className="text-2xl font-black text-blue-200">{formatoMoneda(d.total_esperado)}</p>
+                </div>
+                <div className="p-3 bg-gradient-to-r from-green-900/40 to-green-800/20 rounded-lg border border-green-500/30">
+                  <p className="text-xs text-green-300 font-bold mb-1">Cobrado</p>
+                  <p className="text-2xl font-black text-green-200">{formatoMoneda(d.total_cobrado)}</p>
+                </div>
+                <div className="p-3 bg-gradient-to-r from-red-900/40 to-red-800/20 rounded-lg border border-red-500/30">
+                  <p className="text-xs text-red-300 font-bold mb-1">Pendiente</p>
+                  <p className="text-2xl font-black text-red-200">{formatoMoneda(d.total_pendiente)}</p>
+                  <p className="text-xs text-red-400 mt-1">{d.porcentaje_cobro < 100 ? (100 - d.porcentaje_cobro).toFixed(1) : 0}% falta</p>
+                </div>
+                <div className="relative h-8 bg-slate-700/50 rounded-full overflow-hidden border border-slate-600/50">
+                  <div className="h-full bg-gradient-to-r from-green-500 via-emerald-400 to-cyan-400 transition-all duration-1000" style={{ width: `${Math.min(d.porcentaje_cobro, 100)}%` }} />
+                  <div className="absolute inset-0 flex items-center justify-end pr-3"><span className="text-xs font-bold text-white drop-shadow">{d.porcentaje_cobro.toFixed(1)}%</span></div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+
+// NUEVO CASO: ALDIA
+case 'aldia':
+  return (
+    <div className="p-6 bg-gradient-to-br from-slate-800/80 to-slate-900/40 border border-slate-700/60 rounded-2xl shadow-2xl backdrop-blur-xl">
+      <h2 className="text-2xl font-bold text-white mb-2 flex items-center gap-2"><CheckCircle size={28} className="text-emerald-400" />Estudiantes Al Día</h2>
+      <p className="text-xs text-slate-400 mb-6">Total: {estudiantesAlDia.length} estudiantes sin deuda pendiente</p>
+      {estudiantesAlDia.length > 0 ? (
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b-2 border-slate-700 bg-gradient-to-r from-slate-900/50 to-slate-800/50">
+                <th className="px-4 py-4 text-left font-bold text-white">👤 Estudiante</th>
+                <th className="px-4 py-4 text-left font-bold text-slate-300">📚 Carrera</th>
+                <th className="px-4 py-4 text-right font-bold text-blue-400">💰 Total Responsable</th>
+                <th className="px-4 py-4 text-right font-bold text-green-400">✅ Total Pagado</th>
+                <th className="px-4 py-4 text-center font-bold text-emerald-400">📊 % Pagado</th>
+              </tr>
+            </thead>
+            <tbody>
+              {estudiantesAlDia.map((e, i) => (
+                <tr key={i} className="border-b border-slate-700/30 hover:bg-slate-900/40 transition-colors">
+                  <td className="px-4 py-4 font-bold text-slate-200">{e.nombre_completo}</td>
+                  <td className="px-4 py-4 text-slate-400">{e.carrera}</td>
+                  <td className="px-4 py-4 text-right text-blue-400 font-bold">{formatoMoneda(e.total_responsable)}</td>
+                  <td className="px-4 py-4 text-right text-green-400 font-bold">{formatoMoneda(e.total_pagado)}</td>
+                  <td className="px-4 py-4 text-center"><span className="px-3 py-1 bg-emerald-600/30 text-emerald-300 rounded-lg font-bold text-sm">{e.porcentaje_pagado.toFixed(1)}%</span></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div className="text-center py-12 bg-slate-800/50 border border-slate-700/50 rounded-xl">
+          <CheckCircle size={32} className="text-slate-400 mx-auto mb-2" />
+          <p className="text-slate-400 font-semibold">No hay estudiantes al día</p>
+        </div>
+      )}
+    </div>
+  )
+
+
       default:
         return null
     }
@@ -659,7 +769,9 @@ export const ReportesFinancierosModerno: React.FC = () => {
           { id: 'mes', label: 'Meta Mensual', icon: Target, color: 'from-cyan-600 to-cyan-700' },
           { id: 'mora', label: 'Top Mora', icon: Award, color: 'from-red-600 to-red-700' },
           { id: 'proyeccion', label: 'Proyección', icon: Zap, color: 'from-amber-600 to-amber-700' },
-          { id: 'comparativa', label: 'Ingresos vs Egresos', icon: BarChart3, color: 'from-violet-600 to-violet-700' }
+          { id: 'comparativa', label: 'Ingresos vs Egresos', icon: BarChart3, color: 'from-violet-600 to-violet-700' },
+          { id: 'desglose', label: 'Desglose por Concepto', icon: PieChart, color: 'from-pink-600 to-pink-700' },
+          { id: 'aldia', label: 'Alumnos Al D�a', icon: CheckCircle, color: 'from-emerald-600 to-emerald-700' }
         ].map(({ id, label, icon: Icon, color }) => (
           <button
             key={id}
@@ -682,3 +794,5 @@ export const ReportesFinancierosModerno: React.FC = () => {
 }
 
 export default ReportesFinancierosModerno
+
+

@@ -80,6 +80,16 @@ export interface DesgloseConcepto {
   porcentaje_cobro: number
   cantidad_conceptos: number
 }
+export interface EstudianteAlDia {
+  id: number
+  dni: string
+  nombre_completo: string
+  carrera: string
+  total_responsable: number
+  total_pagado: number
+  estado_pago: string
+  porcentaje_pagado: number
+}
 
 // ========== CONSTANTES ==========
 const PRIMER_MES_ACADEMICO = 3  // Marzo
@@ -748,3 +758,7 @@ export const useReportesFinancieros = (institucionId: number) => {
     totalVentasKiosco,
   }
 }
+
+
+
+
