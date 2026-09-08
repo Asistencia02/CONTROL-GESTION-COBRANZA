@@ -72,7 +72,7 @@ export const ReporteFinanciero: React.FC = () => {
   const [loadingModal, setLoadingModal] = useState(false)
 
   // ============ CARGAR ALUMNOS AL DÍA ============
-  // Lógica CORRECTA: Alumno AL DÍA = tiene TODOS los conceptos vencidos (mes 3 a mes_vencimiento) COMPLETAMENTE PAGADOS
+  // Lógica CORRECTA: Por ALUMNO - tiene TODOS los conceptos vencidos (mes 3 a mes_vencimiento) COMPLETAMENTE PAGADOS
   const cargarAlumnosAlDia = async () => {
     setLoadingModal(true)
     try {
@@ -93,25 +93,19 @@ export const ReporteFinanciero: React.FC = () => {
 
       const idsConceptos = conceptosVencidos.map(c => c.id)
 
-      // 2. Traer pagos
-      const { data: conceptosPagados } = await supabase
+      // 2. Traer PAGOS POR ALUMNO
+      const { data: pagosPorAlumno } = await supabase
         .from('pagos_multiples_detalle')
-        .select('concepto_id, monto_pagado')
+        .select('estudiante_id, concepto_id, monto_pagado')
         .in('concepto_id', idsConceptos)
 
-      // 3. Mapeo de pagos
-      const pagosMap = new Map<number, number>()
-      conceptosPagados?.forEach((p: any) => {
-        pagosMap.set(p.concepto_id, (pagosMap.get(p.concepto_id) || 0) + (p.monto_pagado || 0))
-      })
-
-      // 4. Traer carreras
+      // 3. Traer carreras
       const { data: carreras } = await supabase.from('carreras').select('id, nombre')
       const carrMap = new Map(carreras?.map(c => [c.id, c.nombre]) || [])
 
       const alumnosAlDia: Alumno[] = []
 
-      // 5. Para cada alumno, verificar si tiene TODO pagado
+      // 4. Para cada alumno, verificar si tiene TODO pagado
       estudiantes?.forEach(est => {
         // Conceptos vencidos de su carrera
         const conceptosEstudiante = conceptosVencidos.filter(c => c.carrera_id === est.carrera_id)
@@ -121,9 +115,16 @@ export const ReporteFinanciero: React.FC = () => {
         const conceptosPagadosList: Array<{ nombre: string; monto: number }> = []
 
         conceptosEstudiante.forEach(c => {
-          const pagado = pagosMap.get(c.id) || 0
           capacidadTotal += c.monto || 0
+          
+          // Buscar pagos de ESTE alumno para ESTE concepto
+          const pagoAlumno = pagosPorAlumno?.filter(
+            p => p.estudiante_id === est.id && p.concepto_id === c.id
+          ) || []
+          
+          const pagado = pagoAlumno.reduce((sum, p) => sum + (p.monto_pagado || 0), 0)
           pagadoTotal += pagado
+          
           conceptosPagadosList.push({ nombre: c.nombre, monto: pagado })
         })
 
@@ -151,7 +152,7 @@ export const ReporteFinanciero: React.FC = () => {
   }
 
   // ============ CARGAR DEUDORES (CON MORA) ============
-  // Lógica CORRECTA: Trae alumnos con CUALQUIER concepto vencido pendiente (mes 3 a mes_vencimiento)
+  // Lógica CORRECTA: Por ALUMNO - con CUALQUIER concepto vencido pendiente (mes 3 a mes_vencimiento)
   const cargarDeudores = async () => {
     setLoadingModal(true)
     try {
@@ -172,25 +173,19 @@ export const ReporteFinanciero: React.FC = () => {
 
       const idsConceptos = conceptosVencidos.map(c => c.id)
 
-      // 2. Traer pagos
-      const { data: conceptosPagados } = await supabase
+      // 2. Traer PAGOS POR ALUMNO
+      const { data: pagosPorAlumno } = await supabase
         .from('pagos_multiples_detalle')
-        .select('concepto_id, monto_pagado')
+        .select('estudiante_id, concepto_id, monto_pagado')
         .in('concepto_id', idsConceptos)
 
-      // 3. Mapeo de pagos
-      const pagosMap = new Map<number, number>()
-      conceptosPagados?.forEach((p: any) => {
-        pagosMap.set(p.concepto_id, (pagosMap.get(p.concepto_id) || 0) + (p.monto_pagado || 0))
-      })
-
-      // 4. Traer carreras
+      // 3. Traer carreras
       const { data: carreras } = await supabase.from('carreras').select('id, nombre')
       const carrMap = new Map(carreras?.map(c => [c.id, c.nombre]) || [])
 
       const deudores: Alumno[] = []
 
-      // 5. Calcular deuda por alumno: solo si tiene ALGÚN concepto pendiente
+      // 4. Para cada alumno, calcular deuda individual
       estudiantes?.forEach(est => {
         // Conceptos vencidos de su carrera
         const conceptosEstudiante = conceptosVencidos.filter(c => c.carrera_id === est.carrera_id)
@@ -200,11 +195,17 @@ export const ReporteFinanciero: React.FC = () => {
         const conceptosDebe: Array<{ nombre: string; monto: number }> = []
 
         conceptosEstudiante.forEach(c => {
-          const pagado = pagosMap.get(c.id) || 0
+          capacidadTotal += c.monto || 0
+          
+          // Buscar pagos de ESTE alumno para ESTE concepto
+          const pagoAlumno = pagosPorAlumno?.filter(
+            p => p.estudiante_id === est.id && p.concepto_id === c.id
+          ) || []
+          
+          const pagado = pagoAlumno.reduce((sum, p) => sum + (p.monto_pagado || 0), 0)
           const pendiente = Math.max(0, (c.monto || 0) - pagado)
           
           deudaTotal += pendiente
-          capacidadTotal += c.monto || 0
           
           if (pendiente > 0) {
             conceptosDebe.push({ nombre: c.nombre, monto: pendiente })
