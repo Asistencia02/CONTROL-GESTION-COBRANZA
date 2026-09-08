@@ -668,9 +668,9 @@ case 'desglose':
         </div>
       </div>
 
-      {desgloseConceptos.length > 0 && (
+      {(desgloseConceptos || []).length > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {desgloseConceptos.map((d, i) => (
+          {(desgloseConceptos || []).map((d, i) => (
             <div key={i} className="p-6 bg-gradient-to-br from-slate-800/80 to-slate-900/40 border border-slate-700/60 rounded-2xl shadow-2xl backdrop-blur-xl">
               <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
                 {d.tipo === 'INSCRIPCIÓN' && '💎'}
