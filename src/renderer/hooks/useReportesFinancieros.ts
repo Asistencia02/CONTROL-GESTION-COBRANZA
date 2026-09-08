@@ -72,6 +72,15 @@ export interface ProyeccionAño {
   fecha_calculo: string
 }
 
+export interface DesgloseConcepto {
+  tipo: string
+  total_esperado: number
+  total_cobrado: number
+  total_pendiente: number
+  porcentaje_cobro: number
+  cantidad_conceptos: number
+}
+
 // ========== CONSTANTES ==========
 const PRIMER_MES_ACADEMICO = 3  // Marzo
 const ULTIMO_MES_ACADEMICO = 8  // Agosto
