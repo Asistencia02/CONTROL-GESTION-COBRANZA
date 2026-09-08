@@ -91,19 +91,17 @@ export const ReporteFinanciero: React.FC = () => {
         return
       }
 
-      const idsConceptos = conceptosVencidos.map(c => c.id)
-
-      // 2. Traer PAGOS POR ALUMNO
-      const { data: pagosPorAlumno } = await supabase
+      // 2. Traer TODOS los pagos (sin filtro de concepto para evitar URL larga)
+      const { data: todosPagos } = await supabase
         .from('pagos_multiples_detalle')
         .select('estudiante_id, concepto_id, monto_pagado')
-        .in('concepto_id', idsConceptos)
 
       // 3. Traer carreras
       const { data: carreras } = await supabase.from('carreras').select('id, nombre')
       const carrMap = new Map(carreras?.map(c => [c.id, c.nombre]) || [])
 
       const alumnosAlDia: Alumno[] = []
+      const idsConceptosVencidos = new Set(conceptosVencidos.map(c => c.id))
 
       // 4. Para cada alumno, verificar si tiene TODO pagado
       estudiantes?.forEach(est => {
@@ -118,8 +116,8 @@ export const ReporteFinanciero: React.FC = () => {
           capacidadTotal += c.monto || 0
           
           // Buscar pagos de ESTE alumno para ESTE concepto
-          const pagoAlumno = pagosPorAlumno?.filter(
-            p => p.estudiante_id === est.id && p.concepto_id === c.id
+          const pagoAlumno = todosPagos?.filter(
+            p => p.estudiante_id === est.id && p.concepto_id === c.id && idsConceptosVencidos.has(p.concepto_id)
           ) || []
           
           const pagado = pagoAlumno.reduce((sum, p) => sum + (p.monto_pagado || 0), 0)
@@ -171,19 +169,17 @@ export const ReporteFinanciero: React.FC = () => {
         return
       }
 
-      const idsConceptos = conceptosVencidos.map(c => c.id)
-
-      // 2. Traer PAGOS POR ALUMNO
-      const { data: pagosPorAlumno } = await supabase
+      // 2. Traer TODOS los pagos (sin filtro de concepto para evitar URL larga)
+      const { data: todosPagos } = await supabase
         .from('pagos_multiples_detalle')
         .select('estudiante_id, concepto_id, monto_pagado')
-        .in('concepto_id', idsConceptos)
 
       // 3. Traer carreras
       const { data: carreras } = await supabase.from('carreras').select('id, nombre')
       const carrMap = new Map(carreras?.map(c => [c.id, c.nombre]) || [])
 
       const deudores: Alumno[] = []
+      const idsConceptosVencidos = new Set(conceptosVencidos.map(c => c.id))
 
       // 4. Para cada alumno, calcular deuda individual
       estudiantes?.forEach(est => {
@@ -198,8 +194,8 @@ export const ReporteFinanciero: React.FC = () => {
           capacidadTotal += c.monto || 0
           
           // Buscar pagos de ESTE alumno para ESTE concepto
-          const pagoAlumno = pagosPorAlumno?.filter(
-            p => p.estudiante_id === est.id && p.concepto_id === c.id
+          const pagoAlumno = todosPagos?.filter(
+            p => p.estudiante_id === est.id && p.concepto_id === c.id && idsConceptosVencidos.has(p.concepto_id)
           ) || []
           
           const pagado = pagoAlumno.reduce((sum, p) => sum + (p.monto_pagado || 0), 0)
