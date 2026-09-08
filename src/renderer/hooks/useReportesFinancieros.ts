@@ -88,7 +88,6 @@ export interface EstudianteAlDia {
   porcentaje_pagado: number
 }
 
-// ========== CONSTANTES ==========
 const PRIMER_MES_ACADEMICO = 3
 const ULTIMO_MES_ACADEMICO = 8
 const PRIMER_DIA_VENCIMIENTO = 10
@@ -131,7 +130,6 @@ export const useReportesFinancieros = (institucionId: number) => {
       const mesesNombre = ['', 'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
       const mesActualNombre = mesesNombre[mesActual] || 'Mes Desconocido'
 
-      // OBTENER DATOS BASE
       const { data: estudiantes, error: errEst } = await supabase
         .from('estudiantes')
         .select('id, nombre, apellido, dni, carrera_id, estado, carreras(nombre)')
@@ -190,9 +188,8 @@ export const useReportesFinancieros = (institucionId: number) => {
         return false
       })
 
-      const conceptosFiltrados = [...inscripciones, ...conceptosVencidos]
+      const conceptosFiltrados = conceptosVencidos
 
-      // PAGOS - CON PAGINACIÓN
       let todosPagos: any[] = []
       
       let pagina1 = 0
@@ -255,11 +252,44 @@ export const useReportesFinancieros = (institucionId: number) => {
         return false
       })
 
-      // RESUMEN EJECUTIVO - PARTE ANUAL
       let totalRecaudable = 0
       let totalRecaudado = 0
       let estudiantesEnMora = 0
       const conceptoPorEstudiante = new Map<number, number>()
+
+      estudiantesPorCarrera.forEach((cantEstudiantes, carreraId) => {
+        const inscripcionCarrera = inscripciones.find(c => c.carrera_id === carreraId)
+        if (inscripcionCarrera) {
+          totalRecaudable += inscripcionCarrera.monto * cantEstudiantes
+        }
+        
+        const cuotasCarrera = conceptosVencidos.filter(c => c.carrera_id === carreraId && c.tipo?.toUpperCase() === 'CUOTA')
+        cuotasCarrera.forEach(c => {
+          totalRecaudable += c.monto * cantEstudiantes
+        })
+        
+        const segurosCarrera = conceptosVencidos.filter(c => c.carrera_id === carreraId && c.tipo?.toUpperCase() === 'SEGURO')
+        segurosCarrera.forEach(c => {
+          totalRecaudable += c.monto * cantEstudiantes
+        })
+      })
+
+      estudiantesActivos.forEach(est => {
+        const esBecado50 = est.estado === 'BECADO_50'
+        const esBecado100 = est.estado === 'BECADO_100'
+        
+        if (esBecado50 || esBecado100) {
+          const cuotasEst = conceptosVencidos.filter(c => c.carrera_id === est.carrera_id && c.tipo?.toUpperCase() === 'CUOTA')
+          const segurosEst = conceptosVencidos.filter(c => c.carrera_id === est.carrera_id && c.tipo?.toUpperCase() === 'SEGURO')
+          
+          const montoDescontar = (
+            cuotasEst.reduce((sum, c) => sum + c.monto, 0) + 
+            segurosEst.reduce((sum, c) => sum + c.monto, 0)
+          ) * (esBecado50 ? 0.5 : 1)
+          
+          totalRecaudable -= montoDescontar
+        }
+      })
 
       estudiantesActivos.forEach(est => {
         let deudaEst = 0
@@ -294,51 +324,77 @@ export const useReportesFinancieros = (institucionId: number) => {
         }
       })
 
-      totalRecaudable = 0
-      estudiantesActivos.forEach(est => {
-        const esBecado50 = est.estado === 'BECADO_50'
-        const conceptosDelEstudiante = conceptosFiltrados.filter(c => c.carrera_id === est.carrera_id)
-        
-        conceptosDelEstudiante.forEach(c => {
-          const aplicaBeca = esConceptoBeca(c.tipo)
-          let montoResponsable = c.monto
-          
-          if (esBecado50 && aplicaBeca) {
-            montoResponsable = c.monto * 0.5
-          }
-          
-          totalRecaudable += montoResponsable
-        })
-      })
       totalRecaudado = pagosValidos.reduce((sum, p) => sum + (p.monto_pagado || 0), 0)
 
       const porcentajeCobro = totalRecaudable > 0 ? (totalRecaudado / totalRecaudable) * 100 : 0
       const pendiente = Math.max(0, totalRecaudable - totalRecaudado)
 
       // RESUMEN EJECUTIVO - PARTE MES ACTUAL
-      const conceptosAntesdeMesActual = conceptosFiltrados.filter(c => {
-        if (c.tipo?.toUpperCase() === 'INSCRIPCION' && (!c.mes || !c.año)) {
-          return false
-        }
-        if (c.mes && c.año) {
-          if (c.mes < PRIMER_MES_ACADEMICO || c.mes > ULTIMO_MES_ACADEMICO) return false
-          if (c.año < anioActual) return true
-          if (c.año === anioActual && c.mes < mesActual) return true
-        }
-        return false
-      })
-
+      // Marzo=1, Abril=2, Mayo=3, Junio=4, Julio=5, Agosto=6, Septiembre=7
       let totalRecaudableMesActual = 0
       let estudiantesEnMoraMesActual = 0
+      
+      const numeroMesesAcademicos = Math.max(0, mesActual - PRIMER_MES_ACADEMICO + 1)
+
+      estudiantesPorCarrera.forEach((cantEstudiantes, carreraId) => {
+        const inscripcionCarrera = inscripciones.find(c => c.carrera_id === carreraId)
+        if (inscripcionCarrera) {
+          totalRecaudableMesActual += inscripcionCarrera.monto * cantEstudiantes
+        }
+        
+        const cuotasCarrera = conceptosVencidos.filter(c => 
+          c.carrera_id === carreraId && 
+          c.tipo?.toUpperCase() === 'CUOTA'
+        )
+        cuotasCarrera.forEach(c => {
+          totalRecaudableMesActual += c.monto * cantEstudiantes * numeroMesesAcademicos
+        })
+        
+        const segurosCarrera = conceptosVencidos.filter(c => 
+          c.carrera_id === carreraId && 
+          c.tipo?.toUpperCase() === 'SEGURO'
+        )
+        segurosCarrera.forEach(c => {
+          totalRecaudableMesActual += c.monto * cantEstudiantes * numeroMesesAcademicos
+        })
+      })
+
+      estudiantesActivos.forEach(est => {
+        const esBecado50 = est.estado === 'BECADO_50'
+        const esBecado100 = est.estado === 'BECADO_100'
+        
+        if (esBecado50 || esBecado100) {
+          const cuotasEst = conceptosVencidos.filter(c => 
+            c.carrera_id === est.carrera_id && 
+            c.tipo?.toUpperCase() === 'CUOTA'
+          )
+          const segurosEst = conceptosVencidos.filter(c => 
+            c.carrera_id === est.carrera_id && 
+            c.tipo?.toUpperCase() === 'SEGURO'
+          )
+          
+          const montoDescontar = (
+            cuotasEst.reduce((sum, c) => sum + c.monto, 0) + 
+            segurosEst.reduce((sum, c) => sum + c.monto, 0)
+          ) * numeroMesesAcademicos * (esBecado50 ? 0.5 : 1)
+          
+          totalRecaudableMesActual -= montoDescontar
+        }
+      })
 
       estudiantesActivos.forEach(est => {
         let deudaEst = 0
         const esBecado100 = est.estado === 'BECADO_100'
         const esBecado50 = est.estado === 'BECADO_50'
         
-        conceptosAntesdeMesActual.forEach(concepto => {
-          if (concepto.carrera_id !== est.carrera_id) return
-          
+        const conceptosMesActual = conceptosFiltrados.filter(c => 
+          c.carrera_id === est.carrera_id &&
+          (c.tipo?.toUpperCase() === 'INSCRIPCION' || 
+           (c.tipo?.toUpperCase() === 'CUOTA' && c.mes && c.mes <= mesActual) ||
+           (c.tipo?.toUpperCase() === 'SEGURO' && c.mes && c.mes <= mesActual))
+        )
+        
+        conceptosMesActual.forEach(concepto => {
           const montoPago = pagosValidos.find(p => p.estudiante_id === est.id && p.concepto_id === concepto.id)?.monto_pagado || 0
           const montoOriginal = concepto.monto
           const aplicaBeca = esConceptoBeca(concepto.tipo)
@@ -361,23 +417,6 @@ export const useReportesFinancieros = (institucionId: number) => {
         if (deudaEst > 0 && !esBecado100) {
           estudiantesEnMoraMesActual++
         }
-      })
-
-      totalRecaudableMesActual = 0
-      estudiantesActivos.forEach(est => {
-        const esBecado50 = est.estado === 'BECADO_50'
-        const conceptosDelEstudiante = conceptosAntesdeMesActual.filter(c => c.carrera_id === est.carrera_id)
-        
-        conceptosDelEstudiante.forEach(c => {
-          const aplicaBeca = esConceptoBeca(c.tipo)
-          let montoResponsable = c.monto
-          
-          if (esBecado50 && aplicaBeca) {
-            montoResponsable = c.monto * 0.5
-          }
-          
-          totalRecaudableMesActual += montoResponsable
-        })
       })
       
       const pagosValidosMesActual = pagosValidos.filter(p => {
@@ -414,7 +453,6 @@ export const useReportesFinancieros = (institucionId: number) => {
         fecha_reporte: new Date().toISOString(),
       })
 
-      // REPORTES POR CARRERA
       const carreras = new Map<number, any>()
       estudiantesActivos.forEach(est => {
         if (!carreras.has(est.carrera_id)) {
@@ -465,7 +503,6 @@ export const useReportesFinancieros = (institucionId: number) => {
 
       setReportePorCarrera(reportePorCar)
 
-      // REPORTES MES A MES - CON VALIDACIONES DEFENSIVAS
       const reporteMeses: ReporteMesAMes[] = []
       
       if (reportePorCar && reportePorCar.length > 0) {
@@ -517,7 +554,6 @@ export const useReportesFinancieros = (institucionId: number) => {
 
       setReporteMesAMes(reporteMeses)
 
-      // TOP 20 EN MORA
       const morosos: TopEstudiantesMora[] = []
       estudiantesActivos.forEach(est => {
         let deudaMora = 0
@@ -577,7 +613,6 @@ export const useReportesFinancieros = (institucionId: number) => {
 
       setTopEstudiantesMora(morosos.slice(0, 20))
 
-      // PROYECCIÓN
       const conceptosPorVencer = (conceptos || []).filter(c => {
         if (c.tipo?.toUpperCase() === 'INSCRIPCION' && (!c.mes || !c.año)) return false
         if (c.mes && c.año) {
@@ -612,7 +647,6 @@ export const useReportesFinancieros = (institucionId: number) => {
         fecha_calculo: new Date().toISOString(),
       })
 
-      // GASTOS E INGRESOS POR INSTITUCIÓN
       const fechaInicio = new Date(anioActual, 0, 1).toISOString().split('T')[0]
       const fechaFin = new Date().toISOString().split('T')[0]
       
@@ -659,16 +693,12 @@ export const useReportesFinancieros = (institucionId: number) => {
         setTotalVentasKiosco(0)
       }
 
-      // DESGLOSE POR CONCEPTO
       const desgloseMap = new Map<string, { esperado: number; cobrado: number; conceptos: Set<number> }>()
       
-      // Inicializar map con los tipos
       desgloseMap.set('INSCRIPCION', { esperado: 0, cobrado: 0, conceptos: new Set<number>() })
       desgloseMap.set('CUOTA', { esperado: 0, cobrado: 0, conceptos: new Set<number>() })
       desgloseMap.set('SEGURO', { esperado: 0, cobrado: 0, conceptos: new Set<number>() })
       
-      // INSCRIPCIÓN: cada estudiante tiene UNA inscripción (monto diferente por carrera)
-      // Sumar inscripción de cada estudiante por su carrera
       estudiantesActivos.forEach(est => {
         const inscripcionCarrera = inscripciones.find(c => c.carrera_id === est.carrera_id)
         if (inscripcionCarrera) {
@@ -678,7 +708,6 @@ export const useReportesFinancieros = (institucionId: number) => {
         }
       })
       
-      // CUOTA: múltiples conceptos, se suman por cada estudiante de su carrera
       const cuotas = conceptosVencidos.filter(c => c.tipo?.toUpperCase() === 'CUOTA')
       cuotas.forEach(c => {
         const cuotaEst = desgloseMap.get('CUOTA')!
@@ -687,7 +716,6 @@ export const useReportesFinancieros = (institucionId: number) => {
         cuotaEst.conceptos.add(c.id)
       })
       
-      // SEGURO: múltiples conceptos, se suman por cada estudiante de su carrera
       const seguros = conceptosVencidos.filter(c => c.tipo?.toUpperCase() === 'SEGURO')
       seguros.forEach(c => {
         const seguroEst = desgloseMap.get('SEGURO')!
@@ -696,7 +724,6 @@ export const useReportesFinancieros = (institucionId: number) => {
         seguroEst.conceptos.add(c.id)
       })
       
-      // Calcular cobrado por tipo de concepto
       pagosValidos.forEach(p => {
         const concepto = conceptosFiltrados.find(c => c.id === p.concepto_id)
         if (!concepto) return
@@ -722,7 +749,6 @@ export const useReportesFinancieros = (institucionId: number) => {
       setDesgloseConceptos(desgloseConceptosArray)
       console.log('[REPORTES] Desglose conceptos (institucion_id=' + institucionId + '):', desgloseConceptosArray)
       
-      // ESTUDIANTES AL DÍA
       const estudianteAlDiaArray: EstudianteAlDia[] = []
       
       estudiantesActivos.forEach(est => {
@@ -751,7 +777,6 @@ export const useReportesFinancieros = (institucionId: number) => {
           totalPagado += montoPago
         })
         
-        // Al día: pagó igual o más de lo responsable
         if (totalResponsable > 0 && totalPagado >= totalResponsable) {
           estudianteAlDiaArray.push({
             id: est.id,
@@ -800,7 +825,5 @@ export const useReportesFinancieros = (institucionId: number) => {
     totalVentasKiosco,
   }
 }
-
-
 
 
