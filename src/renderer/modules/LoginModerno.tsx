@@ -80,13 +80,7 @@ export const LoginModerno: React.FC<{ onLoginSuccess: () => void }> = ({ onLogin
                 <p className="font-semibold mb-1">Usuarios disponibles:</p>
                 <div className="grid grid-cols-2 gap-1">
                   {[
-                    'FATIMA MEDINA',
-                    'HUGO DUARTE',
-                    'ALCIDES JARA',
-                    'YOLI MEDINA',
-                    'PROVEDURIA',
-                    'KIOSCO',
-                    'ADMIN'
+                    'FATIMA MEDINA', 'HUGO DUARTE', 'ALCIDES JARA', 'YOLI MEDINA', 'PROVEDURIA', 'KIOSCO', 'SECRETARIA INSM', 'ADMIN'
                   ].map(user => (
                     <button
                       key={user}
@@ -140,3 +134,4 @@ export const LoginModerno: React.FC<{ onLoginSuccess: () => void }> = ({ onLogin
     </div>
   )
 }
+
