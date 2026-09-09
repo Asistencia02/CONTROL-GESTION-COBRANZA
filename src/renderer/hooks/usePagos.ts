@@ -84,6 +84,8 @@ export const usePagos = create<UsePagosStore>((set, get) => ({
             id,
             concepto_id,
             monto_pagado,
+            talonario,
+            metodo_pago,
             conceptos_pago(nombre, tipo, monto, mes)
           ),
           estudiantes(nombre, apellido, dni)
@@ -99,6 +101,16 @@ export const usePagos = create<UsePagosStore>((set, get) => ({
             pm.pagos_multiples_detalle.forEach((detalle: any) => {
               // ✅ ID sintético SOLO para UI, NO para queries a DB
               const idUnico = `pm_${pm.id}_${detalle.id}`
+              
+              // ✅ v3.3: Usar talonario y método del detalle si existen, sino del pago múltiple
+              const talonarioFinal = (detalle.talonario && detalle.talonario.trim() !== '') 
+                ? detalle.talonario 
+                : pm.numero_talonario
+              
+              const metodoFinal = (detalle.metodo_pago && detalle.metodo_pago.trim() !== '')
+                ? detalle.metodo_pago
+                : pm.metodo_pago
+              
               pagosDetalles.push({
                 id: idUnico,
                 institucion_id,
@@ -106,9 +118,9 @@ export const usePagos = create<UsePagosStore>((set, get) => ({
                 concepto_id: detalle.concepto_id,
                 monto_pagado: detalle.monto_pagado,
                 monto_original: detalle.monto_pagado,
-                metodo_pago: pm.metodo_pago,
+                metodo_pago: metodoFinal,
                 tipo_tarjeta: pm.tipo_tarjeta,
-                numero_talonario: pm.numero_talonario,
+                numero_talonario: talonarioFinal,
                 fecha_pago: pm.fecha_cobro,
                 estado: pm.estado,
                 estudiantes: pm.estudiantes,
