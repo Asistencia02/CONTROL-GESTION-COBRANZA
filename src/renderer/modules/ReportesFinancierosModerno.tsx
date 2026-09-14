@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { useInstitucion } from '@renderer/hooks/useInstitucion'
 import { useReportesFinancieros } from '@renderer/hooks/useReportesFinancieros'
 import { useConfiguracion } from '@renderer/hooks/useConfiguracion'
+import { useReportesAvanzados } from '@renderer/hooks/useReportesAvanzados'
 import { formatoMoneda } from '@renderer/lib/helpers'
 import { BarChart3, TrendingUp, AlertCircle, Users, RefreshCw, Target, Zap, DollarSign, Gauge, TrendingDown, Award, Clock, PieChart, CheckCircle, Activity, Calendar } from 'lucide-react'
 import { Chart as ChartJS, ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, Title } from 'chart.js'
@@ -29,6 +30,7 @@ export const ReportesFinancierosModerno: React.FC = () => {
   const { institucionActiva } = useInstitucion()
   const { resumenEjecutivo, reportePorCarrera, reporteMesAMes, topEstudiantesMora, proyeccionAÃ±o, desgloseConceptos, estudiantesAlDia, loading, error, refrescar, totalGastos, totalVentasInsumos, totalVentasKiosco } = useReportesFinancieros(institucionActiva.id)
   const { configuraciones, cargarConfiguracionesPorInstitucion } = useConfiguracion()
+  const { ingresosPorMetodo, realVsTeoricoCarrera } = useReportesAvanzados(institucionActiva.id)
   const [tabActiva, setTabActiva] = useState<TabReporte>('resumen')
   const [vistaResumen, setVistaResumen] = useState<VistaResumen>('anual')
 
@@ -641,7 +643,7 @@ case 'desglose':
     <div className="space-y-6">
       <div className="p-6 bg-gradient-to-br from-slate-800/80 to-slate-900/40 border border-slate-700/60 rounded-2xl shadow-2xl backdrop-blur-xl">
         <h2 className="text-2xl font-bold text-white mb-2 flex items-center gap-2"><PieChart size={28} className="text-pink-400" />Desglose por Concepto</h2>
-        <p className="text-sm text-pink-400 font-bold mb-4">?? Año Completo</p>
+        <p className="text-sm text-pink-400 font-bold mb-4">?? Aï¿½o Completo</p>
         <p className="text-xs text-slate-400 mb-6">Esperado vs Cobrado por tipo de concepto</p>
         <div className="overflow-x-auto">
           <table className="w-full">
@@ -772,7 +774,7 @@ case 'aldia':
           { id: 'proyeccion', label: 'ProyecciÃ³n', icon: Zap, color: 'from-amber-600 to-amber-700' },
           { id: 'comparativa', label: 'Ingresos vs Egresos', icon: BarChart3, color: 'from-violet-600 to-violet-700' },
           { id: 'desglose', label: 'Desglose por Concepto', icon: PieChart, color: 'from-pink-600 to-pink-700' },
-          { id: 'aldia', label: 'Alumnos Al Día', icon: CheckCircle, color: 'from-emerald-600 to-emerald-700' }
+          { id: 'aldia', label: 'Alumnos Al Dï¿½a', icon: CheckCircle, color: 'from-emerald-600 to-emerald-700' }
         ].map(({ id, label, icon: Icon, color }) => (
           <button
             key={id}
