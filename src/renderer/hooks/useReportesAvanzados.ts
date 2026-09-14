@@ -1,15 +1,15 @@
-import { useIngresoPorMetodo, IngresosPorMetodo } from './useIngresoPorMetodo'
+import { useIngresoPorMetodo, MetodoPago } from './useIngresoPorMetodo'
 import { useRealVsTeoricoCarrera, RealVsTeoricoCarrera } from './useRealVsTeoricoCarrera'
 
 export interface ReportesAvanzados {
-  ingresosPorMetodo: IngresosPorMetodo
+  ingresosPorMetodo: MetodoPago[]
   realVsTeoricoCarrera: RealVsTeoricoCarrera[]
   loadingMetodo: boolean
-  loadingRealVsTeor ico: boolean
+  loadingRealVsTeorico: boolean
 }
 
 export const useReportesAvanzados = (institucionId: number): ReportesAvanzados => {
-  const { ingresos: ingresosPorMetodo, loading: loadingMetodo } = useIngresoPorMetodo(institucionId)
+  const { ingresosPorMetodo, loading: loadingMetodo } = useIngresoPorMetodo(institucionId)
   const { datos: realVsTeoricoCarrera, loading: loadingRealVsTeorico } = useRealVsTeoricoCarrera(institucionId)
 
   return {

@@ -1,22 +1,14 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@renderer/lib/supabase'
 
-export interface IngresosPorMetodo {
-  EFECTIVO: number
-  TRANSFERENCIA: number
-  TARJETA_CREDITO: number
-  TARJETA_DEBITO: number
-  TOTAL: number
+export interface MetodoPago {
+  metodo_pago: string
+  total: number
+  porcentaje: number
 }
 
 export const useIngresoPorMetodo = (institucionId: number) => {
-  const [ingresos, setIngresos] = useState<IngresosPorMetodo>({
-    EFECTIVO: 0,
-    TRANSFERENCIA: 0,
-    TARJETA_CREDITO: 0,
-    TARJETA_DEBITO: 0,
-    TOTAL: 0
-  })
+  const [ingresosPorMetodo, setIngresosPorMetodo] = useState<MetodoPago[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -28,14 +20,14 @@ export const useIngresoPorMetodo = (institucionId: number) => {
       const metodosMap: Record<string, number> = {
         EFECTIVO: 0,
         TRANSFERENCIA: 0,
-        TARJETA_CREDITO: 0,
-        TARJETA_DEBITO: 0
+        'TARJETA_CRÉDITO': 0,
+        'TARJETA_DÉBITO': 0
       }
 
       let pagina = 0
       let tieneRangoMas = true
 
-      // Cargar datos de pagos_multiples_detalle con metodo_pago
+      // Cargar datos de pagos_multiples_detalle con metodo_pago (SIN FILTRO DE FECHA)
       while (tieneRangoMas) {
         const desde = pagina * 1000
         const hasta = desde + 999
@@ -60,17 +52,17 @@ export const useIngresoPorMetodo = (institucionId: number) => {
           tieneRangoMas = false
         } else {
           data.forEach((item: any) => {
-            const metodo = item.metodo_pago || 'EFECTIVO'
+            let metodo = item.metodo_pago || 'EFECTIVO'
             const monto = item.monto_pagado || 0
 
             // Normalizar método de pago
-            if (metodo === 'TARJETA_CRÉDITO' || metodo === 'TARJETA CREDITO') {
-              metodosMap['TARJETA_CREDITO'] += monto
-            } else if (metodo === 'TARJETA_DÉBITO' || metodo === 'TARJETA DEBITO') {
-              metodosMap['TARJETA_DEBITO'] += monto
-            } else {
-              metodosMap[metodo] = (metodosMap[metodo] || 0) + monto
+            if (metodo === 'TARJETA_CRÉDITO' || metodo === 'TARJETA CREDITO' || metodo === 'TARJETA_CREDITO') {
+              metodo = 'TARJETA_CRÉDITO'
+            } else if (metodo === 'TARJETA_DÉBITO' || metodo === 'TARJETA DEBITO' || metodo === 'TARJETA_DEBITO') {
+              metodo = 'TARJETA_DÉBITO'
             }
+
+            metodosMap[metodo] = (metodosMap[metodo] || 0) + monto
           })
           pagina++
         }
@@ -78,15 +70,17 @@ export const useIngresoPorMetodo = (institucionId: number) => {
 
       const total = Object.values(metodosMap).reduce((sum, val) => sum + val, 0)
 
-      setIngresos({
-        EFECTIVO: metodosMap.EFECTIVO,
-        TRANSFERENCIA: metodosMap.TRANSFERENCIA,
-        TARJETA_CREDITO: metodosMap.TARJETA_CREDITO,
-        TARJETA_DEBITO: metodosMap.TARJETA_DEBITO,
-        TOTAL: total
-      })
+      // Convertir a array con porcentajes
+      const resultado: MetodoPago[] = Object.entries(metodosMap)
+        .map(([metodo, monto]) => ({
+          metodo_pago: metodo,
+          total: monto,
+          porcentaje: total > 0 ? (monto / total) * 100 : 0
+        }))
+        .filter(m => m.total > 0) // Solo mostrar métodos con monto > 0
 
-      console.log('[INGRESOS POR METODO]', metodosMap)
+      setIngresosPorMetodo(resultado)
+      console.log('[INGRESOS POR METODO]', resultado)
     } catch (err) {
       const mensaje = err instanceof Error ? err.message : 'Error desconocido'
       setError(mensaje)
@@ -102,5 +96,5 @@ export const useIngresoPorMetodo = (institucionId: number) => {
     }
   }, [institucionId])
 
-  return { ingresos, loading, error, refrescar: cargarIngresos }
+  return { ingresosPorMetodo, loading, error, refrescar: cargarIngresos }
 }
