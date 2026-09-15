@@ -37,7 +37,7 @@ export const useRealVsTeoricoCarrera = (institucionId: number) => {
 
       // Obtener configuraciones de carrera (montos)
       const { data: configuraciones, error: errConf } = await supabase
-        .from('configuraciones')
+        .from('configuracion_carreras')
         .select('id, carrera_id, monto_inscripcion, monto_cuota, monto_seguro')
         .eq('institucion_id', institucionId)
 
