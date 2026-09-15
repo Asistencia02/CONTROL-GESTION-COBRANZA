@@ -10,7 +10,7 @@ import { Bar, Pie } from 'react-chartjs-2'
 
 ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, Title)
 
-type TabReporte = 'resumen' | 'carrera' | 'mes' | 'mora' | 'proyeccion' | 'comparativa' | 'desglose' | 'aldia'
+type TabReporte = 'resumen' | 'carrera' | 'mes' | 'mora' | 'proyeccion' | 'comparativa' | 'desglose' | 'realvsteorico' | 'aldia'
 type VistaResumen = 'anual' | 'mes-actual'
 
 const getEfficiencyClass = (porcentaje: number): string => {
@@ -784,7 +784,47 @@ case 'desglose':
         )}
     </div>
   )
-
+  case 'realvsteorico':
+    return (
+      <div className="p-6 bg-gradient-to-br from-slate-800/80 to-slate-900/40 border border-slate-700/60 rounded-2xl shadow-2xl backdrop-blur-xl overflow-x-auto">
+        <h2 className="text-2xl font-bold text-white mb-2 flex items-center gap-2"><TrendingUp size={28} className="text-teal-400" />Real vs Teórico por Carrera</h2>
+        {realVsTeoricoCarrera && realVsTeoricoCarrera.length > 0 ? (
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b-2 border-slate-700 bg-gradient-to-r from-slate-900/50 to-slate-800/50">
+                <th className="px-4 py-3 text-left font-bold text-white">📚 Carrera</th>
+                <th className="px-4 py-3 text-right font-bold text-blue-400">💎 Inscripción Real</th>
+                <th className="px-4 py-3 text-right font-bold text-purple-400">💎 Teórico</th>
+                <th className="px-4 py-3 text-right font-bold text-cyan-400">📅 Cuotas Real</th>
+                <th className="px-4 py-3 text-right font-bold text-purple-400">📅 Teórico</th>
+                <th className="px-4 py-3 text-center font-bold text-green-400">✅ % Cumpl.</th>
+              </tr>
+            </thead>
+            <tbody>
+              {realVsTeoricoCarrera.map((carrera, idx) => (
+                <tr key={idx} className="border-b border-slate-700/30 hover:bg-slate-900/40 transition-colors">
+                  <td className="px-4 py-3 font-bold text-slate-200">{carrera.carrera}</td>
+                  <td className="px-4 py-3 text-right text-blue-300 font-bold text-xs">{formatoMoneda(carrera.inscripcion_real)}</td>
+                  <td className="px-4 py-3 text-right text-purple-300 font-bold text-xs">{formatoMoneda(carrera.inscripcion_teorico)}</td>
+                  <td className="px-4 py-3 text-right text-cyan-300 font-bold text-xs">{formatoMoneda(carrera.cuotas_real)}</td>
+                  <td className="px-4 py-3 text-right text-purple-300 font-bold text-xs">{formatoMoneda(carrera.cuotas_teorico)}</td>
+                  <td className="px-4 py-3 text-center">
+                    <span className={`px-2 py-1 rounded-lg font-bold text-xs ${getEfficiencyClass(carrera.porcentaje_cumplimiento)}`}>
+                      {carrera.porcentaje_cumplimiento.toFixed(1)}%
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <div className="text-center py-12">
+            <p className="text-slate-400">Sin datos disponibles</p>
+          </div>
+        )}
+      </div>
+    )
+  
 // NUEVO CASO: ALDIA
 case 'aldia':
   return (
