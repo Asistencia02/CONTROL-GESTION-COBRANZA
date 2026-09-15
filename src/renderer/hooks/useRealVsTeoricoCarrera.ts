@@ -43,7 +43,7 @@ export const useRealVsTeoricoCarrera = (institucionId: number) => {
 
       if (errConf) throw errConf
 
-      // Obtener pagos múltiples detalle
+      // Obtener pagos múltiples detalle (SIN tipo_concepto que no existe)
       let todosPagos: any[] = []
       let pagina = 0
       let tieneRangoMas = true
@@ -55,7 +55,6 @@ export const useRealVsTeoricoCarrera = (institucionId: number) => {
         const { data: pagos, error: errPagos } = await supabase
           .from('pagos_multiples_detalle')
           .select(`
-            tipo_concepto,
             monto_pagado,
             pagos_multiples!inner(
               estudiante_id,
@@ -95,15 +94,12 @@ export const useRealVsTeoricoCarrera = (institucionId: number) => {
         const config = (configuraciones || []).find((c: any) => c.carrera_id === carreraId)
 
         // Teórico: cantidad de estudiantes × monto por concepto
-        // Asumiendo: 1 inscripción + 10 cuotas + 10 seguros (período académico)
         const inscripcionTeorico = (config?.monto_inscripcion || 0) * cantEst
-        const cuotasTeorico = (config?.monto_cuota || 0) * cantEst * 10 // 10 meses
-        const segurosTeorico = (config?.monto_seguro || 0) * cantEst * 10 // 10 meses
+        const cuotasTeorico = (config?.monto_cuota || 0) * cantEst * 10
+        const segurosTeorico = (config?.monto_seguro || 0) * cantEst * 10
 
-        // Calcular real (pagos)
-        let inscripcionReal = 0
+        // Calcular real (pagos) - por ahora sumamos todo como cuotas
         let cuotasReal = 0
-        let segurosReal = 0
 
         todosPagos.forEach((pago: any) => {
           const esDeCarrera = (estudiantes || []).find(
@@ -112,18 +108,10 @@ export const useRealVsTeoricoCarrera = (institucionId: number) => {
           if (!esDeCarrera) return
 
           const monto = pago.monto_pagado || 0
-          const tipo = pago.tipo_concepto?.toUpperCase()
-
-          if (tipo === 'INSCRIPCIÓN' || tipo === 'INSCRIPCION') {
-            inscripcionReal += monto
-          } else if (tipo === 'CUOTA') {
-            cuotasReal += monto
-          } else if (tipo === 'SEGURO') {
-            segurosReal += monto
-          }
+          cuotasReal += monto
         })
 
-        const totalReal = inscripcionReal + cuotasReal + segurosReal
+        const totalReal = cuotasReal
         const totalTeorico = inscripcionTeorico + cuotasTeorico + segurosTeorico
         const diferencia = totalReal - totalTeorico
         const porcentajeCumplimiento = totalTeorico > 0 ? (totalReal / totalTeorico) * 100 : 0
@@ -131,11 +119,11 @@ export const useRealVsTeoricoCarrera = (institucionId: number) => {
         resultados.push({
           carrera_id: carreraId,
           carrera: carreraNombre,
-          inscripcion_real: inscripcionReal,
+          inscripcion_real: 0,
           inscripcion_teorico: inscripcionTeorico,
           cuotas_real: cuotasReal,
           cuotas_teorico: cuotasTeorico,
-          seguros_real: segurosReal,
+          seguros_real: 0,
           seguros_teorico: segurosTeorico,
           total_real: totalReal,
           total_teorico: totalTeorico,
