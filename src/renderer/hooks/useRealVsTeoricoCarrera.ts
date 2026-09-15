@@ -29,22 +29,21 @@ export const useRealVsTeoricoCarrera = (institucionId: number) => {
       // Obtener estudiantes activos por carrera
       const { data: estudiantes, error: errEst } = await supabase
         .from('estudiantes')
-        .select('id, carrera_id, estado, carreras(nombre)')
+        .select('id, carrera_id, estado, carreras(id, nombre)')
         .eq('institucion_id', institucionId)
         .neq('estado', 'NO_VIENE_MAS')
 
       if (errEst) throw errEst
 
-      // Obtener conceptos
-      const { data: conceptos, error: errConc } = await supabase
-        .from('conceptos_pago')
-        .select('id, tipo, monto, carrera_id')
+      // Obtener configuraciones de carrera (montos)
+      const { data: configuraciones, error: errConf } = await supabase
+        .from('configuraciones')
+        .select('id, carrera_id, monto_inscripcion, monto_cuota, monto_seguro')
         .eq('institucion_id', institucionId)
-        .eq('activo', true)
 
-      if (errConc) throw errConc
+      if (errConf) throw errConf
 
-      // Obtener pagos múltiples detalle con método
+      // Obtener pagos múltiples detalle
       let todosPagos: any[] = []
       let pagina = 0
       let tieneRangoMas = true
@@ -56,7 +55,7 @@ export const useRealVsTeoricoCarrera = (institucionId: number) => {
         const { data: pagos, error: errPagos } = await supabase
           .from('pagos_multiples_detalle')
           .select(`
-            concepto_id,
+            tipo_concepto,
             monto_pagado,
             pagos_multiples!inner(
               estudiante_id,
@@ -81,7 +80,9 @@ export const useRealVsTeoricoCarrera = (institucionId: number) => {
       // Procesar datos
       const estudiantesPorCarrera = new Map<number, number>()
       ;(estudiantes || []).forEach((est: any) => {
-        estudiantesPorCarrera.set(est.carrera_id, (estudiantesPorCarrera.get(est.carrera_id) || 0) + 1)
+        if (est.carrera_id) {
+          estudiantesPorCarrera.set(est.carrera_id, (estudiantesPorCarrera.get(est.carrera_id) || 0) + 1)
+        }
       })
 
       const resultados: RealVsTeoricoCarrera[] = []
@@ -90,27 +91,14 @@ export const useRealVsTeoricoCarrera = (institucionId: number) => {
         const carreraData = (estudiantes || []).find((e: any) => e.carrera_id === carreraId)
         const carreraNombre = (carreraData as any)?.carreras?.nombre || `Carrera ${carreraId}`
 
-        // Conceptos de la carrera
-        const conceptosCarrera = (conceptos || []).filter((c: any) => c.carrera_id === carreraId)
+        // Obtener configuración de la carrera
+        const config = (configuraciones || []).find((c: any) => c.carrera_id === carreraId)
 
-        // Calcular teórico
-        let inscripcionTeorico = 0
-        let cuotasTeorico = 0
-        let segurosTeorico = 0
-
-        const inscripciones = conceptosCarrera.filter((c: any) => c.tipo?.toUpperCase() === 'INSCRIPCIÓN')
-        const cuotas = conceptosCarrera.filter((c: any) => c.tipo?.toUpperCase() === 'CUOTA')
-        const seguros = conceptosCarrera.filter((c: any) => c.tipo?.toUpperCase() === 'SEGURO')
-
-        inscripciones.forEach((c: any) => {
-          inscripcionTeorico += (c.monto || 0) * cantEst
-        })
-        cuotas.forEach((c: any) => {
-          cuotasTeorico += (c.monto || 0) * cantEst
-        })
-        seguros.forEach((c: any) => {
-          segurosTeorico += (c.monto || 0) * cantEst
-        })
+        // Teórico: cantidad de estudiantes × monto por concepto
+        // Asumiendo: 1 inscripción + 10 cuotas + 10 seguros (período académico)
+        const inscripcionTeorico = (config?.monto_inscripcion || 0) * cantEst
+        const cuotasTeorico = (config?.monto_cuota || 0) * cantEst * 10 // 10 meses
+        const segurosTeorico = (config?.monto_seguro || 0) * cantEst * 10 // 10 meses
 
         // Calcular real (pagos)
         let inscripcionReal = 0
@@ -123,15 +111,14 @@ export const useRealVsTeoricoCarrera = (institucionId: number) => {
           )
           if (!esDeCarrera) return
 
-          const concepto = (conceptos || []).find((c: any) => c.id === pago.concepto_id)
-          if (!concepto) return
-
           const monto = pago.monto_pagado || 0
-          if (concepto.tipo?.toUpperCase() === 'INSCRIPCIÓN') {
+          const tipo = pago.tipo_concepto?.toUpperCase()
+
+          if (tipo === 'INSCRIPCIÓN' || tipo === 'INSCRIPCION') {
             inscripcionReal += monto
-          } else if (concepto.tipo?.toUpperCase() === 'CUOTA') {
+          } else if (tipo === 'CUOTA') {
             cuotasReal += monto
-          } else if (concepto.tipo?.toUpperCase() === 'SEGURO') {
+          } else if (tipo === 'SEGURO') {
             segurosReal += monto
           }
         })

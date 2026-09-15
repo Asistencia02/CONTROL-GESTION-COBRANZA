@@ -596,6 +596,29 @@ export const ReportesFinancierosModerno: React.FC = () => {
                       </div>
                     </div>
                   </div>
+                  <div className="p-6 bg-gradient-to-br from-slate-800/80 to-slate-900/40 border border-slate-700/60 rounded-2xl shadow-2xl backdrop-blur-xl">
+  <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2"><DollarSign size={20} className="text-indigo-400" />Ingresos por Método de Pago</h3>
+  {ingresosPorMetodo && ingresosPorMetodo.length > 0 ? (
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      {ingresosPorMetodo.map((metodo, idx) => (
+        <div key={idx} className="p-4 bg-gradient-to-br from-slate-700/80 to-slate-800/40 border border-slate-600/50 rounded-lg text-center">
+          <p className="text-xs text-slate-400 font-bold mb-2">
+            {metodo.metodo_pago === 'EFECTIVO' && '💵'}
+            {metodo.metodo_pago === 'TRANSFERENCIA' && '🏦'}
+            {metodo.metodo_pago === 'TARJETA_CRÉDITO' && '💳'}
+            {metodo.metodo_pago === 'TARJETA_DÉBITO' && '🪙'}
+            {' ' + metodo.metodo_pago}
+          </p>
+          <p className="text-xl font-black text-cyan-300">{formatoMoneda(metodo.total)}</p>
+          <p className="text-xs text-slate-400 mt-2">{metodo.porcentaje.toFixed(1)}%</p>
+        </div>
+      ))}
+    </div>
+  ) : (
+    <p className="text-slate-400 text-sm text-center py-4">Sin datos de métodos de pago</p>
+  )}
+</div>
+
                 </div>
               ) : institucionActiva.id === 1 ? (
                 // ISIP: Solo Ingresos (Cuotas) vs Egresos (sin Insumos ni Kiosco)
