@@ -1,7 +1,8 @@
-Ôªøimport { useState, useCallback } from 'react'
+import { useState, useCallback } from 'react'
 import { supabase } from '@renderer/lib/supabase'
 import { calcularMora, CalculoMoraResult } from '@renderer/lib/moraCalculator'
 import { obtenerFechaLocalIso } from '@renderer/lib/dateUtils'
+import { debeContar } from '@renderer/hooks/filtroConceptosPorIngreso'
 
 export interface ConceptoSeleccionable {
   id: number
@@ -45,15 +46,17 @@ export const useCobranzasMultiples = () => {
         // Obtener estado del estudiante
         const { data: estudianteData } = await supabase
           .from('estudiantes')
-          .select('estado')
+          .select('estado, mes_ingreso, ano_ingreso')
           .eq('id', estudianteId)
           .single()
 
         const estadoEstudiante = estudianteData?.estado || 'ACTIVO'
+        const mesIngreso = estudianteData?.mes_ingreso || 3
+        const anoIngreso = estudianteData?.ano_ingreso || 2026
         const esBecado100 = estadoEstudiante === 'BECADO_100'
         const esBecado50 = estadoEstudiante === 'BECADO_50'
 
-        // Funci√≥n helper para determinar si aplica beca
+        // FunciÛn helper para determinar si aplica beca
         const esConceptoBeca = (tipo: string): boolean => {
           if (!tipo) return true
           const tipoLower = tipo.toLowerCase()
@@ -69,7 +72,7 @@ export const useCobranzasMultiples = () => {
 
         if (errorPagos) throw errorPagos
 
-        // Cargar pagos m√∫ltiples (SIN filtrar por estado en Supabase)
+        // Cargar pagos m˙ltiples (SIN filtrar por estado en Supabase)
         const { data: pagosMultiplesData, error: errorMultiples } = await supabase
           .from('pagos_multiples')
           .select(
@@ -88,7 +91,7 @@ export const useCobranzasMultiples = () => {
 
         const montosPagados = new Map<number, number>()
 
-        // Procesar pagos individuales (FILTRAR en c√≥digo: solo los que NO est√©n ANULADOS)
+        // Procesar pagos individuales (FILTRAR en cÛdigo: solo los que NO estÈn ANULADOS)
         pagosRegistrados?.forEach((p) => {
           // Solo contar si estado !== 'ANULADO'
           if (p.estado !== 'ANULADO') {
@@ -97,7 +100,7 @@ export const useCobranzasMultiples = () => {
           }
         })
 
-        // Procesar pagos m√∫ltiples (FILTRAR en c√≥digo: solo los que NO est√©n ANULADOS)
+        // Procesar pagos m˙ltiples (FILTRAR en cÛdigo: solo los que NO estÈn ANULADOS)
         pagosMultiplesData?.forEach((pm: any) => {
           // Solo contar si estado !== 'ANULADO'
           if (pm.estado !== 'ANULADO' && pm.pagos_multiples_detalle && Array.isArray(pm.pagos_multiples_detalle)) {
@@ -116,6 +119,11 @@ export const useCobranzasMultiples = () => {
         
         const pendientes = conceptosFiltrados
           .map((concepto) => {
+            // Aplicar filtro de fecha de ingreso
+            if (!debeContar(concepto, { mes_ingreso: mesIngreso, ano_ingreso: anoIngreso })) {
+              return null
+            }
+
             const aplicaBeca = esConceptoBeca(concepto.tipo)
             
             // BECADO_100: conceptos con beca no aparecen (considerados pagados)
@@ -208,7 +216,7 @@ export const useCobranzasMultiples = () => {
       .map((c) => {
         let desc = c.nombre
         if (c.montoPagado && c.montoPagado > 0) {
-          desc += ` (Pag√≥: $${c.montoPagado.toFixed(0)}, Pendiente: $${c.monto.toFixed(0)})`
+          desc += ` (PagÛ: $${c.montoPagado.toFixed(0)}, Pendiente: $${c.monto.toFixed(0)})`
         }
         if (c.mora && c.mora.estaVencida && c.mora.montoRecargo > 0) {
           desc += ` + Mora $${c.mora.montoRecargo.toFixed(0)}`
@@ -274,22 +282,22 @@ export const useCobranzasMultiples = () => {
           }
         }
 
-        // Validaci√≥n de datos de entrada
+        // ValidaciÛn de datos de entrada
         if (!institucionId || institucionId <= 0) {
-          throw new Error(`institucionId inv√°lido: ${institucionId}`)
+          throw new Error(`institucionId inv·lido: ${institucionId}`)
         }
         if (!estudianteId || estudianteId <= 0) {
-          throw new Error(`estudianteId inv√°lido: ${estudianteId}`)
+          throw new Error(`estudianteId inv·lido: ${estudianteId}`)
         }
 
         const numeroTalonarioBase = await obtenerProximoTalonario(institucionId)
 
-        // ‚úÖ ARREGLADO: Aplicar opciones de perdonar mora
+        // ? ARREGLADO: Aplicar opciones de perdonar mora
         const aplicarPerdonMora = opciones?.perdonarMora === true
         const montoTotalARegistrar = aplicarPerdonMora ? totales.totalSinMora : totales.totalConMora
         const moraARegistrar = aplicarPerdonMora ? 0 : totales.totalMora
 
-        console.log(`üìù Registrando cobro: perdonarMora=${aplicarPerdonMora}, totalSinMora=$${totales.totalSinMora}, totalConMora=$${totales.totalConMora}, montoFinal=$${montoTotalARegistrar}`)
+        console.log(`?? Registrando cobro: perdonarMora=${aplicarPerdonMora}, totalSinMora=$${totales.totalSinMora}, totalConMora=$${totales.totalConMora}, montoFinal=$${montoTotalARegistrar}`)
 
         // Preparar array de pagos a registrar
         const pagosARegistrar = pagosMultiples && pagosMultiples.length > 0
@@ -301,7 +309,7 @@ export const useCobranzasMultiples = () => {
             }))
           : [{
               metodo: metodoPago,
-              monto: montoTotalARegistrar,  // ‚úÖ Usar el monto con descuento de mora aplicado
+              monto: montoTotalARegistrar,  // ? Usar el monto con descuento de mora aplicado
               tipoTarjeta: tipoTarjeta || null,
               numeroTalonario: numeroTalonarioBase,
             }]
@@ -311,10 +319,10 @@ export const useCobranzasMultiples = () => {
         for (const pago of pagosARegistrar) {
           // Validar datos antes de insertar
           if (!pago.numeroTalonario || pago.monto <= 0) {
-            throw new Error(`Datos de pago inv√°lidos: numeroTalonario=${pago.numeroTalonario}, monto=${pago.monto}`)
+            throw new Error(`Datos de pago inv·lidos: numeroTalonario=${pago.numeroTalonario}, monto=${pago.monto}`)
           }
 
-          // Construir objeto de pago con validaci√≥n de tipos
+          // Construir objeto de pago con validaciÛn de tipos
           const pagoData = {
             institucion_id: Number(institucionId),
             estudiante_id: Number(estudianteId),
@@ -328,28 +336,28 @@ export const useCobranzasMultiples = () => {
             estado: 'REGISTRADO',
           }
 
-          console.log('üìù Insertando pago_multiple:', pagoData)
+          console.log('?? Insertando pago_multiple:', pagoData)
 
-          // Insertar pago m√∫ltiple usando Supabase client (no fetch)
+          // Insertar pago m˙ltiple usando Supabase client (no fetch)
           const { data: pagoMultipleData, error: errorPagoMultiple } = await supabase
             .from('pagos_multiples')
             .insert([pagoData])
             .select()
 
           if (errorPagoMultiple) {
-            console.error('‚ùå Error al insertar pago_multiple:', errorPagoMultiple)
+            console.error('? Error al insertar pago_multiple:', errorPagoMultiple)
             throw new Error(`Error al insertar pago: ${errorPagoMultiple.message}`)
           }
           if (!pagoMultipleData || pagoMultipleData.length === 0) {
-            throw new Error('Error al insertar pago m√∫ltiple: sin datos retornados')
+            throw new Error('Error al insertar pago m˙ltiple: sin datos retornados')
           }
 
           const pagoMultipleId = pagoMultipleData[0].id
           pagosCreados.push(pagoMultipleId)
-          console.log('‚úÖ Pago_multiple creado con ID:', pagoMultipleId)
+          console.log('? Pago_multiple creado con ID:', pagoMultipleId)
 
-          // Insertar detalles del pago m√∫ltiple
-          // ‚úÖ ARREGLADO: Aplicar descuento de mora a los detalles tambi√©n
+          // Insertar detalles del pago m˙ltiple
+          // ? ARREGLADO: Aplicar descuento de mora a los detalles tambiÈn
           const detalles = totales.seleccionados
             .map((concepto) => {
               // Calcular la mora del concepto individual
@@ -360,14 +368,14 @@ export const useCobranzasMultiples = () => {
               const moraFinalConcepto = aplicarPerdonMora ? 0 : moraConcepto
               const montoConceptoFinal = montoPrincipalConcepto + moraFinalConcepto
               
-              // Calcular proporci√≥n del pago
+              // Calcular proporciÛn del pago
               const proporcion = pago.monto / montoTotalARegistrar
               const montoConceptoProporcional = montoConceptoFinal * proporcion
 
-              // Validar c√°lculos
+              // Validar c·lculos
               if (isNaN(montoConceptoProporcional) || montoConceptoProporcional < 0) {
-                console.error(`Monto inv√°lido para concepto ${concepto.id}:`, montoConceptoProporcional)
-                throw new Error(`C√°lculo de monto inv√°lido para concepto ${concepto.nombre}`)
+                console.error(`Monto inv·lido para concepto ${concepto.id}:`, montoConceptoProporcional)
+                throw new Error(`C·lculo de monto inv·lido para concepto ${concepto.nombre}`)
               }
 
               return {
@@ -382,17 +390,17 @@ export const useCobranzasMultiples = () => {
             })
             .filter(d => d.monto_pagado > 0) // No registrar montos 0
 
-          console.log('üìù Insertando detalles:', detalles.length, 'registros')
+          console.log('?? Insertando detalles:', detalles.length, 'registros')
 
           const { error: errorDetalle } = await supabase
             .from('pagos_multiples_detalle')
             .insert(detalles)
 
           if (errorDetalle) {
-            console.error('‚ùå Error al insertar detalles:', errorDetalle)
+            console.error('? Error al insertar detalles:', errorDetalle)
             throw new Error(`Error al insertar detalles de pago: ${errorDetalle.message}`)
           }
-          console.log('‚úÖ Detalles insertados correctamente')
+          console.log('? Detalles insertados correctamente')
         }
 
         const detalleMetodos = pagosARegistrar
@@ -403,7 +411,7 @@ export const useCobranzasMultiples = () => {
           success: true,
           pago_multiple_id: pagosCreados[0],
           numero_talonario: numeroTalonarioBase,
-          mensaje: `Cobro registrado. Talonarios: ${pagosARegistrar.map(p => p.numeroTalonario).join(', ')} | Total: $${montoTotalARegistrar.toFixed(2)}${aplicarPerdonMora ? ' (Mora perdonada)' : ''}\nM√©todos: ${detalleMetodos}`,
+          mensaje: `Cobro registrado. Talonarios: ${pagosARegistrar.map(p => p.numeroTalonario).join(', ')} | Total: $${montoTotalARegistrar.toFixed(2)}${aplicarPerdonMora ? ' (Mora perdonada)' : ''}\nMÈtodos: ${detalleMetodos}`,
         }
       } catch (err) {
         const mensaje = err instanceof Error ? err.message : 'Error desconocido'
@@ -429,3 +437,4 @@ export const useCobranzasMultiples = () => {
     registrarCobranzaMultiple,
   }
 }
+
