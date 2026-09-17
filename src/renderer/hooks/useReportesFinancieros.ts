@@ -761,11 +761,11 @@ export const useReportesFinancieros = (institucionId: number) => {
         const esBecado100 = est.estado === 'BECADO_100'
         const esBecado50 = est.estado === 'BECADO_50'
         
-        conceptosVencidosMoraLocal.forEach(concepto => {
-          if (concepto.carrera_id !== est.carrera_id) return
-          if (!debeContar(concepto, est)) return
-          if (!debeContar(concepto, est)) return
-          
+        conceptosFiltrados.filter(concepto => {
+          if (concepto.carrera_id !== est.carrera_id) return false
+          if (!debeContar(concepto, est)) return false
+          return true
+        }).forEach(concepto => {
           const montoPago = pagosValidos.find(p => p.estudiante_id === est.id && p.concepto_id === concepto.id)?.monto_pagado || 0
           const montoOriginal = concepto.monto
           const aplicaBeca = esConceptoBeca(concepto.tipo)
@@ -836,5 +836,8 @@ export const useReportesFinancieros = (institucionId: number) => {
     totalVentasKiosco,
   }
 }
+
+
+
 
 
