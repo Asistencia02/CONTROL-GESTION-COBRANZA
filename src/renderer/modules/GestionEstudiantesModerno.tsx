@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useInstitucion } from '@renderer/hooks/useInstitucion'
 import { formatoMoneda } from '@renderer/lib/helpers'
-import { Users, Filter, Edit2, CheckCircle, AlertCircle, Zap, Ban } from 'lucide-react'
+import { Users, Filter, Edit2, CheckCircle, AlertCircle, Zap, Ban, X } from 'lucide-react'
 import { supabase } from '@renderer/lib/supabase'
 
 interface Estudiante {
@@ -11,6 +11,8 @@ interface Estudiante {
   dni: string
   carrera_id: number
   estado: 'ACTIVO' | 'BECADO_50' | 'BECADO_100' | 'NO_VIENE_MAS'
+  mes_ingreso: number
+  ano_ingreso: number
   carreras?: { nombre: string }
 }
 
@@ -25,6 +27,8 @@ export const GestionEstudiantesModerno: React.FC = () => {
   const [searchText, setSearchText] = useState('')
   const [editandoId, setEditandoId] = useState<number | null>(null)
   const [nuevoEstado, setNuevoEstado] = useState<EstadoEstudiante>('ACTIVO')
+  const [nuevoMesIngreso, setNuevoMesIngreso] = useState(3)
+  const [nuevoAnoIngreso, setNuevoAnoIngreso] = useState(new Date().getFullYear())
   const [guardando, setGuardando] = useState(false)
   const [successMessage, setSuccessMessage] = useState('')
 
@@ -40,10 +44,10 @@ export const GestionEstudiantesModerno: React.FC = () => {
 
       if (carrData) setCarreras(carrData)
 
-      // Cargar estudiantes
+      // Cargar estudiantes CON mes_ingreso y ano_ingreso
       const { data: estData } = await supabase
         .from('estudiantes')
-        .select('id, nombre, apellido, dni, carrera_id, estado, carreras(nombre)')
+        .select('id, nombre, apellido, dni, carrera_id, estado, mes_ingreso, ano_ingreso, carreras(nombre)')
         .eq('institucion_id', institucionActiva.id)
         .order('nombre', { ascending: true })
 
@@ -84,7 +88,11 @@ export const GestionEstudiantesModerno: React.FC = () => {
     try {
       const { error } = await supabase
         .from('estudiantes')
-        .update({ estado: nuevoEstado })
+        .update({ 
+          estado: nuevoEstado,
+          mes_ingreso: nuevoMesIngreso,
+          ano_ingreso: nuevoAnoIngreso
+        })
         .eq('id', estudianteId)
         .eq('institucion_id', institucionActiva.id)
 
@@ -93,16 +101,18 @@ export const GestionEstudiantesModerno: React.FC = () => {
       // Actualizar localmente
       setEstudiantes(prev =>
         prev.map(est =>
-          est.id === estudianteId ? { ...est, estado: nuevoEstado } : est
+          est.id === estudianteId 
+            ? { ...est, estado: nuevoEstado, mes_ingreso: nuevoMesIngreso, ano_ingreso: nuevoAnoIngreso } 
+            : est
         )
       )
 
-      setSuccessMessage(`✓ Estado actualizado`)
+      setSuccessMessage(`✓ Datos actualizados`)
       setEditandoId(null)
       setTimeout(() => setSuccessMessage(''), 3000)
     } catch (error) {
       console.error('Error guardando:', error)
-      alert('Error al guardar estado')
+      alert('Error al guardar datos')
     } finally {
       setGuardando(false)
     }
@@ -154,6 +164,8 @@ export const GestionEstudiantesModerno: React.FC = () => {
   }
 
   const estadosDisponibles: EstadoEstudiante[] = ['ACTIVO', 'BECADO_50', 'BECADO_100', 'NO_VIENE_MAS']
+  const mesesNombre = ['', 'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
+  const anosDisponibles = [2024, 2025, 2026, 2027, 2028]
 
   if (loading) {
     return (
@@ -180,7 +192,7 @@ export const GestionEstudiantesModerno: React.FC = () => {
             <h1 className="text-2xl sm:text-3xl md:text-4xl font-black bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
               Gestión de Estudiantes
             </h1>
-            <p className="text-slate-400 mt-1">Controla estado y condiciones de estudiantes</p>
+            <p className="text-slate-400 mt-1">Controla estado, condiciones y fecha de ingreso</p>
           </div>
         </div>
 
@@ -248,7 +260,7 @@ export const GestionEstudiantesModerno: React.FC = () => {
       </div>
 
       {/* TABLA DE ESTUDIANTES */}
-      <div className="p-6 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-xl">
+      <div className="p-6 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-xl overflow-x-auto">
         <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
           <Users size={24} className="text-purple-400" />
           Listado de Estudiantes ({estudiantesFiltrados.length})
@@ -267,7 +279,8 @@ export const GestionEstudiantesModerno: React.FC = () => {
                   <th className="px-4 py-3 text-left text-slate-300 font-bold">Nombre Completo</th>
                   <th className="px-4 py-3 text-left text-slate-300 font-bold">DNI</th>
                   <th className="px-4 py-3 text-left text-slate-300 font-bold">Carrera</th>
-                  <th className="px-4 py-3 text-center text-slate-300 font-bold">Estado Actual</th>
+                  <th className="px-4 py-3 text-center text-slate-300 font-bold">Estado</th>
+                  <th className="px-4 py-3 text-center text-slate-300 font-bold">Ingreso</th>
                   <th className="px-4 py-3 text-center text-slate-300 font-bold">Acciones</th>
                 </tr>
               </thead>
@@ -294,32 +307,71 @@ export const GestionEstudiantesModerno: React.FC = () => {
                       </div>
                     </td>
                     <td className="px-4 py-4 text-center">
+                      <span className="px-3 py-1 bg-cyan-500/20 text-cyan-300 rounded-lg text-xs font-bold">
+                        {mesesNombre[estudiante.mes_ingreso]} {estudiante.ano_ingreso}
+                      </span>
+                    </td>
+                    <td className="px-4 py-4 text-center">
                       {editandoId === estudiante.id ? (
-                        <div className="space-y-2 min-w-max">
-                          <select
-                            value={nuevoEstado}
-                            onChange={(e) => setNuevoEstado(e.target.value as EstadoEstudiante)}
-                            className="w-full px-2 py-2 bg-slate-700 border border-slate-600 rounded text-white text-xs"
-                          >
-                            {estadosDisponibles.map(est => (
-                              <option key={est} value={est}>
-                                {getEstadoLabel(est as EstadoEstudiante)}
-                              </option>
-                            ))}
-                          </select>
-                          <div className="flex gap-2 justify-center">
+                        <div className="space-y-3 min-w-max p-4 bg-slate-900/80 border border-slate-700 rounded-lg">
+                          {/* Estado */}
+                          <div>
+                            <label className="text-xs text-slate-400 block mb-1">Estado</label>
+                            <select
+                              value={nuevoEstado}
+                              onChange={(e) => setNuevoEstado(e.target.value as EstadoEstudiante)}
+                              className="w-full px-2 py-2 bg-slate-700 border border-slate-600 rounded text-white text-xs"
+                            >
+                              {estadosDisponibles.map(est => (
+                                <option key={est} value={est}>
+                                  {getEstadoLabel(est as EstadoEstudiante)}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+
+                          {/* Mes Ingreso */}
+                          <div>
+                            <label className="text-xs text-slate-400 block mb-1">Mes de Ingreso</label>
+                            <select
+                              value={nuevoMesIngreso}
+                              onChange={(e) => setNuevoMesIngreso(parseInt(e.target.value))}
+                              className="w-full px-2 py-2 bg-slate-700 border border-slate-600 rounded text-white text-xs"
+                            >
+                              {mesesNombre.map((mes, idx) => (
+                                idx > 0 && <option key={idx} value={idx}>{mes}</option>
+                              ))}
+                            </select>
+                          </div>
+
+                          {/* Año Ingreso */}
+                          <div>
+                            <label className="text-xs text-slate-400 block mb-1">Año de Ingreso</label>
+                            <select
+                              value={nuevoAnoIngreso}
+                              onChange={(e) => setNuevoAnoIngreso(parseInt(e.target.value))}
+                              className="w-full px-2 py-2 bg-slate-700 border border-slate-600 rounded text-white text-xs"
+                            >
+                              {anosDisponibles.map(ano => (
+                                <option key={ano} value={ano}>{ano}</option>
+                              ))}
+                            </select>
+                          </div>
+
+                          {/* Botones */}
+                          <div className="flex gap-2 justify-center pt-2">
                             <button
                               onClick={() => handleGuardarEstado(estudiante.id)}
                               disabled={guardando}
-                              className="px-3 py-1 bg-green-600 hover:bg-green-700 disabled:bg-slate-600 text-white rounded text-xs font-bold transition"
+                              className="px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-slate-600 text-white rounded text-xs font-bold transition"
                             >
                               Guardar
                             </button>
                             <button
                               onClick={() => setEditandoId(null)}
-                              className="px-3 py-1 bg-slate-600 hover:bg-slate-700 text-white rounded text-xs font-bold transition"
+                              className="px-4 py-2 bg-slate-600 hover:bg-slate-700 text-white rounded text-xs font-bold transition flex items-center gap-1"
                             >
-                              Cancelar
+                              <X size={14} /> Cancelar
                             </button>
                           </div>
                         </div>
@@ -328,6 +380,8 @@ export const GestionEstudiantesModerno: React.FC = () => {
                           onClick={() => {
                             setEditandoId(estudiante.id)
                             setNuevoEstado(estudiante.estado)
+                            setNuevoMesIngreso(estudiante.mes_ingreso)
+                            setNuevoAnoIngreso(estudiante.ano_ingreso)
                           }}
                           className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-bold flex items-center gap-2 mx-auto transition"
                         >
