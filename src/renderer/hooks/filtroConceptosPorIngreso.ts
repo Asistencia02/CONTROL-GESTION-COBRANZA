@@ -4,6 +4,6 @@ export const debeContar = (concepto: any, estudiante: any): boolean => {
   const mesIngreso = estudiante.mes_ingreso || 3
   const anioIngreso = estudiante.ano_ingreso || 2024
   
-  return concepto.ano > anioIngreso || 
-         (concepto.ano === anioIngreso && concepto.mes >= mesIngreso)
+  return concepto.año > anioIngreso || 
+         (concepto.año === anioIngreso && concepto.mes >= mesIngreso)
 }
