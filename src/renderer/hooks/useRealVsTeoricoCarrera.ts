@@ -26,7 +26,7 @@ export const useRealVsTeoricoCarrera = (institucionId: number) => {
       setLoading(true)
       setError(null)
 
-      // Obtener estudiantes activos por carrera
+      // Obtener estudiantes activos por carrera CON ESTADO
       const { data: estudiantes, error: errEst } = await supabase
         .from('estudiantes')
         .select('id, carrera_id, estado, carreras(id, nombre)')
@@ -79,38 +79,66 @@ export const useRealVsTeoricoCarrera = (institucionId: number) => {
         }
       }
 
-      // Procesar datos
-      const estudiantesPorCarrera = new Map<number, number>()
+      // Procesar datos: agrupar estudiantes por carrera Y estado
+      const estudiantesPorCarreraEstado = new Map<string, { total: number; becado100: number; becado50: number; activo: number }>()
+      
       ;(estudiantes || []).forEach((est: any) => {
-        if (est.carrera_id) {
-          estudiantesPorCarrera.set(est.carrera_id, (estudiantesPorCarrera.get(est.carrera_id) || 0) + 1)
+        if (!est.carrera_id) return
+        
+        const key = est.carrera_id.toString()
+        if (!estudiantesPorCarreraEstado.has(key)) {
+          estudiantesPorCarreraEstado.set(key, { total: 0, becado100: 0, becado50: 0, activo: 0 })
+        }
+        
+        const stats = estudiantesPorCarreraEstado.get(key)!
+        stats.total++
+        
+        if (est.estado === 'BECADO_100') {
+          stats.becado100++
+        } else if (est.estado === 'BECADO_50') {
+          stats.becado50++
+        } else if (est.estado === 'ACTIVO') {
+          stats.activo++
         }
       })
 
       const resultados: RealVsTeoricoCarrera[] = []
 
-      estudiantesPorCarrera.forEach((cantEst, carreraId) => {
+      Array.from(estudiantesPorCarreraEstado.entries()).forEach(([carreraIdStr, stats]) => {
+        const carreraId = parseInt(carreraIdStr)
         const carreraData = (estudiantes || []).find((e: any) => e.carrera_id === carreraId)
         const carreraNombre = (carreraData as any)?.carreras?.nombre || `Carrera ${carreraId}`
 
         // Obtener configuración de la carrera
         const config = (configuraciones || []).find((c: any) => c.carrera_id === carreraId)
 
-        // Teórico: cantidad de estudiantes × monto por concepto
-        const inscripcionTeorico = (config?.monto_inscripcion || 0) * cantEst
-        const cuotasTeorico = (config?.monto_cuota || 0) * cantEst * 10
-        const segurosTeorico = (config?.monto_seguro || 0) * cantEst * 10
+        // ============ TEÓRICO CON AJUSTE POR BECAS ============
+        // INSCRIPCION: todos la pagan (ACTIVO + BECADO_100 + BECADO_50)
+        const inscripcionTeorico = (config?.monto_inscripcion || 0) * stats.total
 
-        // Calcular real (pagos) - separar por tipo
+        // CUOTAS: 
+        //   - ACTIVO: paga 100% × 10 meses
+        //   - BECADO_100: NO paga (0)
+        //   - BECADO_50: paga 50% × 10 meses
+        const montoCuota = config?.monto_cuota || 0
+        const cuotasActivoTeorico = montoCuota * stats.activo * 10
+        const cuotasBecado50Teorico = (montoCuota * 0.5) * stats.becado50 * 10
+        const cuotasTeorico = cuotasActivoTeorico + cuotasBecado50Teorico
+
+        // SEGUROS: todos pagan (ACTIVO + BECADO_100 + BECADO_50)
+        const segurosTeorico = (config?.monto_seguro || 0) * stats.total * 10
+
+        // ============ REAL: contar pagos por tipo ============
         let inscripcionReal = 0
         let cuotasReal = 0
         let segurosReal = 0
 
         todosPagos.forEach((pago: any) => {
-          const esDeCarrera = (estudiantes || []).find(
-            (e: any) => e.id === pago.pagos_multiples?.estudiante_id && e.carrera_id === carreraId
+          const estudiante = (estudiantes || []).find(
+            (e: any) => e.id === pago.pagos_multiples?.estudiante_id
           )
-          if (!esDeCarrera) return
+          
+          if (!estudiante || estudiante.carrera_id !== carreraId) return
 
           const monto = pago.monto_pagado || 0
           const tipo = pago.conceptos_pago?.tipo?.toUpperCase()
@@ -146,7 +174,7 @@ export const useRealVsTeoricoCarrera = (institucionId: number) => {
       })
 
       setDatos(resultados)
-      console.log('[REAL VS TEORICO CARRERA]', resultados)
+      console.log('[REAL VS TEORICO CARRERA - CON BECAS]', resultados)
     } catch (err) {
       const mensaje = err instanceof Error ? err.message : 'Error desconocido'
       setError(mensaje)

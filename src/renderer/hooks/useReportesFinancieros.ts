@@ -171,9 +171,7 @@ export const useReportesFinancieros = (institucionId: number) => {
         (!c.mes || !c.año)
       )
 
-      // IMPORTANTE: INCLUIR TODOS LOS CONCEPTOS SIN FILTRO DE FECHA
       const conceptosVencidos = conceptos || []
-
       const conceptosFiltrados = conceptosVencidos
 
       let todosPagos: any[] = []
@@ -243,17 +241,26 @@ export const useReportesFinancieros = (institucionId: number) => {
       let estudiantesEnMora = 0
       const conceptoPorEstudiante = new Map<number, number>()
 
+      // ============ CÁLCULO TEÓRICO ANUAL CON BECAS ============
       estudiantesPorCarrera.forEach((cantEstudiantes, carreraId) => {
+        // Contar por estado
+        const estActivosCarrera = estudiantesActivos.filter(e => e.carrera_id === carreraId && e.estado === 'ACTIVO').length
+        const estBecado100Carrera = estudiantesActivos.filter(e => e.carrera_id === carreraId && e.estado === 'BECADO_100').length
+        const estBecado50Carrera = estudiantesActivos.filter(e => e.carrera_id === carreraId && e.estado === 'BECADO_50').length
+
+        // INSCRIPCION: todos pagan
         const inscripcionCarrera = inscripciones.find(c => c.carrera_id === carreraId)
         if (inscripcionCarrera) {
           totalRecaudable += inscripcionCarrera.monto * cantEstudiantes
         }
         
+        // CUOTAS: ACTIVO 100%, BECADO_100 0%, BECADO_50 50%
         const cuotasCarrera = conceptosVencidos.filter(c => c.carrera_id === carreraId && c.tipo?.toUpperCase() === 'CUOTA')
         cuotasCarrera.forEach(c => {
-          totalRecaudable += c.monto * cantEstudiantes
+          totalRecaudable += (c.monto * estActivosCarrera) + (c.monto * 0.5 * estBecado50Carrera)
         })
         
+        // SEGUROS: todos pagan
         const segurosCarrera = conceptosVencidos.filter(c => c.carrera_id === carreraId && c.tipo?.toUpperCase() === 'SEGURO')
         segurosCarrera.forEach(c => {
           totalRecaudable += c.monto * cantEstudiantes
@@ -264,23 +271,7 @@ export const useReportesFinancieros = (institucionId: number) => {
         const esBecado50 = est.estado === 'BECADO_50'
         const esBecado100 = est.estado === 'BECADO_100'
         
-        if (esBecado50 || esBecado100) {
-          const cuotasEst = conceptosVencidos.filter(c => c.carrera_id === est.carrera_id && c.tipo?.toUpperCase() === 'CUOTA')
-          const segurosEst = conceptosVencidos.filter(c => c.carrera_id === est.carrera_id && c.tipo?.toUpperCase() === 'SEGURO')
-          
-          const montoDescontar = (
-            cuotasEst.reduce((sum, c) => sum + c.monto, 0) + 
-            segurosEst.reduce((sum, c) => sum + c.monto, 0)
-          ) * (esBecado50 ? 0.5 : 1)
-          
-          totalRecaudable -= montoDescontar
-        }
-      })
-
-      estudiantesActivos.forEach(est => {
         let deudaEst = 0
-        const esBecado100 = est.estado === 'BECADO_100'
-        const esBecado50 = est.estado === 'BECADO_50'
         
         conceptosVencidos.forEach(concepto => {
           if (concepto.carrera_id !== est.carrera_id) return
@@ -315,8 +306,7 @@ export const useReportesFinancieros = (institucionId: number) => {
       const porcentajeCobro = totalRecaudable > 0 ? (totalRecaudado / totalRecaudable) * 100 : 0
       const pendiente = Math.max(0, totalRecaudable - totalRecaudado)
 
-      // RESUMEN EJECUTIVO - PARTE MES ACTUAL
-      // FIX: Sumar TODAS las cuotas/seguros UNA SOLA VEZ, luego multiplicar por meses * estudiantes
+      // ============ RESUMEN EJECUTIVO - PARTE MES ACTUAL CON BECAS ============
       let totalRecaudableMesActual = 0
       let estudiantesEnMoraMesActual = 0
       
@@ -324,25 +314,30 @@ export const useReportesFinancieros = (institucionId: number) => {
       const cuotasTotales = conceptosVencidos.filter(c => c.tipo?.toUpperCase() === 'CUOTA')
       const segurosTotales = conceptosVencidos.filter(c => c.tipo?.toUpperCase() === 'SEGURO')
       console.log('[DEBUG CONCEPTOS] Cuotas totales:', cuotasTotales.length, 'Seguros totales:', segurosTotales.length, 'Inscripciones:', inscripciones.length)
-      console.log('[DEBUG MES ACTUAL] diaActual:', diaActual, 'mesActual:', mesActual, 'numeroMesesAcademicos:', numeroMesesAcademicos, 'recaudable_a�o:', totalRecaudable)
+      console.log('[DEBUG MES ACTUAL] diaActual:', diaActual, 'mesActual:', mesActual, 'numeroMesesAcademicos:', numeroMesesAcademicos, 'recaudable_año:', totalRecaudable)
 
       estudiantesPorCarrera.forEach((cantEstudiantes, carreraId) => {
-        // INSCRIPCION: 1 por estudiante
+        // Contar por estado
+        const estActivosCarrera = estudiantesActivos.filter(e => e.carrera_id === carreraId && e.estado === 'ACTIVO').length
+        const estBecado100Carrera = estudiantesActivos.filter(e => e.carrera_id === carreraId && e.estado === 'BECADO_100').length
+        const estBecado50Carrera = estudiantesActivos.filter(e => e.carrera_id === carreraId && e.estado === 'BECADO_50').length
+
+        // INSCRIPCION: todos pagan (1 vez)
         const inscripcionCarrera = inscripciones.find(c => c.carrera_id === carreraId)
         if (inscripcionCarrera) {
           totalRecaudableMesActual += inscripcionCarrera.monto * cantEstudiantes
         }
         
-        // CUOTAS: sumar TODAS y multiplicar UNA SOLA VEZ
+        // CUOTAS: sumar y multiplicar UNA SOLA VEZ, por estudiantes según estado
         const cuotasCarrera = conceptosVencidos.filter(c => 
           c.carrera_id === carreraId && 
           c.tipo?.toUpperCase() === "CUOTA" &&
           (!c.mes || c.mes <= mesActual)
         )
         const sumaCuotasCarrera = cuotasCarrera.reduce((sum, c) => sum + c.monto, 0)
-        totalRecaudableMesActual += sumaCuotasCarrera * cantEstudiantes
+        totalRecaudableMesActual += (sumaCuotasCarrera * estActivosCarrera) + (sumaCuotasCarrera * 0.5 * estBecado50Carrera)
         
-        // SEGUROS: sumar TODAS y multiplicar UNA SOLA VEZ
+        // SEGUROS: sumar y multiplicar UNA SOLA VEZ
         const segurosCarrera = conceptosVencidos.filter(c => 
           c.carrera_id === carreraId && 
           c.tipo?.toUpperCase() === "SEGURO" &&
@@ -350,29 +345,6 @@ export const useReportesFinancieros = (institucionId: number) => {
         )
         const sumaSegurosCarrera = segurosCarrera.reduce((sum, c) => sum + c.monto, 0)
         totalRecaudableMesActual += sumaSegurosCarrera * cantEstudiantes
-      })
-
-      estudiantesActivos.forEach(est => {
-        const esBecado50 = est.estado === 'BECADO_50'
-        const esBecado100 = est.estado === 'BECADO_100'
-        
-        if (esBecado50 || esBecado100) {
-          const cuotasEst = conceptosVencidos.filter(c => 
-            c.carrera_id === est.carrera_id && 
-            c.tipo?.toUpperCase() === 'CUOTA'
-          )
-          const segurosEst = conceptosVencidos.filter(c => 
-            c.carrera_id === est.carrera_id && 
-            c.tipo?.toUpperCase() === 'SEGURO'
-          )
-          
-          const montoDescontar = (
-            cuotasEst.reduce((sum, c) => sum + c.monto, 0) + 
-            segurosEst.reduce((sum, c) => sum + c.monto, 0)
-          ) * numeroMesesAcademicos * (esBecado50 ? 0.5 : 1)
-          
-          totalRecaudableMesActual -= montoDescontar
-        }
       })
 
       estudiantesActivos.forEach(est => {
@@ -497,6 +469,7 @@ export const useReportesFinancieros = (institucionId: number) => {
 
       setReportePorCarrera(reportePorCar)
 
+      // ============ REPORTE MES A MES CON BECAS ============
       const reporteMeses: ReporteMesAMes[] = []
       
       if (reportePorCar && reportePorCar.length > 0) {
@@ -504,17 +477,39 @@ export const useReportesFinancieros = (institucionId: number) => {
           try {
             if (!carr || !carr.carrera_id) continue
             
-            const estCarrera = carr.total_estudiantes || 0
-            if (estCarrera === 0) continue
+            // CONTAR ESTUDIANTES POR ESTADO
+            const estCarreraActivos = (estudiantes || []).filter((e: any) => 
+              e.carrera_id === carr.carrera_id && e.estado === 'ACTIVO'
+            ).length
+            const estCarreraBecado100 = (estudiantes || []).filter((e: any) => 
+              e.carrera_id === carr.carrera_id && e.estado === 'BECADO_100'
+            ).length
+            const estCarreraBecado50 = (estudiantes || []).filter((e: any) => 
+              e.carrera_id === carr.carrera_id && e.estado === 'BECADO_50'
+            ).length
+            
+            if (estCarreraActivos === 0 && estCarreraBecado100 === 0 && estCarreraBecado50 === 0) continue
             
             const inscripcionesCarrera = inscripciones.filter(c => c && c.carrera_id === carr.carrera_id)
             const conceptosVencidosCarrera = conceptosVencidos.filter(c => c && c.carrera_id === carr.carrera_id)
             
-            const inscripcionDeberia = inscripcionesCarrera.reduce((sum, c) => sum + ((c?.monto || 0) * estCarrera), 0)
-            const cuotasDeberia = conceptosVencidosCarrera
-              .filter(c => c?.tipo?.toUpperCase() === 'CUOTA' && (!c.mes || c.mes <= mesActual)).reduce((sum, c) => sum + ((c?.monto || 0) * estCarrera), 0)
+            // INSCRIPCION: todos pagan
+            const inscripcionDeberia = inscripcionesCarrera.reduce((sum, c) => 
+              sum + ((c?.monto || 0) * (estCarreraActivos + estCarreraBecado100 + estCarreraBecado50)), 0)
+            
+            // CUOTAS: ACTIVO 100%, BECADO_100 0%, BECADO_50 50%
+            const cuotasDeberiaActivos = conceptosVencidosCarrera
+              .filter(c => c?.tipo?.toUpperCase() === 'CUOTA' && (!c.mes || c.mes <= mesActual))
+              .reduce((sum, c) => sum + ((c?.monto || 0) * estCarreraActivos), 0)
+            const cuotasDeberíaBecado50 = conceptosVencidosCarrera
+              .filter(c => c?.tipo?.toUpperCase() === 'CUOTA' && (!c.mes || c.mes <= mesActual))
+              .reduce((sum, c) => sum + ((c?.monto * 0.5 || 0) * estCarreraBecado50), 0)
+            const cuotasDeberia = cuotasDeberiaActivos + cuotasDeberíaBecado50
+            
+            // SEGUROS: todos pagan
             const seguroDeberia = conceptosVencidosCarrera
-              .filter(c => c?.tipo?.toUpperCase() === 'SEGURO' && (!c.mes || c.mes <= mesActual)).reduce((sum, c) => sum + ((c?.monto || 0) * estCarrera), 0)
+              .filter(c => c?.tipo?.toUpperCase() === 'SEGURO' && (!c.mes || c.mes <= mesActual))
+              .reduce((sum, c) => sum + ((c?.monto || 0) * (estCarreraActivos + estCarreraBecado100 + estCarreraBecado50)), 0)
             
             const totalDeberia = inscripcionDeberia + cuotasDeberia + seguroDeberia
 
@@ -525,7 +520,7 @@ export const useReportesFinancieros = (institucionId: number) => {
 
             reporteMeses.push({
               carrera: carr.carrera || 'Sin nombre',
-              cantidad_estudiantes: estCarrera,
+              cantidad_estudiantes: estCarreraActivos + estCarreraBecado100 + estCarreraBecado50,
               mes_actual: mesActual,
               mes_nombre: mesActualNombre,
               inscripcion_deberia: inscripcionDeberia,
@@ -616,14 +611,20 @@ export const useReportesFinancieros = (institucionId: number) => {
       
       let recaudablePorVencer = 0
       Array.from(estudiantesPorCarrera.entries()).forEach(([carreraId]) => {
-        const estudiantesNoBecadosCarrera = estudiantesActivos.filter(e => 
-          e.carrera_id === carreraId && e.estado !== 'BECADO_100' && e.estado !== 'BECADO_50'
-        ).length
+        const estActivosCarrera = estudiantesActivos.filter(e => e.carrera_id === carreraId && e.estado === 'ACTIVO').length
+        const estBecado50Carrera = estudiantesActivos.filter(e => e.carrera_id === carreraId && e.estado === 'BECADO_50').length
         
         const conceptosPorVencerCarrera = conceptosPorVencer.filter(c => c.carrera_id === carreraId)
-        const sumaConceptosPorVencer = conceptosPorVencerCarrera.reduce((sum, c) => sum + (c.monto || 0), 0)
+        const sumaConceptosPorVencer = conceptosPorVencerCarrera.reduce((sum, c) => {
+          const tipo = c.tipo?.toUpperCase()
+          if (tipo === 'CUOTA') {
+            return sum + ((c.monto || 0) * estActivosCarrera) + ((c.monto * 0.5 || 0) * estBecado50Carrera)
+          }
+          // INSCRIPCION y SEGURO: todos pagan
+          return sum + ((c.monto || 0) * estudiantesPorCarrera.get(carreraId)!)
+        }, 0)
         
-        recaudablePorVencer += sumaConceptosPorVencer * estudiantesNoBecadosCarrera
+        recaudablePorVencer += sumaConceptosPorVencer
       })
       const recaudableAnualTotal = totalRecaudable + recaudablePorVencer
       
@@ -703,8 +704,15 @@ export const useReportesFinancieros = (institucionId: number) => {
       const cuotas = conceptosVencidos.filter(c => c.tipo?.toUpperCase() === 'CUOTA')
       cuotas.forEach(c => {
         const cuotaEst = desgloseMap.get('CUOTA')!
-        const cantEstudiantes = estudiantesActivos.filter(e => e.carrera_id === c.carrera_id).length
-        cuotaEst.esperado += c.monto * cantEstudiantes
+        const cantActivosBecados50 = (estudiantes || []).filter(e => 
+          e.carrera_id === c.carrera_id && (e.estado === 'ACTIVO' || e.estado === 'BECADO_50')
+        ).length
+        const montoEsperado = estudiantes!.filter(e => 
+          e.carrera_id === c.carrera_id && e.estado === 'ACTIVO'
+        ).length * (c.monto || 0) + estudiantes!.filter(e => 
+          e.carrera_id === c.carrera_id && e.estado === 'BECADO_50'
+        ).length * ((c.monto || 0) * 0.5)
+        cuotaEst.esperado += montoEsperado
         cuotaEst.conceptos.add(c.id)
       })
       
@@ -769,7 +777,6 @@ export const useReportesFinancieros = (institucionId: number) => {
           totalPagado += montoPago
         })
         
-                // FIX: Validar que CADA concepto est� pagado completamente, no solo suma global
         let tieneDeudaEnAlgunConcepto = false
         conceptosVencidosMoraLocal.forEach(concepto => {
           if (concepto.carrera_id !== est.carrera_id) return
@@ -825,11 +832,3 @@ export const useReportesFinancieros = (institucionId: number) => {
     totalVentasKiosco,
   }
 }
-
-
-
-
-
-
-
-
