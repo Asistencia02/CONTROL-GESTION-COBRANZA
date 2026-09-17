@@ -754,6 +754,10 @@ export const useReportesFinancieros = (institucionId: number) => {
       estudiantesActivos.forEach(est => {
         let totalResponsable = 0
         let totalPagado = 0
+        let tieneDeudaEnAlgunConcepto = false
+        
+        const esBecado100 = est.estado === 'BECADO_100'
+        const esBecado50 = est.estado === 'BECADO_50'
         
         conceptosVencidosMoraLocal.forEach(concepto => {
           if (concepto.carrera_id !== est.carrera_id) return
@@ -761,29 +765,25 @@ export const useReportesFinancieros = (institucionId: number) => {
           const montoPago = pagosValidos.find(p => p.estudiante_id === est.id && p.concepto_id === concepto.id)?.monto_pagado || 0
           const montoOriginal = concepto.monto
           const aplicaBeca = esConceptoBeca(concepto.tipo)
-          const esBecado100 = est.estado === 'BECADO_100'
-          const esBecado50 = est.estado === 'BECADO_50'
-          
-          let montoResponsable = montoOriginal
           
           if (esBecado100 && aplicaBeca) {
             return
           }
+          
+          let montoResponsable = montoOriginal
           if (esBecado50 && aplicaBeca) {
             montoResponsable = montoOriginal * 0.5
           }
           
           totalResponsable += montoResponsable
           totalPagado += montoPago
+          
+          const deudaDelConcepto = montoResponsable - montoPago
+          if (deudaDelConcepto > 0) {
+            tieneDeudaEnAlgunConcepto = true
+          }
         })
         
-        let tieneDeudaEnAlgunConcepto = false
-        conceptosVencidosMoraLocal.forEach(concepto => {
-          if (concepto.carrera_id !== est.carrera_id) return
-          const montoPago = pagosValidos.find(p => p.estudiante_id === est.id && p.concepto_id === concepto.id)?.monto_pagado || 0
-          const deudaDelConcepto = concepto.monto - montoPago
-          if (deudaDelConcepto > 0) tieneDeudaEnAlgunConcepto = true
-        })
         if (totalResponsable > 0 && !tieneDeudaEnAlgunConcepto) {
           estudianteAlDiaArray.push({
             id: est.id,
@@ -799,7 +799,7 @@ export const useReportesFinancieros = (institucionId: number) => {
       })
       
       setEstudiantesAlDia(estudianteAlDiaArray)
-      console.log('[REPORTES] Estudiantes al día:', estudianteAlDiaArray.length)
+      console.log('[REPORTES] Estudiantes al dia:', estudianteAlDiaArray.length)
 
     } catch (err) {
       const mensaje = err instanceof Error ? err.message : 'Error desconocido'
