@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@renderer/lib/supabase'
+import { debeContar } from '@renderer/hooks/filtroConceptosPorIngreso'
 
 export interface RealVsTeoricoCarrera {
   carrera_id: number
@@ -29,7 +30,7 @@ export const useRealVsTeoricoCarrera = (institucionId: number) => {
       // Obtener estudiantes activos por carrera CON ESTADO
       const { data: estudiantes, error: errEst } = await supabase
         .from('estudiantes')
-        .select('id, carrera_id, estado, carreras(id, nombre)')
+        .select('id, carrera_id, estado, mes_ingreso, ano_ingreso, carreras(id, nombre)')
         .eq('institucion_id', institucionId)
         .neq('estado', 'NO_VIENE_MAS')
 

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@renderer/lib/supabase'
 import { useVentasInsumos } from '@renderer/hooks/useVentasInsumos'
+import { debeContar } from '@renderer/hooks/filtroConceptosPorIngreso'
 
 export interface ResumenEjecutivo {
   total_recaudable_año: number
@@ -132,7 +133,7 @@ export const useReportesFinancieros = (institucionId: number) => {
 
       const { data: estudiantes, error: errEst } = await supabase
         .from('estudiantes')
-        .select('id, nombre, apellido, dni, carrera_id, estado, carreras(nombre)')
+        .select('id, nombre, apellido, dni, carrera_id, estado, mes_ingreso, ano_ingreso, carreras(nombre)')
         .eq('institucion_id', institucionId)
         .neq('estado', 'NO_VIENE_MAS')
 
@@ -275,6 +276,7 @@ export const useReportesFinancieros = (institucionId: number) => {
         
         conceptosVencidos.forEach(concepto => {
           if (concepto.carrera_id !== est.carrera_id) return
+          if (!debeContar(concepto, est)) return
           
           const montoPago = pagosValidos.find(p => p.estudiante_id === est.id && p.concepto_id === concepto.id)?.monto_pagado || 0
           const montoOriginal = concepto.monto
@@ -761,6 +763,8 @@ export const useReportesFinancieros = (institucionId: number) => {
         
         conceptosVencidosMoraLocal.forEach(concepto => {
           if (concepto.carrera_id !== est.carrera_id) return
+          if (!debeContar(concepto, est)) return
+          if (!debeContar(concepto, est)) return
           
           const montoPago = pagosValidos.find(p => p.estudiante_id === est.id && p.concepto_id === concepto.id)?.monto_pagado || 0
           const montoOriginal = concepto.monto
@@ -832,3 +836,5 @@ export const useReportesFinancieros = (institucionId: number) => {
     totalVentasKiosco,
   }
 }
+
+
