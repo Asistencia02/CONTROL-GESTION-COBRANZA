@@ -166,6 +166,7 @@ export const useReportesFinancieros = (institucionId: number) => {
       if (errConc) throw errConc
 
       console.log('[REPORTES] TODOS los conceptos:', conceptos?.length)
+      console.log('[DEBUG AL DIA] Primeros 3 conceptos:', (conceptos || []).slice(0, 3))
 
       const inscripciones = (conceptos || []).filter(c => 
         c.tipo?.toUpperCase() === 'INSCRIPCION' && 
@@ -751,26 +752,39 @@ export const useReportesFinancieros = (institucionId: number) => {
       setDesgloseConceptos(desgloseConceptosArray)
       console.log('[REPORTES] Desglose conceptos (institucion_id=' + institucionId + '):', desgloseConceptosArray)
       
+      // ============ ESTUDIANTES AL DÍA - CON LOGS DETALLADOS ============
       const estudianteAlDiaArray: EstudianteAlDia[] = []
+      let countAlDiaDebug = 0
       
-      estudiantesActivos.forEach(est => {
+      console.log('[DEBUG AL DIA] INICIO - conceptosFiltrados:', conceptosFiltrados.length, 'estudiantesActivos:', estudiantesActivos.length)
+      
+      estudiantesActivos.forEach((est, estIdx) => {
         let totalResponsable = 0
         let totalPagado = 0
         let tieneDeudaEnAlgunConcepto = false
+        let debugInfo: any = { nombre: est.nombre, conceptosIncluidos: 0, deudas: [] }
         
         const esBecado100 = est.estado === 'BECADO_100'
         const esBecado50 = est.estado === 'BECADO_50'
         
-        conceptosFiltrados.filter(concepto => {
+        const conceptosDelEst = conceptosFiltrados.filter(concepto => {
           if (concepto.carrera_id !== est.carrera_id) return false
-          // if (!debeContar(concepto, est)) return false  // DEBUG: disabled for Al Dia
           return true
-        }).forEach(concepto => {
+        })
+        
+        if (estIdx === 0 || estIdx === 1) {
+          console.log(`[DEBUG AL DIA] Est ${estIdx} (${est.nombre}): carrera_id=${est.carrera_id}, conceptos=` + conceptosDelEst.length)
+        }
+        
+        conceptosDelEst.forEach(concepto => {
           const montoPago = pagosValidos.find(p => p.estudiante_id === est.id && p.concepto_id === concepto.id)?.monto_pagado || 0
           const montoOriginal = concepto.monto
           const aplicaBeca = esConceptoBeca(concepto.tipo)
           
           if (esBecado100 && aplicaBeca) {
+            totalResponsable += montoOriginal
+            totalPagado += montoOriginal
+            debugInfo.conceptosIncluidos++
             return
           }
           
@@ -781,14 +795,24 @@ export const useReportesFinancieros = (institucionId: number) => {
           
           totalResponsable += montoResponsable
           totalPagado += montoPago
+          debugInfo.conceptosIncluidos++
           
           const deudaDelConcepto = montoResponsable - montoPago
           if (deudaDelConcepto > 0) {
             tieneDeudaEnAlgunConcepto = true
+            debugInfo.deudas.push({ concepto: concepto.tipo, deuda: deudaDelConcepto })
           }
         })
         
+        if (estIdx < 3) {
+          console.log(`[DEBUG AL DIA] Est ${estIdx}: responsable=${totalResponsable}, pagado=${totalPagado}, deuda=${tieneDeudaEnAlgunConcepto}`)
+        }
+        
         if (totalResponsable > 0 && !tieneDeudaEnAlgunConcepto) {
+          countAlDiaDebug++
+          if (countAlDiaDebug <= 5) {
+            console.log(`[DEBUG AL DIA] ✓ INCLUYENDO: ${est.nombre} (responsable=${totalResponsable}, pagado=${totalPagado})`)
+          }
           estudianteAlDiaArray.push({
             id: est.id,
             dni: est.dni || '',
@@ -803,7 +827,7 @@ export const useReportesFinancieros = (institucionId: number) => {
       })
       
       setEstudiantesAlDia(estudianteAlDiaArray)
-      console.log('[REPORTES] Estudiantes al dia:', estudianteAlDiaArray.length)
+      console.log('[REPORTES] Estudiantes al dia: TOTAL =', estudianteAlDiaArray.length, 'countDebug =', countAlDiaDebug)
 
     } catch (err) {
       const mensaje = err instanceof Error ? err.message : 'Error desconocido'
@@ -836,12 +860,3 @@ export const useReportesFinancieros = (institucionId: number) => {
     totalVentasKiosco,
   }
 }
-
-
-
-
-
-
-
-
-
