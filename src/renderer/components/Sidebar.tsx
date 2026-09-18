@@ -115,6 +115,12 @@ const NAV_ITEMS: NavItem[] = [
     icon: <Settings size={20} />,
     color: 'from-indigo-500 to-purple-500',
   },
+  {
+    id: 'chat_fundacion',
+    label: '💬 chat-FUNDACION',
+    icon: <Sparkles size={20} />,
+    color: 'from-purple-500 via-pink-500 to-red-500',
+  },
 ]
 
 export const Sidebar: React.FC<SidebarProps> = ({ 

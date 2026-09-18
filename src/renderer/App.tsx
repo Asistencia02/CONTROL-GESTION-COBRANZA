@@ -15,10 +15,11 @@ import { VentaKioscoModerno } from '@renderer/modules/VentaKioscoModerno'
 import { KioscoConfiguracionModerno } from '@renderer/modules/KioscoConfiguracionModerno'
 import { GestionEstudiantesModerno } from '@renderer/modules/GestionEstudiantesModerno'
 import { Sincronizacion } from '@renderer/modules/Sincronizacion'
+import { ChatFundacion } from '@renderer/modules/ChatFundacion'
 import { supabase } from '@renderer/lib/supabase'
 import '@renderer/lib/verificarVariables' // Verificar variables de entorno
 
-type ModuleId = 'dashboard' | 'cobranzas' | 'deudas' | 'ventas' | 'ventakiosco' | 'gastos' | 'reportes' | 'cierre' | 'configuracion' | 'kioscoconfig' | 'sincronizacion' | 'estudiantes' | 'admin'
+type ModuleId = 'dashboard' | 'cobranzas' | 'deudas' | 'ventas' | 'ventakiosco' | 'gastos' | 'reportes' | 'cierre' | 'configuracion' | 'kioscoconfig' | 'sincronizacion' | 'estudiantes' | 'admin' | 'chat_fundacion'
 
 const checkConnection = async (): Promise<boolean> => {
   try {
@@ -81,7 +82,7 @@ export const App: React.FC = () => {
     }
 
     // Validar acceso al módulo
-    if (!modulosPermitidos.includes(activeModule) && activeModule !== 'dashboard' && activeModule !== 'admin') {
+    if (!modulosPermitidos.includes(activeModule) && activeModule !== 'dashboard' && activeModule !== 'admin' && activeModule !== 'chat_fundacion') {
       return (
         <div className="flex items-center justify-center h-screen">
           <div className="text-center">
@@ -93,6 +94,7 @@ export const App: React.FC = () => {
     }
 
     switch (activeModule) {
+      case 'chat_fundacion': return <ChatFundacion />
       case 'dashboard': return <DashboardModerno />
       case 'cobranzas': return <Cobranzas />
       case 'deudas': return <DeudasModerno />
@@ -166,5 +168,3 @@ export const App: React.FC = () => {
     </div>
   )
 }
-
-
