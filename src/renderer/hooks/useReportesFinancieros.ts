@@ -133,7 +133,7 @@ export const useReportesFinancieros = (institucionId: number) => {
 
       const { data: estudiantes, error: errEst } = await supabase
         .from('estudiantes')
-        .select('id, nombre, apellido, dni, carrera_id, estado, mes_ingreso, `"año_ingreso`", carreras(nombre)')
+        .select('id, nombre, apellido, dni, carrera_id, estado, mes_ingreso, ano_ingreso, carreras(nombre)')
         .eq('institucion_id', institucionId)
         .neq('estado', 'NO_VIENE_MAS')
 
@@ -836,6 +836,7 @@ export const useReportesFinancieros = (institucionId: number) => {
     totalVentasKiosco,
   }
 }
+
 
 
 
