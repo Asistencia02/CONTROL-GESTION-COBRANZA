@@ -763,7 +763,7 @@ export const useReportesFinancieros = (institucionId: number) => {
         
         conceptosFiltrados.filter(concepto => {
           if (concepto.carrera_id !== est.carrera_id) return false
-          if (!debeContar(concepto, est)) return false
+          // if (!debeContar(concepto, est)) return false  // DEBUG: disabled for Al Dia
           return true
         }).forEach(concepto => {
           const montoPago = pagosValidos.find(p => p.estudiante_id === est.id && p.concepto_id === concepto.id)?.monto_pagado || 0
