@@ -767,10 +767,20 @@ export const useReportesFinancieros = (institucionId: number) => {
         const esBecado100 = est.estado === 'BECADO_100'
         const esBecado50 = est.estado === 'BECADO_50'
         
-        const conceptosDelEst = conceptosFiltrados.filter(concepto => {
-          if (concepto.carrera_id !== est.carrera_id) return false
-          return true
-        })
+        const conceptosDelEst = conceptosFiltrados
+          .filter(c => c.carrera_id === est.carrera_id)
+          .filter(c => {
+            if (c.mes && c.año) {
+              if (c.año < anioActual) return true
+              if (c.año === anioActual) {
+                if (c.mes < mesActual) return true
+                if (c.mes === mesActual && diaActual >= 10) return true
+              }
+              return false
+            } else {
+              return true
+            }
+          })
         
         if (estIdx === 0 || estIdx === 1) {
           console.log(`[DEBUG AL DIA] Est ${estIdx} (${est.nombre}): carrera_id=${est.carrera_id}, conceptos=` + conceptosDelEst.length)
