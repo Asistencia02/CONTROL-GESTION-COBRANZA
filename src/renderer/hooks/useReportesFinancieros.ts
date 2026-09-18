@@ -808,7 +808,7 @@ export const useReportesFinancieros = (institucionId: number) => {
           console.log(`[DEBUG AL DIA] Est ${estIdx}: responsable=${totalResponsable}, pagado=${totalPagado}, deuda=${tieneDeudaEnAlgunConcepto}`)
         }
         
-        if (totalResponsable > 0 && !tieneDeudaEnAlgunConcepto) {
+        if (totalResponsable > 0 && totalPagado >= totalResponsable) {
           countAlDiaDebug++
           if (countAlDiaDebug <= 5) {
             console.log(`[DEBUG AL DIA] ✓ INCLUYENDO: ${est.nombre} (responsable=${totalResponsable}, pagado=${totalPagado})`)
@@ -860,3 +860,4 @@ export const useReportesFinancieros = (institucionId: number) => {
     totalVentasKiosco,
   }
 }
+
