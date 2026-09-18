@@ -115,12 +115,6 @@ const NAV_ITEMS: NavItem[] = [
     icon: <Settings size={20} />,
     color: 'from-indigo-500 to-purple-500',
   },
-  {
-    id: 'chat_fundacion',
-    label: '💬 chat-FUNDACION',
-    icon: <Sparkles size={20} />,
-    color: 'from-purple-500 via-pink-500 to-red-500',
-  },
 ]
 
 export const Sidebar: React.FC<SidebarProps> = ({ 
@@ -139,7 +133,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
     if (item.id === 'testing') return false
     if (item.id === 'dashboard') return modulosPermitidos.includes('dashboard')
     if (item.id === 'estudiantes' && esAdmin) return true
-    if (item.id === 'chat_fundacion' && esAdmin) return true
     return modulosPermitidos.includes(item.id)
   })
 
