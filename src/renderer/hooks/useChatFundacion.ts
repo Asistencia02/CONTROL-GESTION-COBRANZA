@@ -50,12 +50,18 @@ export const useChatFundacion = create<UseChatFundacionStore>((set, get) => ({
         mensajes: [...state.mensajes, mensajeUsuario]
       }))
 
-      // 2️⃣ Enviar a servidor
-      const apiUrl = process.env.NODE_ENV === 'production'
-        ? `${window.location.origin}/api/chatbot/ask`
-        : 'http://localhost:3001/api/chatbot/ask'
+      // 2️⃣ Determinar URL de servidor
+      let serverUrl = 'http://localhost:3001'
+      
+      if (process.env.NODE_ENV === 'production') {
+        // Usar variable de entorno en Vercel
+        serverUrl = process.env.VITE_CHATBOT_SERVER_URL || 'http://localhost:3001'
+      }
 
-      const response = await fetch(apiUrl, {
+      console.log('[CHAT] Llamando a:', `${serverUrl}/api/chatbot/ask`)
+
+      // 3️⃣ Enviar a servidor
+      const response = await fetch(`${serverUrl}/api/chatbot/ask`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
@@ -65,7 +71,8 @@ export const useChatFundacion = create<UseChatFundacionStore>((set, get) => ({
       })
 
       if (!response.ok) {
-        throw new Error(`Error ${response.status}: ${response.statusText}`)
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.error || `Error ${response.status}: ${response.statusText}`)
       }
 
       const { respuesta, datos_consultados, error: apiError } = await response.json()
@@ -74,7 +81,7 @@ export const useChatFundacion = create<UseChatFundacionStore>((set, get) => ({
         throw new Error(apiError)
       }
 
-      // 3️⃣ Agregar respuesta del bot
+      // 4️⃣ Agregar respuesta del bot
       const mensajeBot: MensajeChat = {
         tipo: 'bot',
         texto: respuesta,
@@ -86,7 +93,7 @@ export const useChatFundacion = create<UseChatFundacionStore>((set, get) => ({
         mensajes: [...state.mensajes, mensajeBot]
       }))
 
-      // 4️⃣ Guardar en BD
+      // 5️⃣ Guardar en BD
       try {
         await supabase
           .from('chatbot_historial')
@@ -99,8 +106,7 @@ export const useChatFundacion = create<UseChatFundacionStore>((set, get) => ({
             created_at: new Date().toISOString()
           })
       } catch (dbError) {
-        console.warn('Error guardando en BD:', dbError)
-        // No fallar si no se guarda en BD
+        console.warn('[CHAT] Error guardando en BD:', dbError)
       }
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Error desconocido'
@@ -111,7 +117,7 @@ export const useChatFundacion = create<UseChatFundacionStore>((set, get) => ({
           ...state.mensajes,
           {
             tipo: 'bot',
-            texto: `❌ Error: ${errorMsg}\n\n¿Está Ollama corriendo en tu PC?\n\nEjecuta en terminal: \`ollama serve\``,
+            texto: `❌ Error: ${errorMsg}\n\n¿Está el servidor corriendo?\n\nEjecuta en terminal: \`node server/index.js\``,
             timestamp: new Date(),
             estado: 'error'
           }
