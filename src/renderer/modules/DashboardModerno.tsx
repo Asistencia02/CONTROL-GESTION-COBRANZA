@@ -6,10 +6,7 @@ import { useEstudiantes } from '@renderer/hooks/useEstudiantes'
 import { useReporteConceptos } from '@renderer/hooks/useReporteConceptos'
 import { DollarSign, TrendingUp, Users, CheckCircle, AlertCircle, Activity, PieChart, Calendar, Zap, RefreshCw, ArrowUp, ArrowDown } from 'lucide-react'
 import { formatoMoneda } from '@renderer/lib/helpers'
-import { Chart as ChartJS, ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, LineElement, PointElement, Title, Filler } from 'chart.js'
-import { Pie, Bar, Line } from 'react-chartjs-2'
-
-ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, LineElement, PointElement, Title, Filler)
+import { InteractiveChart } from '@renderer/components/InteractiveChart'
 
 export const DashboardModerno: React.FC = () => {
   const { institucionActiva } = useInstitucion()
@@ -73,63 +70,6 @@ export const DashboardModerno: React.FC = () => {
   }, [pagos])
 
   const isLoading = pagosLoading || gastosLoading || estudiantesLoading
-
-  // Gráficos
-  const chartConceptos = {
-    labels: reporteConceptos.slice(0, 5).map(c => c.concepto),
-    datasets: [
-      {
-        label: 'Adeudado',
-        data: reporteConceptos.slice(0, 5).map(c => c.monto_adeudado),
-        backgroundColor: 'rgba(239, 68, 68, 0.8)',
-        borderColor: 'rgba(239, 68, 68, 1)',
-      },
-      {
-        label: 'Pagado',
-        data: reporteConceptos.slice(0, 5).map(c => c.monto_total_pagado),
-        backgroundColor: 'rgba(34, 197, 94, 0.8)',
-        borderColor: 'rgba(34, 197, 94, 1)',
-      },
-    ],
-  }
-
-  const chartEstados = {
-    labels: ['Activos', 'Becado 50%', 'Becado 100%'],
-    datasets: [
-      {
-        data: [activos, becados50, becados100],
-        backgroundColor: [
-          'rgba(34, 197, 94, 0.8)',
-          'rgba(251, 146, 60, 0.8)',
-          'rgba(168, 85, 247, 0.8)',
-        ],
-        borderColor: [
-          'rgba(34, 197, 94, 1)',
-          'rgba(251, 146, 60, 1)',
-          'rgba(168, 85, 247, 1)',
-        ],
-        borderWidth: 2,
-      },
-    ],
-  }
-
-  const chartPagosUltimaSemana = {
-    labels: Object.keys(ultimosPagos).map(f => {
-      const date = new Date(f)
-      return date.toLocaleDateString('es-AR', { weekday: 'short', day: '2-digit' })
-    }),
-    datasets: [
-      {
-        label: 'Pagos Diarios',
-        data: Object.values(ultimosPagos),
-        borderColor: 'rgba(59, 130, 246, 1)',
-        backgroundColor: 'rgba(59, 130, 246, 0.1)',
-        borderWidth: 2,
-        fill: true,
-        tension: 0.4,
-      },
-    ],
-  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-2 sm:p-3 md:p-4 lg:p-8 space-y-4 sm:space-y-5 md:space-y-6 lg:space-y-8">
@@ -231,44 +171,35 @@ export const DashboardModerno: React.FC = () => {
             </div>
           </div>
 
-          {/* GRÁFICOS */}
+          {/* GRÁFICOS CON RECHARTS */}
           <div className="grid grid-cols-1 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-3 sm:gap-4 md:gap-6">
             {/* Pagos Últimas 7 días */}
             <div className="p-3 sm:p-4 md:p-6 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-lg sm:rounded-xl col-span-1 md:col-span-2">
-              <h2 className="text-base sm:text-lg font-bold text-white mb-3 sm:mb-4">Pagos - Últimos 7 Días</h2>
-              <div style={{ height: '200px' }} className="sm:h-64 md:h-80">
-                <Line data={chartPagosUltimaSemana} options={{
-                  maintainAspectRatio: false,
-                  responsive: true,
-                  plugins: { legend: { display: false } },
-                  scales: {
-                    y: {
-                      grid: { color: 'rgba(100, 116, 139, 0.1)' },
-                      ticks: { color: '#cbd5e1', font: { size: 11 } },
-                    },
-                    x: {
-                      grid: { color: 'rgba(100, 116, 139, 0.1)' },
-                      ticks: { color: '#cbd5e1', font: { size: 11 } },
-                    },
-                  },
-                }} />
-              </div>
+              <h2 className="text-base sm:text-lg font-bold text-white mb-3 sm:mb-4">Pagos - Ultimos 7 Dias</h2>
+              <InteractiveChart
+                type="line"
+                data={Object.entries(ultimosPagos).map(([fecha, monto]) => ({
+                  name: new Date(fecha).toLocaleDateString('es-AR', { weekday: 'short', day: '2-digit' }),
+                  value: monto,
+                }))}
+                dataKey="value"
+                lineColor="#3b82f6"
+                height={300}
+              />
             </div>
 
             {/* Estados de Estudiantes */}
             <div className="p-3 sm:p-4 md:p-6 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-lg sm:rounded-xl">
               <h2 className="text-base sm:text-lg font-bold text-white mb-3 sm:mb-4">Estudiantes</h2>
-              <div style={{ height: '200px' }} className="sm:h-64 md:h-80 flex justify-center items-center">
-                <div style={{ width: '100%', maxWidth: '200px' }}>
-                  <Pie data={chartEstados} options={{
-                    maintainAspectRatio: false,
-                    responsive: true,
-                    plugins: {
-                      legend: { position: 'bottom', labels: { color: '#cbd5e1', font: { size: 10 } } },
-                    },
-                  }} />
-                </div>
-              </div>
+              <InteractiveChart
+                type="pie"
+                data={[
+                  { name: 'Activos', value: activos },
+                  { name: 'Becado 50%', value: becados50 },
+                  { name: 'Becado 100%', value: becados100 },
+                ]}
+                height={280}
+              />
             </div>
           </div>
 
@@ -277,24 +208,17 @@ export const DashboardModerno: React.FC = () => {
             {/* Deuda vs Pagos por Concepto */}
             <div className="lg:col-span-2 p-3 sm:p-4 md:p-6 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-lg sm:rounded-xl">
               <h2 className="text-base sm:text-lg font-bold text-white mb-3 sm:mb-4">Top Conceptos</h2>
-              <div style={{ height: '200px' }} className="sm:h-64 md:h-80">
-                <Bar data={chartConceptos} options={{
-                  maintainAspectRatio: false,
-                  responsive: true,
-                  indexAxis: 'y',
-                  plugins: { legend: { labels: { color: '#cbd5e1', font: { size: 10 } } } },
-                  scales: {
-                    x: {
-                      grid: { color: 'rgba(100, 116, 139, 0.1)' },
-                      ticks: { color: '#cbd5e1', font: { size: 10 } },
-                    },
-                    y: {
-                      grid: { color: 'rgba(100, 116, 139, 0.1)' },
-                      ticks: { color: '#cbd5e1', font: { size: 10 } },
-                    },
-                  },
-                }} />
-              </div>
+              <InteractiveChart
+                type="bar"
+                data={reporteConceptos.slice(0, 5).map(c => ({
+                  name: c.concepto,
+                  Adeudado: c.monto_adeudado,
+                  Pagado: c.monto_total_pagado,
+                }))}
+                dataKeys={['Adeudado', 'Pagado']}
+                colors={['#ef4444', '#22c55e']}
+                height={300}
+              />
             </div>
 
             {/* Información de Institución */}
