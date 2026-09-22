@@ -17,6 +17,7 @@ import {
   Users,
 } from 'lucide-react'
 import { InstitucionSwitcher } from './InstitucionSwitcher'
+import { DarkModeToggle } from './DarkModeToggle'
 
 interface NavItem {
   id: string
@@ -246,7 +247,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </nav>
 
         {/* Separador */}
-        <div className="px-4 py-4 border-t border-slate-700/50">
+        <div className="px-4 py-4 border-t border-slate-700/50 space-y-3">
+          {/* Dark mode toggle */}
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-slate-400 font-semibold">Tema</span>
+            <DarkModeToggle />
+          </div>
           {/* Info de usuario */}
           <div className="mb-4 p-3 bg-slate-700/30 border border-slate-600/50 rounded-lg">
             <p className="text-xs text-slate-400 font-semibold mb-2">Usuario</p>
