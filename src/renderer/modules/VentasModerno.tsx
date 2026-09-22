@@ -4,6 +4,10 @@ import { useInsumos } from '@renderer/hooks/useInsumos'
 import { useVentasInsumos } from '@renderer/hooks/useVentasInsumos'
 import { formatoMoneda } from '@renderer/lib/helpers'
 import { ShoppingCart, Plus, TrendingUp, Package, DollarSign, RefreshCw, X } from 'lucide-react'
+import { Pagination } from '@renderer/components/Pagination'
+import { AdvancedSearch } from '@renderer/components/AdvancedSearch'
+import { ExportButton } from '@renderer/components/ExportButton'
+import { SkeletonTable } from '@renderer/components/SkeletonLoader'
 
 interface Venta {
   id?: number
@@ -30,6 +34,9 @@ export const VentasModerno: React.FC = () => {
   const [registrando, setRegistrando] = useState(false)
   const [mensaje, setMensaje] = useState('')
   const [tabActiva, setTabActiva] = useState<TabVenta>('registro')
+  const [searchText, setSearchText] = useState('')
+  const [currentPage, setCurrentPage] = useState(1)
+  const [pageSize, setPageSize] = useState(10)
 
   useEffect(() => {
     cargarVentasInsumos(institucionActiva.id)
@@ -114,6 +121,19 @@ export const VentasModerno: React.FC = () => {
       setRegistrando(false)
     }
   }
+
+  // Filtrar ventas por busqueda
+  const ventasFiltradas = ventas.filter(v => {
+    const searchLower = searchText.toLowerCase()
+    const insumo = insumos.find(i => i.id === v.insumo_id)
+    const matchSearch = insumo?.nombre.toLowerCase().includes(searchLower) ||
+                       v.metodo_pago?.toLowerCase().includes(searchLower)
+    return matchSearch
+  })
+
+  // Paginar
+  const startIdx = (currentPage - 1) * pageSize
+  const ventasPaginadas = ventasFiltradas.slice(startIdx, startIdx + pageSize)
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-2 sm:p-3 md:p-4 lg:p-8 space-y-4 sm:space-y-5 md:space-y-6">
