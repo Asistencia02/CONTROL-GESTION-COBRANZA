@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { useInstitucion } from '@renderer/hooks/useInstitucion'
 import { useInsumos } from '@renderer/hooks/useInsumos'
 import { useVentasInsumos } from '@renderer/hooks/useVentasInsumos'
@@ -55,7 +55,7 @@ export const VentasModerno: React.FC = () => {
 
   const handleRegistrarVenta = async () => {
     if (!selectedInsumo || cantidad <= 0) {
-      setMensaje('❌ Selecciona insumo y cantidad válida')
+      setMensaje('Error: Selecciona insumo y cantidad valida')
       setTimeout(() => setMensaje(''), 3000)
       return
     }
@@ -64,12 +64,12 @@ export const VentasModerno: React.FC = () => {
     try {
       const insumo = insumos.find(i => i.id === selectedInsumo)
       if (!insumo) {
-        setMensaje('❌ Insumo no encontrado')
+        setMensaje('Error: Insumo no encontrado')
         return
       }
 
       if (insumo.cantidad_stock < cantidad) {
-        setMensaje('❌ Stock insuficiente')
+        setMensaje('Error: Stock insuficiente')
         return
       }
 
@@ -87,34 +87,34 @@ export const VentasModerno: React.FC = () => {
       })
 
       if (resultado) {
-        setMensaje(`✓ Venta registrada: ${insumo.nombre}`)
+        setMensaje(`Venta registrada: ${insumo.nombre}`)
         setSelectedInsumo(null)
         setCantidad(1)
         setMetodoPago('EFECTIVO')
         await cargarVentasInsumos(institucionActiva.id)
       } else {
-        setMensaje('❌ Error al registrar venta')
+        setMensaje('Error al registrar venta')
       }
       
       setTimeout(() => setMensaje(''), 3000)
     } catch (error) {
-      setMensaje('❌ Error al registrar venta')
+      setMensaje('Error al registrar venta')
     } finally {
       setRegistrando(false)
     }
   }
 
   const handleAnularVenta = async (venta_id: number) => {
-    if (!window.confirm('¿Deseas anular esta venta?')) return
+    if (!window.confirm('Deseas anular esta venta?')) return
 
     setRegistrando(true)
     try {
-      const resultado = await anularVentaInsumo(venta_id, 'Anulación manual', 'Usuario')
+      const resultado = await anularVentaInsumo(venta_id, 'Anulacion manual', 'Usuario')
       if (resultado) {
-        setMensaje('✓ Venta anulada')
+        setMensaje('Venta anulada')
         await cargarVentasInsumos(institucionActiva.id)
       } else {
-        setMensaje('❌ Error al anular venta')
+        setMensaje('Error al anular venta')
       }
       setTimeout(() => setMensaje(''), 3000)
     } finally {
@@ -122,22 +122,22 @@ export const VentasModerno: React.FC = () => {
     }
   }
 
-  // Filtrar ventas por busqueda
-  const ventasFiltradas = ventas.filter(v => {
-    const searchLower = searchText.toLowerCase()
-    const insumo = insumos.find(i => i.id === v.insumo_id)
-    const matchSearch = insumo?.nombre.toLowerCase().includes(searchLower) ||
-                       v.metodo_pago?.toLowerCase().includes(searchLower)
-    return matchSearch
-  })
+  const ventasFiltradas = useMemo(() => {
+    return ventas.filter(v => {
+      const searchLower = searchText.toLowerCase()
+      const insumo = insumos.find(i => i.id === v.insumo_id)
+      const matchSearch = insumo?.nombre.toLowerCase().includes(searchLower) ||
+                         v.metodo_pago?.toLowerCase().includes(searchLower) ||
+                         v.fecha_venta.toLowerCase().includes(searchLower)
+      return matchSearch
+    })
+  }, [ventas, insumos, searchText])
 
-  // Paginar
   const startIdx = (currentPage - 1) * pageSize
   const ventasPaginadas = ventasFiltradas.slice(startIdx, startIdx + pageSize)
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-2 sm:p-3 md:p-4 lg:p-8 space-y-4 sm:space-y-5 md:space-y-6">
-      {/* HEADER */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 mb-4 sm:mb-6 md:mb-8">
         <div className="flex items-center gap-2 sm:gap-3 md:gap-4 flex-1 min-w-0">
           <div className="p-2 sm:p-2.5 md:p-3 bg-gradient-to-br from-green-500 to-emerald-500 rounded-lg sm:rounded-xl shadow-lg shadow-green-500/50 flex-shrink-0">
@@ -145,7 +145,7 @@ export const VentasModerno: React.FC = () => {
           </div>
           <div className="min-w-0 flex-1">
             <h1 className="text-lg sm:text-2xl md:text-3xl lg:text-4xl font-black bg-gradient-to-r from-green-400 to-emerald-400 bg-clip-text text-transparent truncate">
-              Gestión de Ventas
+              Gestion de Ventas
             </h1>
             <p className="text-slate-400 mt-0.5 sm:mt-1 text-xs sm:text-sm truncate">Registra insumos</p>
           </div>
@@ -161,16 +161,15 @@ export const VentasModerno: React.FC = () => {
 
       {mensaje && (
         <div className={`p-2 sm:p-3 md:p-4 rounded-lg border-l-4 mb-4 sm:mb-5 md:mb-6 font-semibold flex items-center gap-2 text-xs sm:text-sm ${
-          mensaje.includes('✓') 
-            ? 'bg-green-500/20 border-green-500/50 text-green-400' 
-            : 'bg-red-500/20 border-red-500/50 text-red-400'
+          mensaje.includes('Error')
+            ? 'bg-red-500/20 border-red-500/50 text-red-400' 
+            : 'bg-green-500/20 border-green-500/50 text-green-400'
         }`}>
-          <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${mensaje.includes('✓') ? 'bg-green-400' : 'bg-red-400'}`}></div>
+          <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${mensaje.includes('Error') ? 'bg-red-400' : 'bg-green-400'}`}></div>
           <span className="truncate">{mensaje}</span>
         </div>
       )}
 
-      {/* KPIs EN GRID RESPONSIVE */}
       <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3 md:gap-4 mb-4 sm:mb-6 md:mb-8">
         <div className="p-2 sm:p-3 md:p-4 lg:p-5 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-lg sm:rounded-xl hover:border-green-500/50 transition-all">
           <p className="text-xs text-slate-400 font-bold mb-1">Hoy</p>
@@ -190,7 +189,6 @@ export const VentasModerno: React.FC = () => {
         </div>
       </div>
 
-      {/* TABS RESPONSIVE */}
       <div className="mb-4 sm:mb-6 md:mb-8">
         <div className="flex gap-1 sm:gap-2 p-1 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-lg sm:rounded-xl overflow-x-auto">
           <button
@@ -230,9 +228,7 @@ export const VentasModerno: React.FC = () => {
         </div>
       </div>
 
-      {/* CONTENIDO DINÁMICO */}
       <div className="transition-all duration-500 space-y-4 sm:space-y-5 md:space-y-6">
-        {/* TAB: REGISTRO */}
         {tabActiva === 'registro' && (
           <div className="p-3 sm:p-4 md:p-6 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-lg sm:rounded-xl">
             <div className="flex items-center gap-2 sm:gap-3 mb-4 sm:mb-6">
@@ -244,7 +240,6 @@ export const VentasModerno: React.FC = () => {
 
             <div className="space-y-3 sm:space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
-                {/* Insumo */}
                 <div>
                   <label className="block text-xs sm:text-sm font-bold text-slate-300 mb-1.5 sm:mb-2">Insumo</label>
                   <select
@@ -261,7 +256,6 @@ export const VentasModerno: React.FC = () => {
                   </select>
                 </div>
 
-                {/* Cantidad */}
                 <div>
                   <label className="block text-xs sm:text-sm font-bold text-slate-300 mb-1.5 sm:mb-2">Cantidad</label>
                   <input
@@ -274,15 +268,14 @@ export const VentasModerno: React.FC = () => {
                 </div>
               </div>
 
-              {/* Método de Pago */}
               <div>
-                <label className="block text-xs sm:text-sm font-bold text-slate-300 mb-2 sm:mb-3">Método</label>
+                <label className="block text-xs sm:text-sm font-bold text-slate-300 mb-2 sm:mb-3">Metodo</label>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-1.5 sm:gap-2">
                   {[
-                    { value: 'EFECTIVO', label: '💵' },
-                    { value: 'TRANSFERENCIA', label: '🏦' },
-                    { value: 'TARJETA', label: '💳' },
-                    { value: 'CHEQUE', label: '✓' },
+                    { value: 'EFECTIVO', label: 'EFECTIVO' },
+                    { value: 'TRANSFERENCIA', label: 'TRANSFERENCIA' },
+                    { value: 'TARJETA', label: 'TARJETA' },
+                    { value: 'CHEQUE', label: 'CHEQUE' },
                   ].map(opt => (
                     <label
                       key={opt.value}
@@ -321,70 +314,112 @@ export const VentasModerno: React.FC = () => {
           </div>
         )}
 
-        {/* TAB: HISTORIAL */}
         {tabActiva === 'historial' && (
-          <div className="p-3 sm:p-4 md:p-6 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-lg sm:rounded-xl">
-            <h2 className="text-base sm:text-lg md:text-xl font-bold text-white mb-3 sm:mb-4">Historial ({ventas.filter(v => v.estado === 'VENDIDO').length})</h2>
+          <div className="space-y-4 sm:space-y-5 md:space-y-6">
+            <AdvancedSearch
+              onSearch={setSearchText}
+              placeholder="Buscar por insumo, metodo o fecha..."
+              debounceMs={300}
+            />
 
-            {ventas.length === 0 ? (
-              <div className="text-center py-8 sm:py-12">
-                <ShoppingCart size={28} className="text-slate-500 mx-auto mb-2 sm:mb-3 sm:w-8 sm:h-8" />
-                <p className="text-slate-400 font-semibold text-sm">No hay ventas</p>
+            <div className="p-3 sm:p-4 md:p-6 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-lg sm:rounded-xl">
+              <div className="flex items-center justify-between gap-2 sm:gap-3 mb-4 sm:mb-6 flex-wrap">
+                <h2 className="text-base sm:text-lg md:text-xl font-bold text-white">Historial ({ventasFiltradas.length})</h2>
+                <ExportButton
+                  filename="ventas"
+                  data={ventasFiltradas.map(v => ({
+                    insumo: insumos.find(i => i.id === v.insumo_id)?.nombre || 'N/A',
+                    cantidad: v.cantidad,
+                    precio_unitario: v.precio_unitario,
+                    total: v.subtotal,
+                    metodo: v.metodo_pago,
+                    fecha: v.fecha_venta,
+                    estado: v.estado
+                  }))}
+                  columns={[
+                    { key: 'insumo', label: 'Insumo' },
+                    { key: 'cantidad', label: 'Cantidad' },
+                    { key: 'precio_unitario', label: 'Precio' },
+                    { key: 'total', label: 'Total' },
+                    { key: 'metodo', label: 'Metodo' },
+                    { key: 'fecha', label: 'Fecha' },
+                  ]}
+                />
               </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-xs sm:text-sm">
-                  <thead className="bg-slate-900/50">
-                    <tr>
-                      <th className="px-2 sm:px-4 py-2 sm:py-3 text-left text-slate-300 font-bold">Insumo</th>
-                      <th className="px-2 sm:px-4 py-2 sm:py-3 text-center text-slate-300 font-bold">Cant.</th>
-                      <th className="px-2 sm:px-4 py-2 sm:py-3 text-right text-slate-300 font-bold">P.U.</th>
-                      <th className="px-2 sm:px-4 py-2 sm:py-3 text-right text-slate-300 font-bold">Total</th>
-                      <th className="px-2 sm:px-4 py-2 sm:py-3 text-center text-slate-300 font-bold">Método</th>
-                      <th className="px-2 sm:px-4 py-2 sm:py-3 text-left text-slate-300 font-bold">Fecha</th>
-                      <th className="px-2 sm:px-4 py-2 sm:py-3 text-center text-slate-300 font-bold">Acción</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-700/50">
-                    {ventas.map(venta => {
-                      const insumo = insumos.find(i => i.id === venta.insumo_id)
-                      return (
-                        <tr key={venta.id} className={`hover:bg-slate-700/30 transition text-xs sm:text-sm ${venta.estado === 'ANULADO' ? 'bg-red-500/10' : ''}`}>
-                          <td className="px-2 sm:px-4 py-2 sm:py-3 text-slate-300 font-semibold truncate">{insumo?.nombre}</td>
-                          <td className="px-2 sm:px-4 py-2 sm:py-3 text-center text-slate-400">{venta.cantidad}</td>
-                          <td className="px-2 sm:px-4 py-2 sm:py-3 text-right text-slate-400 truncate">{formatoMoneda(venta.precio_unitario)}</td>
-                          <td className="px-2 sm:px-4 py-2 sm:py-3 text-right text-green-400 font-semibold truncate">{formatoMoneda(venta.subtotal)}</td>
-                          <td className="px-2 sm:px-4 py-2 sm:py-3 text-center text-lg">
-                            {venta.metodo_pago === 'EFECTIVO' && '💵'}
-                            {venta.metodo_pago === 'TRANSFERENCIA' && '🏦'}
-                            {venta.metodo_pago === 'TARJETA' && '💳'}
-                            {venta.metodo_pago === 'CHEQUE' && '✓'}
-                          </td>
-                          <td className="px-2 sm:px-4 py-2 sm:py-3 text-slate-400 text-xs">{venta.fecha_venta}</td>
-                          <td className="px-2 sm:px-4 py-2 sm:py-3 text-center">
-                            {venta.estado === 'VENDIDO' ? (
-                              <button
-                                onClick={() => handleAnularVenta(venta.id!)}
-                                disabled={registrando}
-                                className="text-xs px-1.5 sm:px-2 py-1 bg-red-600/30 hover:bg-red-600/50 text-red-300 rounded transition disabled:opacity-50 whitespace-nowrap"
-                              >
-                                <X size={12} className="inline mr-0.5" /> Anular
-                              </button>
-                            ) : (
-                              <span className="text-xs text-slate-500">-</span>
-                            )}
-                          </td>
+
+              {loading ? (
+                <SkeletonTable rows={5} cols={7} />
+              ) : ventas.length === 0 ? (
+                <div className="text-center py-8 sm:py-12">
+                  <ShoppingCart size={28} className="text-slate-500 mx-auto mb-2 sm:mb-3 sm:w-8 sm:h-8" />
+                  <p className="text-slate-400 font-semibold text-sm">No hay ventas</p>
+                </div>
+              ) : (
+                <>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs sm:text-sm">
+                      <thead className="bg-slate-900/50">
+                        <tr>
+                          <th className="px-2 sm:px-4 py-2 sm:py-3 text-left text-slate-300 font-bold">Insumo</th>
+                          <th className="px-2 sm:px-4 py-2 sm:py-3 text-center text-slate-300 font-bold">Cant.</th>
+                          <th className="px-2 sm:px-4 py-2 sm:py-3 text-right text-slate-300 font-bold">P.U.</th>
+                          <th className="px-2 sm:px-4 py-2 sm:py-3 text-right text-slate-300 font-bold">Total</th>
+                          <th className="px-2 sm:px-4 py-2 sm:py-3 text-center text-slate-300 font-bold">Metodo</th>
+                          <th className="px-2 sm:px-4 py-2 sm:py-3 text-left text-slate-300 font-bold">Fecha</th>
+                          <th className="px-2 sm:px-4 py-2 sm:py-3 text-center text-slate-300 font-bold">Accion</th>
                         </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
+                      </thead>
+                      <tbody className="divide-y divide-slate-700/50">
+                        {ventasPaginadas.map(venta => {
+                          const insumo = insumos.find(i => i.id === venta.insumo_id)
+                          return (
+                            <tr key={venta.id} className={`hover:bg-slate-700/30 transition text-xs sm:text-sm ${venta.estado === 'ANULADO' ? 'bg-red-500/10' : ''}`}>
+                              <td className="px-2 sm:px-4 py-2 sm:py-3 text-slate-300 font-semibold truncate">{insumo?.nombre}</td>
+                              <td className="px-2 sm:px-4 py-2 sm:py-3 text-center text-slate-400">{venta.cantidad}</td>
+                              <td className="px-2 sm:px-4 py-2 sm:py-3 text-right text-slate-400 truncate">{formatoMoneda(venta.precio_unitario)}</td>
+                              <td className="px-2 sm:px-4 py-2 sm:py-3 text-right text-green-400 font-semibold truncate">{formatoMoneda(venta.subtotal)}</td>
+                              <td className="px-2 sm:px-4 py-2 sm:py-3 text-center text-xs">{venta.metodo_pago}</td>
+                              <td className="px-2 sm:px-4 py-2 sm:py-3 text-slate-400 text-xs">{venta.fecha_venta}</td>
+                              <td className="px-2 sm:px-4 py-2 sm:py-3 text-center">
+                                {venta.estado === 'VENDIDO' ? (
+                                  <button
+                                    onClick={() => handleAnularVenta(venta.id!)}
+                                    disabled={registrando}
+                                    className="text-xs px-1.5 sm:px-2 py-1 bg-red-600/30 hover:bg-red-600/50 text-red-300 rounded transition disabled:opacity-50 whitespace-nowrap"
+                                  >
+                                    <X size={12} className="inline mr-0.5" /> Anular
+                                  </button>
+                                ) : (
+                                  <span className="text-xs text-slate-500">-</span>
+                                )}
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {ventasFiltradas.length > 0 && (
+                    <div className="mt-4 sm:mt-6">
+                      <Pagination
+                        total={ventasFiltradas.length}
+                        pageSize={pageSize}
+                        currentPage={currentPage}
+                        onPageChange={setCurrentPage}
+                        onPageSizeChange={(newSize) => {
+                          setPageSize(newSize)
+                          setCurrentPage(1)
+                        }}
+                      />
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
           </div>
         )}
 
-        {/* TAB: RESUMEN */}
         {tabActiva === 'resumen' && (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 md:gap-6">
             <div className="p-3 sm:p-4 md:p-6 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-lg sm:rounded-xl">
@@ -406,11 +441,11 @@ export const VentasModerno: React.FC = () => {
                   <DollarSign size={20} className="text-emerald-400 sm:w-6 sm:h-6" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="text-xs sm:text-sm text-slate-400 font-bold truncate">Total Período</p>
+                  <p className="text-xs sm:text-sm text-slate-400 font-bold truncate">Total Periodo</p>
                   <p className="text-base sm:text-xl md:text-2xl font-black text-emerald-400 truncate">{formatoMoneda(totalVentasTotal)}</p>
                 </div>
               </div>
-              <p className="text-xs text-slate-400">{ventas.filter(v => v.estado === 'VENDIDO').length} transacción(es)</p>
+              <p className="text-xs text-slate-400">{ventas.filter(v => v.estado === 'VENDIDO').length} transaccion(es)</p>
             </div>
 
             <div className="p-3 sm:p-4 md:p-6 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-lg sm:rounded-xl">
