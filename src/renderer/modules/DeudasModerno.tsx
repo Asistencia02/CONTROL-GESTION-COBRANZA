@@ -4,7 +4,11 @@ import { useDeudas, type Deuda, type DeudaDetallada, type DeudaCritica } from '@
 import { TablaDeudas } from '@renderer/components/TablaDeudas'
 import { ModalFinanciamientoDeuda } from '@renderer/components/ModalFinanciamientoDeuda'
 import { formatoMoneda, formatoFecha } from '@renderer/lib/helpers'
-import { AlertCircle, TrendingDown, X, BarChart3, Users, Percent, RefreshCw, Zap } from 'lucide-react'
+import { AlertCircle, TrendingDown, X, BarChart3, Users, Percent, RefreshCw, Zap, Download } from 'lucide-react'
+import { Pagination } from '@renderer/components/Pagination'
+import { AdvancedSearch } from '@renderer/components/AdvancedSearch'
+import { ExportButton } from '@renderer/components/ExportButton'
+import { SkeletonTable } from '@renderer/components/SkeletonLoader'
 
 type TabDeuda = 'general' | 'critica' | 'detalle'
 
@@ -26,6 +30,10 @@ export const DeudasModerno: React.FC = () => {
   const [tabActiva, setTabActiva] = useState<TabDeuda>('general')
   const [modalFinanciamiento, setModalFinanciamiento] = useState(false)
   const [deudaSeleccionadaFinanciar, setDeudaSeleccionadaFinanciar] = useState<{ concepto: string; monto: number } | null>(null)
+  const [searchText, setSearchText] = useState('')
+  const [filters, setFilters] = useState({})
+  const [currentPage, setCurrentPage] = useState(1)
+  const [pageSize, setPageSize] = useState(10)
 
   const cargarTodo = async () => {
     await cargarDeudas(institucionActiva.id)
@@ -44,7 +52,6 @@ export const DeudasModerno: React.FC = () => {
     }
   }, [estudianteSeleccionado, institucionActiva.id])
 
-  // Agrupar deudas detalladas por año
   const deudasPorAño = useMemo(() => {
     const agrupadas = new Map<number, DeudaDetallada[]>()
     
@@ -78,6 +85,20 @@ export const DeudasModerno: React.FC = () => {
     }
   }
 
+  // Filtrar deudas por busqueda
+  const deudasFiltradas = useMemo(() => {
+    return deudas.filter(deuda => {
+      const searchLower = searchText.toLowerCase()
+      const matchSearch = deuda.nombre_completo.toLowerCase().includes(searchLower) ||
+                         deuda.dni.toLowerCase().includes(searchLower)
+      return matchSearch
+    })
+  }, [deudas, searchText])
+
+  // Paginar
+  const startIdx = (currentPage - 1) * pageSize
+  const deudasPaginadas = deudasFiltradas.slice(startIdx, startIdx + pageSize)
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-2 sm:p-4">
@@ -101,7 +122,7 @@ export const DeudasModerno: React.FC = () => {
           </div>
           <div className="min-w-0 flex-1">
             <h1 className="text-lg sm:text-2xl md:text-3xl lg:text-4xl font-black bg-gradient-to-r from-red-400 to-orange-400 bg-clip-text text-transparent truncate">
-              Gestión de Deudas
+              Gestion de Deudas
             </h1>
             <p className="text-slate-400 mt-0.5 sm:mt-1 text-xs sm:text-sm truncate">Monitorea deudas</p>
           </div>
@@ -130,7 +151,7 @@ export const DeudasModerno: React.FC = () => {
           <p className="text-lg sm:text-xl md:text-2xl font-black text-amber-400 truncate">{resumen.porcentajeMora}%</p>
         </div>
         <div className="p-2 sm:p-3 md:p-4 lg:p-5 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-lg sm:rounded-xl hover:border-rose-500/50 transition-all">
-          <p className="text-xs text-slate-400 font-bold mb-1">Crítica</p>
+          <p className="text-xs text-slate-400 font-bold mb-1">Critica</p>
           <p className="text-lg sm:text-xl md:text-2xl font-black text-rose-400 truncate">{deudasCriticas.length}</p>
         </div>
       </div>
@@ -158,7 +179,7 @@ export const DeudasModerno: React.FC = () => {
             }`}
           >
             <AlertCircle size={16} className="sm:w-5 sm:h-5" />
-            <span className="hidden sm:inline">Críticas</span>
+            <span className="hidden sm:inline">Criticas</span>
             <span className="text-xs font-bold">({deudasCriticas.length})</span>
           </button>
           {estudianteSeleccionado && (
@@ -177,35 +198,76 @@ export const DeudasModerno: React.FC = () => {
         </div>
       </div>
 
-      {/* CONTENIDO DINÁMICO */}
+      {/* CONTENIDO DINAMICO */}
       <div className="transition-all duration-500 space-y-4 sm:space-y-5 md:space-y-6">
-        {/* TAB: GENERAL */}
+        {/* TAB: GENERAL CON BUSQUEDA, PAGINACION Y EXPORTACION */}
         {tabActiva === 'general' && (
-          <div className="p-3 sm:p-4 md:p-6 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-lg sm:rounded-xl">
-            <div className="flex items-center gap-2 sm:gap-3 mb-4 sm:mb-6">
-              <div className="p-2 sm:p-3 bg-red-500/20 rounded-lg flex-shrink-0">
-                <BarChart3 size={20} className="text-red-400 sm:w-6 sm:h-6" />
+          <div className="space-y-4 sm:space-y-5 md:space-y-6">
+            <AdvancedSearch
+              onSearch={setSearchText}
+              placeholder="Buscar por nombre o DNI..."
+              debounceMs={300}
+            />
+
+            <div className="p-3 sm:p-4 md:p-6 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-lg sm:rounded-xl">
+              <div className="flex items-center justify-between gap-2 sm:gap-3 mb-4 sm:mb-6 flex-wrap">
+                <div className="flex items-center gap-2 sm:gap-3">
+                  <div className="p-2 sm:p-3 bg-red-500/20 rounded-lg flex-shrink-0">
+                    <BarChart3 size={20} className="text-red-400 sm:w-6 sm:h-6" />
+                  </div>
+                  <h2 className="text-base sm:text-lg md:text-xl font-bold text-white">Listado ({deudasFiltradas.length})</h2>
+                </div>
+                <ExportButton
+                  filename="deudas"
+                  data={deudasFiltradas}
+                  columns={[
+                    { key: 'nombre_completo', label: 'Nombre' },
+                    { key: 'dni', label: 'DNI' },
+                    { key: 'carrera', label: 'Carrera' },
+                    { key: 'total_adeudado', label: 'Adeudado' },
+                    { key: 'total_pagado', label: 'Pagado' },
+                  ]}
+                />
               </div>
-              <h2 className="text-base sm:text-lg md:text-xl font-bold text-white truncate">Listado ({deudas.length})</h2>
-            </div>
-            <div className="overflow-x-auto">
-              <TablaDeudas
-                deudas={deudas}
-                loading={loading}
-                onSeleccionar={handleSeleccionarEstudiante}
-              />
+
+              {loading ? (
+                <SkeletonTable rows={5} cols={5} />
+              ) : (
+                <div className="overflow-x-auto">
+                  <TablaDeudas
+                    deudas={deudasPaginadas}
+                    loading={loading}
+                    onSeleccionar={handleSeleccionarEstudiante}
+                  />
+                </div>
+              )}
+
+              {deudasFiltradas.length > 0 && (
+                <div className="mt-4 sm:mt-6">
+                  <Pagination
+                    total={deudasFiltradas.length}
+                    pageSize={pageSize}
+                    currentPage={currentPage}
+                    onPageChange={setCurrentPage}
+                    onPageSizeChange={(newSize) => {
+                      setPageSize(newSize)
+                      setCurrentPage(1)
+                    }}
+                  />
+                </div>
+              )}
             </div>
           </div>
         )}
 
-        {/* TAB: CRÍTICA */}
+        {/* TAB: CRITICA */}
         {tabActiva === 'critica' && (
           <div className="p-3 sm:p-4 md:p-6 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-lg sm:rounded-xl">
             <div className="flex items-center gap-2 sm:gap-3 mb-4 sm:mb-6">
               <div className="p-2 sm:p-3 bg-rose-500/20 rounded-lg flex-shrink-0">
                 <AlertCircle size={20} className="text-rose-400 sm:w-6 sm:h-6" />
               </div>
-              <h2 className="text-base sm:text-lg md:text-xl font-bold text-white">Deudas Críticas (50%+)</h2>
+              <h2 className="text-base sm:text-lg md:text-xl font-bold text-white">Deudas Criticas (50%+)</h2>
             </div>
 
             {deudasCriticas.length > 0 ? (
@@ -248,7 +310,7 @@ export const DeudasModerno: React.FC = () => {
             ) : (
               <div className="text-center py-8 sm:py-12">
                 <AlertCircle size={28} className="text-green-400 mx-auto mb-2 sm:mb-3 sm:w-8 sm:h-8" />
-                <p className="text-slate-400 font-semibold text-sm">No hay deudas críticas</p>
+                <p className="text-slate-400 font-semibold text-sm">No hay deudas criticas</p>
               </div>
             )}
           </div>
@@ -257,7 +319,6 @@ export const DeudasModerno: React.FC = () => {
         {/* TAB: DETALLE */}
         {tabActiva === 'detalle' && estudianteSeleccionado && (
           <>
-            {/* Header del estudiante */}
             <div className="p-3 sm:p-4 md:p-6 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-lg sm:rounded-xl">
               <div className="flex justify-between items-start gap-2 mb-4 sm:mb-6">
                 <div className="min-w-0 flex-1">
@@ -275,7 +336,6 @@ export const DeudasModerno: React.FC = () => {
                 </button>
               </div>
 
-              {/* Tarjetas de resumen */}
               <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3 md:gap-4">
                 <div className="p-2 sm:p-3 md:p-4 bg-gradient-to-br from-red-500/20 to-red-600/20 border border-red-500/50 rounded-lg">
                   <p className="text-xs text-red-300 font-bold mb-0.5 sm:mb-1">Adeudado</p>
@@ -304,7 +364,6 @@ export const DeudasModerno: React.FC = () => {
               </div>
             </div>
 
-            {/* Detalles agrupados por año */}
             {deudasPorAño.length > 0 ? (
               deudasPorAño.map(([año, deudas]) => (
                 <div key={año} className="p-3 sm:p-4 md:p-6 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-lg sm:rounded-xl">
@@ -366,7 +425,6 @@ export const DeudasModerno: React.FC = () => {
         )}
       </div>
 
-      {/* MODAL DE FINANCIAMIENTO */}
       {deudaSeleccionadaFinanciar && estudianteSeleccionado && (
         <ModalFinanciamientoDeuda
           isOpen={modalFinanciamiento}
