@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react'
 import { useInstitucion } from '@renderer/hooks/useInstitucion'
+import { useFormValidation } from '@renderer/hooks/useFormValidation'
 import { formatoMoneda } from '@renderer/lib/helpers'
 import { Users, Filter, Edit2, CheckCircle, AlertCircle, Zap, Ban, X, RefreshCw } from 'lucide-react'
 import { supabase } from '@renderer/lib/supabase'
+import { z } from 'zod'
 
 interface Estudiante {
   id: number
@@ -18,8 +20,19 @@ interface Estudiante {
 
 type EstadoEstudiante = 'ACTIVO' | 'BECADO_50' | 'BECADO_100' | 'NO_VIENE_MAS'
 
+const validationSchema = z.object({
+  nombre: z.string().min(2, 'Nombre muy corto').max(100, 'Nombre muy largo'),
+  apellido: z.string().min(2, 'Apellido muy corto').max(100, 'Apellido muy largo'),
+  dni: z.string().min(7, 'DNI minimo 7 digitos').max(10, 'DNI maximo 10 digitos'),
+  estado: z.enum(['ACTIVO', 'BECADO_50', 'BECADO_100', 'NO_VIENE_MAS']),
+})
+
 export const GestionEstudiantesModerno: React.FC = () => {
   const { institucionActiva } = useInstitucion()
+  const { values, errors, touched, handleChange, validateForm } = useFormValidation(
+    { nombre: '', apellido: '', dni: '', estado: 'ACTIVO' as EstadoEstudiante },
+    validationSchema
+  )
   const [estudiantes, setEstudiantes] = useState<Estudiante[]>([])
   const [carreras, setCarreras] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
