@@ -4,6 +4,7 @@ import { formatoMoneda, formatoFecha } from '@renderer/lib/helpers'
 import { calcularMora } from '@renderer/lib/moraCalculator'
 import { useExcepcionesCobro } from '@renderer/hooks/useExcepcionesCobro'
 import { usePagoValidation } from '@renderer/hooks/usePagoValidation'
+import { Pagination } from './Pagination'
 import { ModalExcepcionesPago } from './ModalExcepcionesPago'
 import { ModalAnulacionPago } from './ModalAnulacionPago'
 
@@ -67,6 +68,8 @@ export const RegistroPagos: React.FC<RegistroPagosProps> = ({
   const [filtroEstudiante, setFiltroEstudiante] = useState<string>('')
   const [filtroTipo, setFiltroTipo] = useState<string>('')
   const [filtroEstado, setFiltroEstado] = useState<string>('')
+  const [currentPage, setCurrentPage] = useState(1)
+  const [pageSize, setPageSize] = useState(10)
   const [modalTalonario, setModalTalonario] = useState<{ pagoId: number | string; numeroActual?: string } | null>(null)
   const [numeroTalonarioInput, setNumeroTalonarioInput] = useState('')
   const [guardandoTalonario, setGuardandoTalonario] = useState(false)
@@ -125,6 +128,11 @@ export const RegistroPagos: React.FC<RegistroPagosProps> = ({
       return fechaB - fechaA
     })
   }, [pagos, filtroEstudiante, filtroTipo, filtroEstado])
+
+  const pagosPaginados = useMemo(() => {
+    const startIdx = (currentPage - 1) * pageSize
+    return pagosFiltrados.slice(startIdx, startIdx + pageSize)
+  }, [pagosFiltrados, currentPage, pageSize])
 
   const pagosSinTalonario = useMemo(() => {
     return pagos.filter((pago) => !esAnulado(pago) && !pago.numero_talonario).sort((a, b) => {
@@ -344,7 +352,7 @@ export const RegistroPagos: React.FC<RegistroPagosProps> = ({
                   </td>
                 </tr>
               ) : (
-                pagosFiltrados.map((pago) => {
+                pagosPaginados.map((pago) => {
                   const montoAdeudado = pago.monto_original - pago.monto_pagado
 
                   return (
@@ -430,6 +438,22 @@ export const RegistroPagos: React.FC<RegistroPagosProps> = ({
             </tbody>
           </table>
         </div>
+
+        {/* PAGINACIÓN */}
+        {pagosFiltrados.length > 0 && (
+          <div className="px-6 py-4 bg-slate-700/30 border-t border-slate-700/50">
+            <Pagination
+              total={pagosFiltrados.length}
+              pageSize={pageSize}
+              currentPage={currentPage}
+              onPageChange={setCurrentPage}
+              onPageSizeChange={(newSize) => {
+                setPageSize(newSize)
+                setCurrentPage(1)
+              }}
+            />
+          </div>
+        )}
       </div>
 
       {/* PAGOS SIN TALONARIO */}
