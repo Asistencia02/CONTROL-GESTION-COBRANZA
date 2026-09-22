@@ -39,7 +39,6 @@ export const DashboardModerno: React.FC = () => {
     return hoy === pagoFecha
   }
 
-  // Función para detectar si un pago está anulado
   const esAnulado = (pago: any): boolean => {
     return pago.estado === 'ANULADO'
   }
@@ -133,111 +132,111 @@ export const DashboardModerno: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-2 sm:p-4 md:p-8 space-y-4 sm:space-y-6 md:space-y-8">
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-2 sm:p-3 md:p-4 lg:p-8 space-y-4 sm:space-y-5 md:space-y-6 lg:space-y-8">
       {/* HEADER */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <div className="p-3 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-xl shadow-lg shadow-blue-500/50 animate-pulse">
-            <Activity size={32} className="text-white" />
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
+        <div className="flex items-center gap-2 sm:gap-3 md:gap-4 w-full sm:w-auto">
+          <div className="p-2 sm:p-2.5 md:p-3 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-lg sm:rounded-xl shadow-lg shadow-blue-500/50 animate-pulse flex-shrink-0">
+            <Activity size={24} className="text-white sm:w-6 sm:h-6 md:w-8 md:h-8" />
           </div>
-          <div>
-            <h1 className="text-2xl sm:text-3xl md:text-4xl font-black bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent">
+          <div className="min-w-0 flex-1">
+            <h1 className="text-xl sm:text-2xl md:text-3xl lg:text-4xl font-black bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent truncate">
               Dashboard
             </h1>
-            <p className="text-slate-400 mt-1">{institucionActiva.nombre}</p>
+            <p className="text-xs sm:text-sm text-slate-400 mt-0.5 truncate">{institucionActiva.nombre}</p>
           </div>
         </div>
-        <button className="p-3 bg-slate-800/50 hover:bg-slate-700/50 border border-slate-700/50 rounded-xl text-slate-400 hover:text-blue-400 transition-all duration-300">
-          <RefreshCw size={24} />
+        <button className="p-2 sm:p-2.5 md:p-3 bg-slate-800/50 hover:bg-slate-700/50 border border-slate-700/50 rounded-lg sm:rounded-xl text-slate-400 hover:text-blue-400 transition-all duration-300 flex-shrink-0">
+          <RefreshCw size={20} className="sm:w-5 sm:h-5 md:w-6 md:h-6" />
         </button>
       </div>
 
       {/* Error State */}
       {pagosError && (
-        <div className="p-4 bg-red-500/20 border border-red-500/50 rounded-lg flex items-start gap-3">
-          <AlertCircle size={20} className="text-red-400 flex-shrink-0 mt-0.5" />
-          <div>
-            <p className="font-bold text-red-300">Error al cargar pagos</p>
-            <p className="text-sm text-red-200">{pagosError}</p>
+        <div className="p-3 sm:p-4 bg-red-500/20 border border-red-500/50 rounded-lg flex items-start gap-2 sm:gap-3">
+          <AlertCircle size={18} className="text-red-400 flex-shrink-0 mt-0.5 sm:mt-1" />
+          <div className="min-w-0">
+            <p className="font-bold text-red-300 text-xs sm:text-sm truncate">Error al cargar pagos</p>
+            <p className="text-xs text-red-200 mt-1 line-clamp-2">{pagosError}</p>
           </div>
         </div>
       )}
 
       {/* Loading State */}
       {isLoading ? (
-        <div className="flex items-center justify-center py-20">
-          <div className="inline-block p-4 bg-gradient-to-br from-blue-500/20 to-cyan-500/20 rounded-xl border border-blue-500/50">
-            <Activity size={32} className="text-blue-400 animate-spin" />
+        <div className="flex items-center justify-center py-12 sm:py-16 md:py-20">
+          <div className="inline-block p-3 sm:p-4 bg-gradient-to-br from-blue-500/20 to-cyan-500/20 rounded-lg sm:rounded-xl border border-blue-500/50">
+            <Activity size={28} className="text-blue-400 animate-spin sm:w-8 sm:h-8" />
           </div>
-          <span className="ml-4 text-slate-400 font-semibold">Cargando datos...</span>
+          <span className="ml-3 sm:ml-4 text-slate-400 font-semibold text-sm sm:text-base">Cargando datos...</span>
         </div>
       ) : (
         <>
           {/* KPIs PRINCIPALES */}
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 md:gap-4">
             {/* Cobrado Hoy */}
-            <div className="p-3 sm:p-4 md:p-6 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-xl hover:border-green-500/50 transition-all group">
-              <div className="flex items-start justify-between mb-4">
-                <div className="p-3 bg-green-500/20 rounded-lg group-hover:bg-green-500/30 transition">
-                  <DollarSign size={24} className="text-green-400" />
+            <div className="p-3 sm:p-4 md:p-5 lg:p-6 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-lg sm:rounded-xl hover:border-green-500/50 transition-all group">
+              <div className="flex items-start justify-between mb-3 sm:mb-4">
+                <div className="p-2 sm:p-2.5 md:p-3 bg-green-500/20 rounded-lg group-hover:bg-green-500/30 transition flex-shrink-0">
+                  <DollarSign size={18} className="text-green-400 sm:w-5 sm:h-5 md:w-6 md:h-6" />
                 </div>
                 <div className="flex items-center gap-1 text-xs font-bold text-green-400">
-                  <ArrowUp size={14} />
+                  <ArrowUp size={12} />
                   +5%
                 </div>
               </div>
-              <p className="text-xs text-slate-400 font-bold mb-1">Cobrado Hoy</p>
-              <p className="text-2xl font-black text-green-400">{formatoMoneda(pagosHoy)}</p>
-              <p className="text-xs text-slate-500 mt-2">{cantidadPagosHoy} transacción(es)</p>
+              <p className="text-xs text-slate-400 font-bold mb-1 sm:mb-2">Cobrado Hoy</p>
+              <p className="text-lg sm:text-xl md:text-2xl font-black text-green-400 truncate">{formatoMoneda(pagosHoy)}</p>
+              <p className="text-xs text-slate-500 mt-1 sm:mt-2">{cantidadPagosHoy} transacción(es)</p>
             </div>
 
             {/* Total Recaudado */}
-            <div className="p-3 sm:p-4 md:p-6 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-xl hover:border-blue-500/50 transition-all group">
-              <div className="flex items-start justify-between mb-4">
-                <div className="p-3 bg-blue-500/20 rounded-lg group-hover:bg-blue-500/30 transition">
-                  <TrendingUp size={24} className="text-blue-400" />
+            <div className="p-3 sm:p-4 md:p-5 lg:p-6 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-lg sm:rounded-xl hover:border-blue-500/50 transition-all group">
+              <div className="flex items-start justify-between mb-3 sm:mb-4">
+                <div className="p-2 sm:p-2.5 md:p-3 bg-blue-500/20 rounded-lg group-hover:bg-blue-500/30 transition flex-shrink-0">
+                  <TrendingUp size={18} className="text-blue-400 sm:w-5 sm:h-5 md:w-6 md:h-6" />
                 </div>
               </div>
-              <p className="text-xs text-slate-400 font-bold mb-1">Total Recaudado</p>
-              <p className="text-2xl font-black text-blue-400">{formatoMoneda(totalRecaudado)}</p>
-              <p className="text-xs text-slate-500 mt-2">{pagos.filter(p => !esAnulado(p)).length} pagos</p>
+              <p className="text-xs text-slate-400 font-bold mb-1 sm:mb-2">Total Recaudado</p>
+              <p className="text-lg sm:text-xl md:text-2xl font-black text-blue-400 truncate">{formatoMoneda(totalRecaudado)}</p>
+              <p className="text-xs text-slate-500 mt-1 sm:mt-2">{pagos.filter(p => !esAnulado(p)).length} pagos</p>
             </div>
 
             {/* Gastos */}
-            <div className="p-3 sm:p-4 md:p-6 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-xl hover:border-orange-500/50 transition-all group">
-              <div className="flex items-start justify-between mb-4">
-                <div className="p-3 bg-orange-500/20 rounded-lg group-hover:bg-orange-500/30 transition">
-                  <TrendingUp size={24} className="text-orange-400 rotate-180" />
+            <div className="p-3 sm:p-4 md:p-5 lg:p-6 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-lg sm:rounded-xl hover:border-orange-500/50 transition-all group">
+              <div className="flex items-start justify-between mb-3 sm:mb-4">
+                <div className="p-2 sm:p-2.5 md:p-3 bg-orange-500/20 rounded-lg group-hover:bg-orange-500/30 transition flex-shrink-0">
+                  <TrendingUp size={18} className="text-orange-400 rotate-180 sm:w-5 sm:h-5 md:w-6 md:h-6" />
                 </div>
               </div>
-              <p className="text-xs text-slate-400 font-bold mb-1">Gastos Totales</p>
-              <p className="text-2xl font-black text-orange-400">{formatoMoneda(totalGastos)}</p>
-              <p className="text-xs text-slate-500 mt-2">{gastos.length} gastos</p>
+              <p className="text-xs text-slate-400 font-bold mb-1 sm:mb-2">Gastos Totales</p>
+              <p className="text-lg sm:text-xl md:text-2xl font-black text-orange-400 truncate">{formatoMoneda(totalGastos)}</p>
+              <p className="text-xs text-slate-500 mt-1 sm:mt-2">{gastos.length} gastos</p>
             </div>
 
             {/* Neto */}
-            <div className={`p-3 sm:p-4 md:p-6 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-xl hover:border-${neto >= 0 ? 'purple' : 'red'}-500/50 transition-all group`}>
-              <div className="flex items-start justify-between mb-4">
-                <div className={`p-3 rounded-lg group-hover:brightness-110 transition ${neto >= 0 ? 'bg-purple-500/20' : 'bg-red-500/20'}`}>
-                  <Zap size={24} className={neto >= 0 ? 'text-purple-400' : 'text-red-400'} />
+            <div className={`p-3 sm:p-4 md:p-5 lg:p-6 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-lg sm:rounded-xl hover:border-${neto >= 0 ? 'purple' : 'red'}-500/50 transition-all group`}>
+              <div className="flex items-start justify-between mb-3 sm:mb-4">
+                <div className={`p-2 sm:p-2.5 md:p-3 rounded-lg group-hover:brightness-110 transition flex-shrink-0 ${neto >= 0 ? 'bg-purple-500/20' : 'bg-red-500/20'}`}>
+                  <Zap size={18} className={neto >= 0 ? 'text-purple-400' : 'text-red-400' + ' sm:w-5 sm:h-5 md:w-6 md:h-6'} />
                 </div>
                 <div className={`flex items-center gap-1 text-xs font-bold ${neto >= 0 ? 'text-purple-400' : 'text-red-400'}`}>
-                  {neto >= 0 ? <ArrowUp size={14} /> : <ArrowDown size={14} />}
+                  {neto >= 0 ? <ArrowUp size={12} /> : <ArrowDown size={12} />}
                   {Math.abs(neto / totalRecaudado * 100).toFixed(1)}%
                 </div>
               </div>
-              <p className="text-xs text-slate-400 font-bold mb-1">Neto</p>
-              <p className={`text-2xl font-black ${neto >= 0 ? 'text-purple-400' : 'text-red-400'}`}>{formatoMoneda(neto)}</p>
-              <p className="text-xs text-slate-500 mt-2">{neto >= 0 ? '✓ Positivo' : '⚠️ Negativo'}</p>
+              <p className="text-xs text-slate-400 font-bold mb-1 sm:mb-2">Neto</p>
+              <p className={`text-lg sm:text-xl md:text-2xl font-black truncate ${neto >= 0 ? 'text-purple-400' : 'text-red-400'}`}>{formatoMoneda(neto)}</p>
+              <p className="text-xs text-slate-500 mt-1 sm:mt-2">{neto >= 0 ? '✓ Positivo' : '⚠️ Negativo'}</p>
             </div>
           </div>
 
           {/* GRÁFICOS */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3 md:gap-4 lg:gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-3 sm:gap-4 md:gap-6">
             {/* Pagos Últimas 7 días */}
-            <div className="lg:col-span-2 p-3 sm:p-4 md:p-6 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-xl">
-              <h2 className="text-lg font-bold text-white mb-4">Pagos - Últimos 7 Días</h2>
-              <div style={{ height: '250px' }}>
+            <div className="p-3 sm:p-4 md:p-6 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-lg sm:rounded-xl col-span-1 md:col-span-2">
+              <h2 className="text-base sm:text-lg font-bold text-white mb-3 sm:mb-4">Pagos - Últimos 7 Días</h2>
+              <div style={{ height: '200px' }} className="sm:h-64 md:h-80">
                 <Line data={chartPagosUltimaSemana} options={{
                   maintainAspectRatio: false,
                   responsive: true,
@@ -245,11 +244,11 @@ export const DashboardModerno: React.FC = () => {
                   scales: {
                     y: {
                       grid: { color: 'rgba(100, 116, 139, 0.1)' },
-                      ticks: { color: '#cbd5e1' },
+                      ticks: { color: '#cbd5e1', font: { size: 11 } },
                     },
                     x: {
                       grid: { color: 'rgba(100, 116, 139, 0.1)' },
-                      ticks: { color: '#cbd5e1' },
+                      ticks: { color: '#cbd5e1', font: { size: 11 } },
                     },
                   },
                 }} />
@@ -257,15 +256,15 @@ export const DashboardModerno: React.FC = () => {
             </div>
 
             {/* Estados de Estudiantes */}
-            <div className="p-3 sm:p-4 md:p-6 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-xl">
-              <h2 className="text-lg font-bold text-white mb-4">Estudiantes</h2>
-              <div style={{ height: '250px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+            <div className="p-3 sm:p-4 md:p-6 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-lg sm:rounded-xl">
+              <h2 className="text-base sm:text-lg font-bold text-white mb-3 sm:mb-4">Estudiantes</h2>
+              <div style={{ height: '200px' }} className="sm:h-64 md:h-80 flex justify-center items-center">
                 <div style={{ width: '100%', maxWidth: '200px' }}>
                   <Pie data={chartEstados} options={{
                     maintainAspectRatio: false,
                     responsive: true,
                     plugins: {
-                      legend: { position: 'bottom', labels: { color: '#cbd5e1', font: { size: 11 } } },
+                      legend: { position: 'bottom', labels: { color: '#cbd5e1', font: { size: 10 } } },
                     },
                   }} />
                 </div>
@@ -274,24 +273,24 @@ export const DashboardModerno: React.FC = () => {
           </div>
 
           {/* CONTENIDO INFERIOR */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4 md:gap-6">
             {/* Deuda vs Pagos por Concepto */}
-            <div className="lg:col-span-2 p-6 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-xl">
-              <h2 className="text-lg font-bold text-white mb-4">Top Conceptos</h2>
-              <div style={{ height: '280px' }}>
+            <div className="lg:col-span-2 p-3 sm:p-4 md:p-6 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-lg sm:rounded-xl">
+              <h2 className="text-base sm:text-lg font-bold text-white mb-3 sm:mb-4">Top Conceptos</h2>
+              <div style={{ height: '200px' }} className="sm:h-64 md:h-80">
                 <Bar data={chartConceptos} options={{
                   maintainAspectRatio: false,
                   responsive: true,
                   indexAxis: 'y',
-                  plugins: { legend: { labels: { color: '#cbd5e1' } } },
+                  plugins: { legend: { labels: { color: '#cbd5e1', font: { size: 10 } } } },
                   scales: {
                     x: {
                       grid: { color: 'rgba(100, 116, 139, 0.1)' },
-                      ticks: { color: '#cbd5e1' },
+                      ticks: { color: '#cbd5e1', font: { size: 10 } },
                     },
                     y: {
                       grid: { color: 'rgba(100, 116, 139, 0.1)' },
-                      ticks: { color: '#cbd5e1' },
+                      ticks: { color: '#cbd5e1', font: { size: 10 } },
                     },
                   },
                 }} />
@@ -299,40 +298,40 @@ export const DashboardModerno: React.FC = () => {
             </div>
 
             {/* Información de Institución */}
-            <div className="p-6 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-xl space-y-4">
+            <div className="p-3 sm:p-4 md:p-6 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-lg sm:rounded-xl space-y-3 sm:space-y-4">
               <div>
                 <p className="text-xs text-slate-400 font-bold mb-1">Institución</p>
-                <p className="text-sm font-bold text-white">{institucionActiva.nombre}</p>
+                <p className="text-sm font-bold text-white truncate">{institucionActiva.nombre}</p>
               </div>
               <div>
                 <p className="text-xs text-slate-400 font-bold mb-1">CUIT</p>
-                <p className="text-sm font-bold text-white">{institucionActiva.cuit}</p>
+                <p className="text-sm font-bold text-white truncate">{institucionActiva.cuit}</p>
               </div>
               <div>
                 <p className="text-xs text-slate-400 font-bold mb-1">Punto de Venta</p>
-                <p className="text-sm font-bold text-white">{institucionActiva.punto_venta}</p>
+                <p className="text-sm font-bold text-white truncate">{institucionActiva.punto_venta}</p>
               </div>
-              <div className="pt-4 border-t border-slate-700/50">
-                <div className="flex items-center gap-2 text-green-400 text-sm font-bold">
-                  <CheckCircle size={16} />
-                  Conectado a Supabase
+              <div className="pt-3 sm:pt-4 border-t border-slate-700/50">
+                <div className="flex items-center gap-2 text-green-400 text-xs sm:text-sm font-bold">
+                  <CheckCircle size={14} />
+                  Conectado
                 </div>
               </div>
             </div>
           </div>
 
           {/* TARJETAS RESUMEN */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4 md:gap-6">
             {/* Total Estudiantes */}
-            <div className="p-6 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-xl">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="p-3 bg-purple-500/20 rounded-lg">
-                  <Users size={24} className="text-purple-400" />
+            <div className="p-3 sm:p-4 md:p-6 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-lg sm:rounded-xl">
+              <div className="flex items-center gap-2 sm:gap-3 mb-3 sm:mb-4">
+                <div className="p-2 sm:p-2.5 md:p-3 bg-purple-500/20 rounded-lg flex-shrink-0">
+                  <Users size={18} className="text-purple-400 sm:w-5 sm:h-5 md:w-6 md:h-6" />
                 </div>
-                <h3 className="text-sm font-bold text-slate-300">Total Estudiantes</h3>
+                <h3 className="text-xs sm:text-sm font-bold text-slate-300">Total Estudiantes</h3>
               </div>
-              <p className="text-3xl font-black text-purple-400">{estudiantes.length}</p>
-              <div className="mt-4 pt-4 border-t border-slate-700/50 space-y-2">
+              <p className="text-2xl sm:text-3xl font-black text-purple-400">{estudiantes.length}</p>
+              <div className="mt-3 sm:mt-4 pt-3 sm:pt-4 border-t border-slate-700/50 space-y-1.5 sm:space-y-2">
                 <div className="flex justify-between text-xs">
                   <span className="text-slate-400">Activos</span>
                   <span className="text-green-400 font-bold">{activos}</span>
@@ -349,15 +348,15 @@ export const DashboardModerno: React.FC = () => {
             </div>
 
             {/* Pagos Registrados */}
-            <div className="p-6 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-xl">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="p-3 bg-blue-500/20 rounded-lg">
-                  <Calendar size={24} className="text-blue-400" />
+            <div className="p-3 sm:p-4 md:p-6 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-lg sm:rounded-xl">
+              <div className="flex items-center gap-2 sm:gap-3 mb-3 sm:mb-4">
+                <div className="p-2 sm:p-2.5 md:p-3 bg-blue-500/20 rounded-lg flex-shrink-0">
+                  <Calendar size={18} className="text-blue-400 sm:w-5 sm:h-5 md:w-6 md:h-6" />
                 </div>
-                <h3 className="text-sm font-bold text-slate-300">Pagos Registrados</h3>
+                <h3 className="text-xs sm:text-sm font-bold text-slate-300">Pagos Registrados</h3>
               </div>
-              <p className="text-3xl font-black text-blue-400">{pagos.filter(p => !p.anulado).length}</p>
-              <div className="mt-4 pt-4 border-t border-slate-700/50">
+              <p className="text-2xl sm:text-3xl font-black text-blue-400">{pagos.filter(p => !p.anulado).length}</p>
+              <div className="mt-3 sm:mt-4 pt-3 sm:pt-4 border-t border-slate-700/50">
                 <div className="flex justify-between text-sm">
                   <span className="text-slate-400">Hoy</span>
                   <span className="text-green-400 font-bold">{cantidadPagosHoy}</span>
@@ -366,15 +365,15 @@ export const DashboardModerno: React.FC = () => {
             </div>
 
             {/* Gastos */}
-            <div className="p-6 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-xl">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="p-3 bg-orange-500/20 rounded-lg">
-                  <PieChart size={24} className="text-orange-400" />
+            <div className="p-3 sm:p-4 md:p-6 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-lg sm:rounded-xl">
+              <div className="flex items-center gap-2 sm:gap-3 mb-3 sm:mb-4">
+                <div className="p-2 sm:p-2.5 md:p-3 bg-orange-500/20 rounded-lg flex-shrink-0">
+                  <PieChart size={18} className="text-orange-400 sm:w-5 sm:h-5 md:w-6 md:h-6" />
                 </div>
-                <h3 className="text-sm font-bold text-slate-300">Gastos</h3>
+                <h3 className="text-xs sm:text-sm font-bold text-slate-300">Gastos</h3>
               </div>
-              <p className="text-3xl font-black text-orange-400">{gastos.length}</p>
-              <div className="mt-4 pt-4 border-t border-slate-700/50">
+              <p className="text-2xl sm:text-3xl font-black text-orange-400">{gastos.length}</p>
+              <div className="mt-3 sm:mt-4 pt-3 sm:pt-4 border-t border-slate-700/50">
                 <div className="flex justify-between text-sm">
                   <span className="text-slate-400">Total</span>
                   <span className="text-orange-400 font-bold">{formatoMoneda(totalGastos)}</span>
