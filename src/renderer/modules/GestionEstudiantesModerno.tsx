@@ -3,6 +3,7 @@ import { useInstitucion } from '@renderer/hooks/useInstitucion'
 import { useFormValidation } from '@renderer/hooks/useFormValidation'
 import { formatoMoneda } from '@renderer/lib/helpers'
 import { Users, Filter, Edit2, CheckCircle, AlertCircle, Zap, Ban, X, RefreshCw } from 'lucide-react'
+import { Pagination } from '@renderer/components/Pagination'
 import { supabase } from '@renderer/lib/supabase'
 import { z } from 'zod'
 
@@ -38,6 +39,8 @@ export const GestionEstudiantesModerno: React.FC = () => {
   const [loading, setLoading] = useState(true)
   const [filtroCarrera, setFiltroCarrera] = useState<number | null>(null)
   const [searchText, setSearchText] = useState('')
+  const [currentPage, setCurrentPage] = useState(1)
+  const [pageSize, setPageSize] = useState(10)
   const [editandoId, setEditandoId] = useState<number | null>(null)
   const [nuevoEstado, setNuevoEstado] = useState<EstadoEstudiante>('ACTIVO')
   const [nuevoMesIngreso, setNuevoMesIngreso] = useState(3)
@@ -93,6 +96,8 @@ export const GestionEstudiantesModerno: React.FC = () => {
       const nombreB = `${b.nombre} ${b.apellido}`.toLowerCase()
       return nombreA.localeCompare(nombreB)
     })
+
+  const estudiantesPaginados = estudiantesFiltrados.slice((currentPage - 1) * pageSize, currentPage * pageSize)
 
   const handleGuardarEstado = async (estudianteId: number) => {
     setGuardando(true)
@@ -300,7 +305,7 @@ export const GestionEstudiantesModerno: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-700/50">
-                {estudiantesFiltrados.map(estudiante => (
+                {estudiantesPaginados.map(estudiante => (
                   <tr key={estudiante.id} className="hover:bg-slate-700/30 transition">
                     <td className="px-2 sm:px-4 py-2 sm:py-4">
                       <p className="font-bold text-white text-xs sm:text-sm truncate">
@@ -404,6 +409,21 @@ export const GestionEstudiantesModerno: React.FC = () => {
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+
+        {estudiantesFiltrados.length > 0 && (
+          <div className="pt-4 border-t border-slate-700/50 mt-4">
+            <Pagination
+              total={estudiantesFiltrados.length}
+              pageSize={pageSize}
+              currentPage={currentPage}
+              onPageChange={setCurrentPage}
+              onPageSizeChange={(newSize) => {
+                setPageSize(newSize)
+                setCurrentPage(1)
+              }}
+            />
           </div>
         )}
       </div>
