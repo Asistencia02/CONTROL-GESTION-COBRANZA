@@ -1,19 +1,23 @@
-import React, { useEffect, useMemo } from 'react'
+import React, { useEffect, useState, useMemo } from 'react'
 import { useInstitucion } from '@renderer/hooks/useInstitucion'
+import { useAuth } from '@renderer/hooks/useAuth'
 import { usePagos } from '@renderer/hooks/usePagos'
 import { useGastos } from '@renderer/hooks/useGastos'
 import { useEstudiantes } from '@renderer/hooks/useEstudiantes'
 import { useReporteConceptos } from '@renderer/hooks/useReporteConceptos'
-import { DollarSign, TrendingUp, Users, CheckCircle, AlertCircle, Activity, PieChart, Calendar, Zap, RefreshCw, ArrowUp, ArrowDown } from 'lucide-react'
+import { DollarSign, TrendingUp, Users, CheckCircle, AlertCircle, Activity, PieChart, Calendar, Zap, RefreshCw, ArrowUp, ArrowDown, Lock } from 'lucide-react'
 import { formatoMoneda } from '@renderer/lib/helpers'
 import { InteractiveChart } from '@renderer/components/InteractiveChart'
+import { ModalCambiarContrasena } from '@renderer/components/ModalCambiarContrasena'
 
 export const DashboardModerno: React.FC = () => {
   const { institucionActiva } = useInstitucion()
+  const { cambiarContrasenia, error: errorContrasenia, loading: loadingContrasenia } = useAuth()
   const { pagos, cargarPagos, loading: pagosLoading, error: pagosError } = usePagos()
   const { gastos, cargarGastos, loading: gastosLoading } = useGastos()
   const { estudiantes, cargarEstudiantes, loading: estudiantesLoading } = useEstudiantes()
   const { reporteConceptos, cargarReporteConceptos } = useReporteConceptos()
+  const [modalCambiarContrasenaAbierto, setModalCambiarContrasenaAbierto] = useState(false)
 
   useEffect(() => {
     const cargarDatos = async () => {
@@ -86,6 +90,10 @@ export const DashboardModerno: React.FC = () => {
             <p className="text-xs sm:text-sm text-slate-400 mt-0.5 truncate">{institucionActiva.nombre}</p>
           </div>
         </div>
+        <button onClick={() => setModalContrasenaAbierto(true)} className="p-2 sm:p-2.5 md:p-3 bg-slate-800/50 hover:bg-slate-700/50 border border-slate-700/50 rounded-lg sm:rounded-xl text-slate-400 hover:text-blue-400 transition-all duration-300 flex-shrink-0 flex items-center gap-2">
+          <Lock size={18} className="sm:w-5 sm:h-5" />
+          <span className="hidden lg:inline text-xs font-bold">Cambiar Contraseña</span>
+        </button>
         <button className="p-2 sm:p-2.5 md:p-3 bg-slate-800/50 hover:bg-slate-700/50 border border-slate-700/50 rounded-lg sm:rounded-xl text-slate-400 hover:text-blue-400 transition-all duration-300 flex-shrink-0">
           <RefreshCw size={20} className="sm:w-5 sm:h-5 md:w-6 md:h-6" />
         </button>
@@ -307,6 +315,17 @@ export const DashboardModerno: React.FC = () => {
           </div>
         </>
       )}
+
+      {/* MODAL CAMBIAR CONTRASEÃ‘A */}
+      <ModalCambiarContrasena
+        isOpen={modalCambiarContrasenaAbierto}
+        onClose={() => setModalCambiarContrasenaAbierto(false)}
+        onCambiar={cambiarContrasenia}
+        error={errorContrasenia}
+        loading={loadingContrasenia}
+      />
     </div>
   )
 }
+
+
