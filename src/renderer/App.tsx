@@ -39,6 +39,12 @@ export const App: React.FC = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [modalCambiarContrasenaAbierto, setModalCambiarContrasenaAbierto] = useState(false)
 
+  // Wrapper para cambiar contraseña con usuario actual
+  const handleCambiarContrasenia = async (contraseniaActual: string, contrasenianueva: string) => {
+    if (!usuarioActual) return false
+    return await cambiarContrasenia(usuarioActual.id, contraseniaActual, contrasenianueva)
+  }
+
   // Cargar usuario desde localStorage si existe
   useEffect(() => {
     const usuarioGuardado = localStorage.getItem('usuarioActual')
@@ -171,7 +177,7 @@ export const App: React.FC = () => {
       <ModalCambiarContrasena
         isOpen={modalCambiarContrasenaAbierto}
         onClose={() => setModalCambiarContrasenaAbierto(false)}
-        onCambiar={cambiarContrasenia}
+        onCambiar={handleCambiarContrasenia}
         error={errorContrasenia}
         loading={loadingContrasenia}
       />
