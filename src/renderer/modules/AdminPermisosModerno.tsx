@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react'
 import { useAuth } from '@renderer/hooks/useAuth'
 import { useInstitucion } from '@renderer/hooks/useInstitucion'
 import { Settings, Save, RefreshCw, AlertCircle, Lock } from 'lucide-react'
-import { ModalCambiarContrasenaAdmin } from '@renderer/components/ModalCambiarContrasenaAdmin'
 
 interface UsuarioConPermisos {
   id: number
@@ -42,7 +41,6 @@ export const AdminPermisosModerno: React.FC = () => {
   const [cambiosInstituciones, setCambiosInstituciones] = useState(false)
   const [cambiosPuedeModificar, setCambiosPuedeModificar] = useState(false)
   const [cambiosContrasenia, setCambiosContrasenia] = useState(false)
-  const [modalCambiarContrasenaAbierto, setModalCambiarContrasenaAbierto] = useState(false)
 
   useEffect(() => {
     cargarUsuarios()
@@ -470,7 +468,3 @@ export const AdminPermisosModerno: React.FC = () => {
     </div>
   )
 }
-
-
-
-
