@@ -31,6 +31,7 @@ const checkConnection = async (): Promise<boolean> => {
 }
 
 export const App: React.FC = () => {
+  // v2.0 - Force reload
   const { usuarioActual, autenticado, modulosPermitidos, logout, cambiarContrasenia, error: errorContrasenia, loading: loadingContrasenia } = useAuth()
   
   const [activeModule, setActiveModule] = useState<ModuleId>('dashboard')
@@ -184,3 +185,4 @@ export const App: React.FC = () => {
     </div>
   )
 }
+
