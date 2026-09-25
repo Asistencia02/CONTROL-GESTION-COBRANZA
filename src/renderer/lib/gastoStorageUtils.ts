@@ -56,11 +56,19 @@ export const subirArchivoGasto = async (
     const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://tcqamchiwtijniiwbpde.supabase.co'
     const edgeFunctionUrl = `${supabaseUrl}/functions/v1/upload-gasto-comprobante`
 
+    // Obtener token Supabase (si existe sesión)
+    const token = localStorage.getItem('supabase.auth.token')
+    
+    const headers: HeadersInit = {}
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`
+    }
+
     // Llamar Edge Function
     const response = await fetch(edgeFunctionUrl, {
       method: 'POST',
       body: formData,
-      // NO incluir Content-Type header (FormData lo hace automáticamente)
+      headers: headers,
     })
 
     // Verificar respuesta
