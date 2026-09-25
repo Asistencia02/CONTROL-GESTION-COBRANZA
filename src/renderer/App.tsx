@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { useAuth } from '@renderer/hooks/useAuth'
 import { Sidebar } from '@renderer/components/Sidebar'
-import { ModalCambiarContrasena } from '@renderer/components'
 import { LoginModerno } from '@renderer/modules/LoginModerno'
 import { AdminPermisosModerno } from '@renderer/modules/AdminPermisosModerno'
 import { DashboardModerno } from '@renderer/modules/DashboardModerno'
@@ -31,18 +30,12 @@ const checkConnection = async (): Promise<boolean> => {
 }
 
 export const App: React.FC = () => {
-  const { usuarioActual, autenticado, modulosPermitidos, logout, cambiarContrasenia, error: errorContrasenia, loading: loadingContrasenia } = useAuth()
+  const { usuarioActual, autenticado, modulosPermitidos, logout } = useAuth()
   
   const [activeModule, setActiveModule] = useState<ModuleId>('dashboard')
   const [supabaseConnected, setSupabaseConnected] = useState<boolean | null>(null)
   const [usuarioLoaded, setUsuarioLoaded] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [modalCambiarContrasenaAbierto, setModalCambiarContrasenaAbierto] = useState(false)
-
-  const handleCambiarContrasenia = async (contraseniaActual: string, contrasenianueva: string) => {
-    if (!usuarioActual) return false
-    return await cambiarContrasenia(usuarioActual.id, contraseniaActual, contrasenianueva)
-  }
 
   useEffect(() => {
     const usuarioGuardado = localStorage.getItem('usuarioActual')
@@ -144,7 +137,6 @@ export const App: React.FC = () => {
         esAdmin={usuarioActual?.rol === 'ADMIN'}
         isOpen={sidebarOpen}
         onToggle={() => setSidebarOpen(!sidebarOpen)}
-        onCambiarContrasena={() => setModalCambiarContrasenaAbierto(true)}
       />
 
       <main className="flex-1 w-full bg-slate-900 overflow-y-auto">
@@ -161,14 +153,6 @@ export const App: React.FC = () => {
           renderModule()
         )}
       </main>
-
-      <ModalCambiarContrasena
-        isOpen={modalCambiarContrasenaAbierto}
-        onClose={() => setModalCambiarContrasenaAbierto(false)}
-        onCambiar={handleCambiarContrasenia}
-        error={errorContrasenia}
-        loading={loadingContrasenia}
-      />
     </div>
   )
 }
