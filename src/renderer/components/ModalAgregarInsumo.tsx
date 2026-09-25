@@ -290,38 +290,44 @@ export const ModalAgregarInsumo: React.FC<ModalAgregarInsumoProps> = ({
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Categoría</label>
-              {categorias.length > 0 ? (
-                <select
-                  name="categoria"
-                  value={formData.categoria}
-                  onChange={(e) => {
-                    setFormData({ ...formData, categoria: e.target.value })
-                    setError('')
-                  }}
-                  disabled={cargando}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100"
-                >
-                  <option value="">Nueva categoría</option>
-                  {categorias.map((cat) => (
-                    <option key={cat} value={cat}>
-                      {cat}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <input
-                  type="text"
-                  name="categoria"
-                  value={formData.categoria}
-                  onChange={(e) => {
-                    setFormData({ ...formData, categoria: e.target.value })
-                    setError('')
-                  }}
-                  placeholder="Ej: Remeras"
-                  disabled={cargando}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100"
-                />
-              )}
+              <div className="relative">
+                {categorias.length > 0 ? (
+                  <>
+                    <input
+                      type="text"
+                      name="categoria"
+                      value={formData.categoria}
+                      onChange={(e) => {
+                        setFormData({ ...formData, categoria: e.target.value })
+                        setError('')
+                      }}
+                      placeholder="Selecciona o escribe una nueva..."
+                      list="categorias-list"
+                      disabled={cargando}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100"
+                    />
+                    <datalist id="categorias-list">
+                      {categorias.map((cat) => (
+                        <option key={cat} value={cat} />
+                      ))}
+                    </datalist>
+                  </>
+                ) : (
+                  <input
+                    type="text"
+                    name="categoria"
+                    value={formData.categoria}
+                    onChange={(e) => {
+                      setFormData({ ...formData, categoria: e.target.value })
+                      setError('')
+                    }}
+                    placeholder="Ej: Remeras, Mochilas..."
+                    disabled={cargando}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100"
+                  />
+                )}
+              </div>
+              <p className="text-xs text-gray-500 mt-1">Ej: Remeras, Mochilas, Ótiles, etc.</p>
             </div>
           </div>
 
