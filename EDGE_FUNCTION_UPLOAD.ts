@@ -38,7 +38,8 @@ serve(async (req) => {
     const archivo = formData.get("archivo") as File
     const institucionId = formData.get("institucion_id") as string
     const usuarioId = formData.get("usuario_id") as string
-    const token = formData.get("token") as string
+
+    console.log(`📤 Edge Function: usuario=${usuarioId}, institucion=${institucionId}`)
 
     // VALIDACIÓN 1: Parámetros requeridos
     if (!archivo || !institucionId || !usuarioId) {
@@ -83,6 +84,7 @@ serve(async (req) => {
       .single()
 
     if (errorUsuario || !usuario || usuario.institucion_id !== parseInt(institucionId)) {
+      console.error(`❌ Validación fallida: usuario=${usuarioId}, institucion=${institucionId}`, errorUsuario)
       return new Response(
         JSON.stringify({ 
           success: false, 
