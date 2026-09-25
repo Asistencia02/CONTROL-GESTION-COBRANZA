@@ -43,12 +43,22 @@ export const subirArchivoGasto = async (
       }
     }
 
+    // Verificar que Supabase está configurado
+    if (!supabase) {
+      return {
+        success: false,
+        error: 'Supabase no está configurado correctamente'
+      }
+    }
+
     // Generar nombre único
     const timestamp = Date.now()
     const extension = archivo.name.split('.').pop() || 'archivo'
     const nombreArchivo = `gasto-${institucionId}-${timestamp}.${extension}`
     const carpeta = `gastos/${institucionId}`
     const ruta = `${carpeta}/${nombreArchivo}`
+
+    console.log(`📤 Subiendo archivo: ${ruta}`)
 
     // Subir a Supabase Storage
     const { data, error: errorUpload } = await supabase.storage
@@ -59,7 +69,23 @@ export const subirArchivoGasto = async (
       })
 
     if (errorUpload) {
-      console.error('Error uploading to storage:', errorUpload)
+      console.error('❌ Error uploading to storage:', errorUpload)
+      
+      // Manejo específico de errores
+      if (errorUpload.message.includes('row-level security')) {
+        return {
+          success: false,
+          error: 'Error de permisos: Configura las políticas RLS en Supabase Storage (bucket: comprobantes)'
+        }
+      }
+      
+      if (errorUpload.message.includes('Bucket not found')) {
+        return {
+          success: false,
+          error: 'Error: Bucket "comprobantes" no existe en Supabase Storage'
+        }
+      }
+
       return {
         success: false,
         error: `Error al subir archivo: ${errorUpload.message}`
@@ -71,16 +97,19 @@ export const subirArchivoGasto = async (
       .from('comprobantes')
       .getPublicUrl(ruta)
 
+    console.log(`✅ Archivo subido exitosamente: ${datosPublicos.publicUrl}`)
+
     return {
       success: true,
       url: datosPublicos.publicUrl,
       tipoArchivo: archivo.type.includes('image') ? 'imagen' : 'pdf'
     }
   } catch (err) {
-    console.error('Error en subirArchivoGasto:', err)
+    console.error('❌ Error en subirArchivoGasto:', err)
+    const mensaje = err instanceof Error ? err.message : 'Error desconocido'
     return {
       success: false,
-      error: 'Error desconocido al subir archivo'
+      error: `Error desconocido al subir archivo: ${mensaje}`
     }
   }
 }
