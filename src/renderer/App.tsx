@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useAuth } from '@renderer/hooks/useAuth'
 import { Sidebar } from '@renderer/components/Sidebar'
-import { ModalCambiarContrasena } from '@renderer/components/ModalCambiarContrasena'
+import { ModalCambiarContrasena } from '@renderer/components'
 import { LoginModerno } from '@renderer/modules/LoginModerno'
 import { AdminPermisosModerno } from '@renderer/modules/AdminPermisosModerno'
 import { DashboardModerno } from '@renderer/modules/DashboardModerno'
