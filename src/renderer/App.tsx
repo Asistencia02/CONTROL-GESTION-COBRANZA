@@ -1,7 +1,6 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, lazy, Suspense } from 'react'
 import { useAuth } from '@renderer/hooks/useAuth'
 import { Sidebar } from '@renderer/components/Sidebar'
-import { ModalCambiarContrasena } from '@renderer/components/ModalCambiarContrasena'
 import { LoginModerno } from '@renderer/modules/LoginModerno'
 import { AdminPermisosModerno } from '@renderer/modules/AdminPermisosModerno'
 import { DashboardModerno } from '@renderer/modules/DashboardModerno'
@@ -17,7 +16,9 @@ import { KioscoConfiguracionModerno } from '@renderer/modules/KioscoConfiguracio
 import { GestionEstudiantesModerno } from '@renderer/modules/GestionEstudiantesModerno'
 import { Sincronizacion } from '@renderer/modules/Sincronizacion'
 import { supabase } from '@renderer/lib/supabase'
-import '@renderer/lib/verificarVariables' // Verificar variables de entorno
+import '@renderer/lib/verificarVariables'
+
+const ModalCambiarContrasena = lazy(() => import('@renderer/components/ModalCambiarContrasena').then(m => ({ default: m.ModalCambiarContrasena })))
 
 type ModuleId = 'dashboard' | 'cobranzas' | 'deudas' | 'ventas' | 'ventakiosco' | 'gastos' | 'reportes' | 'cierre' | 'configuracion' | 'kioscoconfig' | 'sincronizacion' | 'estudiantes' | 'admin'
 
@@ -175,13 +176,15 @@ export const App: React.FC = () => {
       </main>
 
       {/* MODAL CAMBIAR CONTRASEÑA */}
-      <ModalCambiarContrasena
-        isOpen={modalCambiarContrasenaAbierto}
-        onClose={() => setModalCambiarContrasenaAbierto(false)}
-        onCambiar={handleCambiarContrasenia}
-        error={errorContrasenia}
-        loading={loadingContrasenia}
-      />
+      <Suspense fallback={null}>
+        <ModalCambiarContrasena
+          isOpen={modalCambiarContrasenaAbierto}
+          onClose={() => setModalCambiarContrasenaAbierto(false)}
+          onCambiar={handleCambiarContrasenia}
+          error={errorContrasenia}
+          loading={loadingContrasenia}
+        />
+      </Suspense>
     </div>
   )
 }
