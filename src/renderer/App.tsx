@@ -1,24 +1,8 @@
-import React, { useState, useEffect, lazy, Suspense } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useAuth } from '@renderer/hooks/useAuth'
 import { Sidebar } from '@renderer/components/Sidebar'
+import { ModalCambiarContrasena } from '@renderer/components/ModalCambiarContrasena'
 import { LoginModerno } from '@renderer/modules/LoginModerno'
-import { AdminPermisosModerno } from '@renderer/modules/AdminPermisosModerno'
-import { DashboardModerno } from '@renderer/modules/DashboardModerno'
-import { Cobranzas } from '@renderer/modules/Cobranzas'
-import { DeudasModerno } from '@renderer/modules/DeudasModerno'
-import { VentasModerno } from '@renderer/modules/VentasModerno'
-import { ConfiguracionModerno } from '@renderer/modules/ConfiguracionModerno'
-import { GastosModerno } from '@renderer/modules/GastosModerno'
-import { ReportesFinancierosModerno } from '@renderer/modules/ReportesFinancierosModerno'
-import { CierreModerno } from '@renderer/modules/CierreModerno'
-import { VentaKioscoModerno } from '@renderer/modules/VentaKioscoModerno'
-import { KioscoConfiguracionModerno } from '@renderer/modules/KioscoConfiguracionModerno'
-import { GestionEstudiantesModerno } from '@renderer/modules/GestionEstudiantesModerno'
-import { Sincronizacion } from '@renderer/modules/Sincronizacion'
-import { supabase } from '@renderer/lib/supabase'
-import '@renderer/lib/verificarVariables'
-
-const ModalCambiarContrasena = lazy(() => import('@renderer/components/ModalCambiarContrasena').then(m => ({ default: m.ModalCambiarContrasena })))
 
 type ModuleId = 'dashboard' | 'cobranzas' | 'deudas' | 'ventas' | 'ventakiosco' | 'gastos' | 'reportes' | 'cierre' | 'configuracion' | 'kioscoconfig' | 'sincronizacion' | 'estudiantes' | 'admin'
 
