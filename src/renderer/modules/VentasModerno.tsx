@@ -8,6 +8,8 @@ import { Pagination } from '@renderer/components/Pagination'
 import { AdvancedSearch } from '@renderer/components/AdvancedSearch'
 import { ExportButton } from '@renderer/components/ExportButton'
 import { SkeletonTable } from '@renderer/components/SkeletonLoader'
+import { TablaInsumos } from '@renderer/components/TablaInsumos'
+import { ModalAgregarInsumo } from '@renderer/components/ModalAgregarInsumo'
 
 interface Venta {
   id?: number
@@ -21,11 +23,11 @@ interface Venta {
   estado?: 'VENDIDO' | 'ANULADO'
 }
 
-type TabVenta = 'registro' | 'historial' | 'resumen'
+type TabVenta = 'registro' | 'historial' | 'resumen' | 'insumos'
 
 export const VentasModerno: React.FC = () => {
   const { institucionActiva } = useInstitucion()
-  const { insumos } = useInsumos()
+  const { insumos, cargarInsumos, agregarInsumo, actualizarInsumo, eliminarInsumo, loading: insumosLoading } = useInsumos()
   const { ventas, cargarVentasInsumos, agregarVentaInsumo, anularVentaInsumo, loading } = useVentasInsumos()
   
   const [selectedInsumo, setSelectedInsumo] = useState<number | null>(null)
@@ -37,10 +39,13 @@ export const VentasModerno: React.FC = () => {
   const [searchText, setSearchText] = useState('')
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
+  const [modalAbrirInsumo, setModalAbrirInsumo] = useState(false)
+  const [insumoEditando, setInsumoEditando] = useState<any | null>(null)
 
   useEffect(() => {
     cargarVentasInsumos(institucionActiva.id)
-  }, [institucionActiva.id, cargarVentasInsumos])
+    cargarInsumos(institucionActiva.id)
+  }, [institucionActiva.id, cargarVentasInsumos, cargarInsumos])
 
   const totalVentasHoy = ventas
     .filter(v => v.fecha_venta === new Date().toISOString().split('T')[0] && v.estado === 'VENDIDO')
@@ -52,6 +57,7 @@ export const VentasModerno: React.FC = () => {
     .filter(v => v.estado === 'VENDIDO')
     .reduce((sum, v) => sum + v.cantidad, 0)
   const stockTotal = insumos.reduce((sum, i) => sum + i.cantidad_stock, 0)
+  const capitalEnStock = insumos.reduce((sum, i) => sum + (i.precio_unitario * i.cantidad_stock), 0)
 
   const handleRegistrarVenta = async () => {
     if (!selectedInsumo || cantidad <= 0) {
@@ -119,6 +125,50 @@ export const VentasModerno: React.FC = () => {
       setTimeout(() => setMensaje(''), 3000)
     } finally {
       setRegistrando(false)
+    }
+  }
+
+  const handleEditarInsumo = (insumo: any) => {
+    setInsumoEditando(insumo)
+    setModalAbrirInsumo(true)
+  }
+
+  const handleActualizarInsumo = async (insumo_id: number, insumo: any) => {
+    try {
+      await actualizarInsumo(insumo_id, insumo)
+      setInsumoEditando(null)
+      setMensaje('✓ Insumo actualizado')
+      await cargarInsumos(institucionActiva.id)
+      setTimeout(() => setMensaje(''), 3000)
+    } catch (error) {
+      setMensaje('❌ Error al actualizar insumo')
+    }
+  }
+
+  const handleCerrarModalInsumo = () => {
+    setModalAbrirInsumo(false)
+    setInsumoEditando(null)
+  }
+
+  const handleActualizarStock = async (insumo_id: number, nuevaCantidad: number) => {
+    try {
+      await actualizarInsumo(insumo_id, { cantidad_stock: nuevaCantidad })
+      setMensaje('✓ Stock actualizado')
+      await cargarInsumos(institucionActiva.id)
+      setTimeout(() => setMensaje(''), 2000)
+    } catch (error) {
+      setMensaje(`❌ Error`)
+    }
+  }
+
+  const handleEliminarInsumo = async (insumo_id: number) => {
+    try {
+      await eliminarInsumo(insumo_id)
+      setMensaje('✓ Insumo eliminado')
+      await cargarInsumos(institucionActiva.id)
+      setTimeout(() => setMensaje(''), 2000)
+    } catch (error) {
+      setMensaje(`❌ Error`)
     }
   }
 
@@ -224,6 +274,17 @@ export const VentasModerno: React.FC = () => {
           >
             <TrendingUp size={16} className="sm:w-5 sm:h-5" />
             <span className="hidden sm:inline">Resumen</span>
+          </button>
+          <button
+            onClick={() => setTabActiva('insumos')}
+            className={`px-2 sm:px-4 md:px-6 py-2 sm:py-3 rounded-lg font-bold transition-all duration-300 flex items-center gap-1 sm:gap-2 text-xs sm:text-sm flex-shrink-0 ${
+              tabActiva === 'insumos'
+                ? 'bg-gradient-to-r from-green-600 to-emerald-600 text-white shadow-lg shadow-green-500/50'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Package size={16} className="sm:w-5 sm:h-5" />
+            <span className="hidden sm:inline">Insumos</span>
           </button>
         </div>
       </div>
@@ -473,9 +534,23 @@ export const VentasModerno: React.FC = () => {
               </div>
               <p className="text-xs text-slate-400">unidades</p>
             </div>
+
+            <div className="p-3 sm:p-4 md:p-6 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-lg sm:rounded-xl">
+              <div className="flex items-center gap-2 sm:gap-3 mb-3 sm:mb-4">
+                <div className="p-2 sm:p-3 bg-yellow-500/20 rounded-lg flex-shrink-0">
+                  <DollarSign size={20} className="text-yellow-400 sm:w-6 sm:h-6" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs sm:text-sm text-slate-400 font-bold truncate">Capital en Stock</p>
+                  <p className="text-base sm:text-xl md:text-2xl font-black text-yellow-400 truncate">{formatoMoneda(capitalEnStock)}</p>
+                </div>
+              </div>
+              <p className="text-xs text-slate-400">valor invertido</p>
+            </div>
           </div>
         )}
       </div>
     </div>
   )
 }
+
