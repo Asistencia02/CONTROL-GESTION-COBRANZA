@@ -70,25 +70,35 @@ export const subirArchivoGasto = async (
 
     if (errorUpload) {
       console.error('❌ Error uploading to storage:', errorUpload)
+      console.error('Status:', errorUpload.status)
+      console.error('Message:', errorUpload.message)
+      console.error('Full error:', JSON.stringify(errorUpload, null, 2))
       
       // Manejo específico de errores
-      if (errorUpload.message.includes('row-level security')) {
+      if (errorUpload.message?.includes('row-level security')) {
         return {
           success: false,
           error: 'Error de permisos: Configura las políticas RLS en Supabase Storage (bucket: comprobantes)'
         }
       }
       
-      if (errorUpload.message.includes('Bucket not found')) {
+      if (errorUpload.message?.includes('Bucket not found')) {
         return {
           success: false,
           error: 'Error: Bucket "comprobantes" no existe en Supabase Storage'
         }
       }
 
+      if (errorUpload.status === 400) {
+        return {
+          success: false,
+          error: `Error 400 - Bad Request. Verifica: 1) Bucket es público, 2) Políticas RLS configuradas, 3) Tipo de archivo válido. Detalles: ${errorUpload.message}`
+        }
+      }
+
       return {
         success: false,
-        error: `Error al subir archivo: ${errorUpload.message}`
+        error: `Error al subir archivo: ${errorUpload.message || 'Error desconocido'}`
       }
     }
 
