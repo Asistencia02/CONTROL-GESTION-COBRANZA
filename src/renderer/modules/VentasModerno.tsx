@@ -549,8 +549,36 @@ export const VentasModerno: React.FC = () => {
             </div>
           </div>
         )}
+
+        {tabActiva === 'insumos' && (
+          <div className="p-3 sm:p-4 md:p-6 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-lg sm:rounded-xl">
+            <TablaInsumos
+              insumos={insumos}
+              loading={insumosLoading}
+              onAgregar={() => {
+                setInsumoEditando(null)
+                setModalAbrirInsumo(true)
+              }}
+              onEditar={handleEditarInsumo}
+              onActualizarStock={handleActualizarStock}
+              onEliminar={handleEliminarInsumo}
+              onAgregarCategoria={() => {}}
+            />
+          </div>
+        )}
       </div>
+
+      {/* MODAL AGREGAR/EDITAR INSUMO */}
+      <ModalAgregarInsumo 
+        isOpen={modalAbrirInsumo} 
+        onClose={handleCerrarModalInsumo} 
+        onAgregar={(insumo) => agregarInsumo({ ...insumo, institucion_id: institucionActiva.id })} 
+        onActualizar={handleActualizarInsumo}
+        insumoEditando={insumoEditando}
+        categorias={[...new Set(insumos.map((i) => i.categoria).filter(Boolean))]} 
+      />
     </div>
   )
 }
 
+export default VentasModerno
