@@ -3,6 +3,21 @@ import { useAuth } from '@renderer/hooks/useAuth'
 import { Sidebar } from '@renderer/components/Sidebar'
 import { ModalCambiarContrasena } from '@renderer/components/ModalCambiarContrasena'
 import { LoginModerno } from '@renderer/modules/LoginModerno'
+import { AdminPermisosModerno } from '@renderer/modules/AdminPermisosModerno'
+import { DashboardModerno } from '@renderer/modules/DashboardModerno'
+import { Cobranzas } from '@renderer/modules/Cobranzas'
+import { DeudasModerno } from '@renderer/modules/DeudasModerno'
+import { VentasModerno } from '@renderer/modules/VentasModerno'
+import { ConfiguracionModerno } from '@renderer/modules/ConfiguracionModerno'
+import { GastosModerno } from '@renderer/modules/GastosModerno'
+import { ReportesFinancierosModerno } from '@renderer/modules/ReportesFinancierosModerno'
+import { CierreModerno } from '@renderer/modules/CierreModerno'
+import { VentaKioscoModerno } from '@renderer/modules/VentaKioscoModerno'
+import { KioscoConfiguracionModerno } from '@renderer/modules/KioscoConfiguracionModerno'
+import { GestionEstudiantesModerno } from '@renderer/modules/GestionEstudiantesModerno'
+import { Sincronizacion } from '@renderer/modules/Sincronizacion'
+import { supabase } from '@renderer/lib/supabase'
+import '@renderer/lib/verificarVariables'
 
 type ModuleId = 'dashboard' | 'cobranzas' | 'deudas' | 'ventas' | 'ventakiosco' | 'gastos' | 'reportes' | 'cierre' | 'configuracion' | 'kioscoconfig' | 'sincronizacion' | 'estudiantes' | 'admin'
 
@@ -16,7 +31,6 @@ const checkConnection = async (): Promise<boolean> => {
 }
 
 export const App: React.FC = () => {
-  // v2.0 - Force reload
   const { usuarioActual, autenticado, modulosPermitidos, logout, cambiarContrasenia, error: errorContrasenia, loading: loadingContrasenia } = useAuth()
   
   const [activeModule, setActiveModule] = useState<ModuleId>('dashboard')
@@ -25,13 +39,11 @@ export const App: React.FC = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [modalCambiarContrasenaAbierto, setModalCambiarContrasenaAbierto] = useState(false)
 
-  // Wrapper para cambiar contraseña con usuario actual
   const handleCambiarContrasenia = async (contraseniaActual: string, contrasenianueva: string) => {
     if (!usuarioActual) return false
     return await cambiarContrasenia(usuarioActual.id, contraseniaActual, contrasenianueva)
   }
 
-  // Cargar usuario desde localStorage si existe
   useEffect(() => {
     const usuarioGuardado = localStorage.getItem('usuarioActual')
     setUsuarioLoaded(true)
@@ -54,27 +66,21 @@ export const App: React.FC = () => {
     return () => { isMounted = false }
   }, [])
 
-  // Si autenticado y modulosPermitidos cargados, ir al primer módulo permitido si no es dashboard
   useEffect(() => {
     if (autenticado && modulosPermitidos.length > 0) {
-      // Si dashboard no está en la lista, ir al primer módulo permitido
       if (!modulosPermitidos.includes('dashboard') && activeModule === 'dashboard') {
         setActiveModule(modulosPermitidos[0] as ModuleId)
-      }
-      // Si el módulo actual no está permitido, ir al primero permitido
-      else if (!modulosPermitidos.includes(activeModule) && activeModule !== 'admin') {
+      } else if (!modulosPermitidos.includes(activeModule) && activeModule !== 'admin') {
         setActiveModule(modulosPermitidos[0] as ModuleId)
       }
     }
   }, [autenticado, modulosPermitidos])
 
   const renderModule = () => {
-    // ADMIN siempre puede ver panel de permisos
     if (activeModule === 'admin' && usuarioActual?.rol === 'ADMIN') {
       return <AdminPermisosModerno />
     }
 
-    // Validar acceso al módulo
     if (!modulosPermitidos.includes(activeModule) && activeModule !== 'dashboard' && activeModule !== 'admin') {
       return (
         <div className="flex items-center justify-center h-screen">
@@ -105,14 +111,12 @@ export const App: React.FC = () => {
 
   const isLoading = supabaseConnected === null || !usuarioLoaded
 
-  // MOSTRAR LOGIN si no está autenticado
   if (!autenticado) {
     return <LoginModerno onLoginSuccess={() => {}} />
   }
 
   return (
     <div className="flex h-screen w-screen bg-gray-100 flex-col md:flex-row">
-      {/* Hamburger menu en mobile */}
       <div className="md:hidden flex items-center gap-2 bg-slate-900 border-b border-slate-700/50 px-4 py-3 z-40">
         <button
           onClick={() => setSidebarOpen(!sidebarOpen)}
@@ -132,7 +136,7 @@ export const App: React.FC = () => {
             logout()
           } else {
             setActiveModule(id as ModuleId)
-            setSidebarOpen(false) // Cerrar en mobile
+            setSidebarOpen(false)
           }
         }}
         modulosPermitidos={modulosPermitidos}
@@ -143,7 +147,6 @@ export const App: React.FC = () => {
         onCambiarContrasena={() => setModalCambiarContrasenaAbierto(true)}
       />
 
-      {/* Main content - scrolleable */}
       <main className="flex-1 w-full bg-slate-900 overflow-y-auto">
         {isLoading ? (
           <div className="flex items-center justify-center h-full">
@@ -159,17 +162,13 @@ export const App: React.FC = () => {
         )}
       </main>
 
-      {/* MODAL CAMBIAR CONTRASEÑA */}
-      <Suspense fallback={null}>
-        <ModalCambiarContrasena
-          isOpen={modalCambiarContrasenaAbierto}
-          onClose={() => setModalCambiarContrasenaAbierto(false)}
-          onCambiar={handleCambiarContrasenia}
-          error={errorContrasenia}
-          loading={loadingContrasenia}
-        />
-      </Suspense>
+      <ModalCambiarContrasena
+        isOpen={modalCambiarContrasenaAbierto}
+        onClose={() => setModalCambiarContrasenaAbierto(false)}
+        onCambiar={handleCambiarContrasenia}
+        error={errorContrasenia}
+        loading={loadingContrasenia}
+      />
     </div>
   )
 }
-
