@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useAuth } from '@renderer/hooks/useAuth'
 import { Sidebar } from '@renderer/components/Sidebar'
+import { ModalCambiarContrasena } from '@renderer/components/ModalCambiarContrasena'
 import { LoginModerno } from '@renderer/modules/LoginModerno'
 import { AdminPermisosModerno } from '@renderer/modules/AdminPermisosModerno'
 import { DashboardModerno } from '@renderer/modules/DashboardModerno'
@@ -30,7 +31,7 @@ const checkConnection = async (): Promise<boolean> => {
 }
 
 export const App: React.FC = () => {
-  const { usuarioActual, autenticado, modulosPermitidos, logout } = useAuth()
+  const { usuarioActual, autenticado, modulosPermitidos, logout, cambiarContrasenia, error: errorContrasenia, loading: loadingContrasenia } = useAuth()
   
   const [activeModule, setActiveModule] = useState<ModuleId>('dashboard')
   const [supabaseConnected, setSupabaseConnected] = useState<boolean | null>(null)
@@ -165,6 +166,15 @@ export const App: React.FC = () => {
           renderModule()
         )}
       </main>
+
+      {/* MODAL CAMBIAR CONTRASEÑA */}
+      <ModalCambiarContrasena
+        isOpen={modalCambiarContrasenaAbierto}
+        onClose={() => setModalCambiarContrasenaAbierto(false)}
+        onCambiar={cambiarContrasenia}
+        error={errorContrasenia}
+        loading={loadingContrasenia}
+      />
     </div>
   )
 }
