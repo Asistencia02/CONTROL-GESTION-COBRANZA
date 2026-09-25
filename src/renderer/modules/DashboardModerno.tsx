@@ -309,16 +309,10 @@ export const DashboardModerno: React.FC = () => {
       )}
 
       {/* MODAL CAMBIAR CONTRASEÑA */}
-      <ModalCambiarContrasena
-        isOpen={modalCambiarContrasenaAbierto}
-        onClose={() => setModalCambiarContrasenaAbierto(false)}
-        onCambiar={cambiarContrasenia}
-        error={errorContrasenia}
-        loading={loadingContrasenia}
-      />
-    </div>
+</div>
   )
 }
+
 
 
 
