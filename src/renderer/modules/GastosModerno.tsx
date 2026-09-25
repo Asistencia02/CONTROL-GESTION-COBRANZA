@@ -61,7 +61,8 @@ export const GastosModerno: React.FC = () => {
       if (formData.archivo) {
         const resultadoUpload = await subirArchivoGasto(
           formData.archivo,
-          institucionActiva.id
+          institucionActiva.id,
+          usuarioActual?.id || 0
         )
 
         if (!resultadoUpload.success) {
@@ -550,3 +551,5 @@ export const GastosModerno: React.FC = () => {
 }
 
 export default GastosModerno
+
+

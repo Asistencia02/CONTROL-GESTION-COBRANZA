@@ -8,19 +8,19 @@ interface UploadGastoArchivoResult {
 }
 
 /**
- * Sube un archivo de factura/comprobante a Supabase Storage
+ * Sube un archivo de factura/comprobante usando Edge Function
  * @param archivo - File object del input
  * @param institucionId - ID de la institución
- * @param gastoId - ID del gasto (opcional, para organizar carpetas)
+ * @param usuarioId - ID del usuario (para validación en Edge Function)
  * @returns URL pública del archivo o error
  */
 export const subirArchivoGasto = async (
   archivo: File,
   institucionId: number,
-  gastoId?: number
+  usuarioId: number
 ): Promise<UploadGastoArchivoResult> => {
   try {
-    // Validaciones
+    // Validaciones locales (primeras defensas)
     if (!archivo) {
       return { success: false, error: 'No se seleccionó archivo' }
     }
@@ -43,123 +43,62 @@ export const subirArchivoGasto = async (
       }
     }
 
-    // Verificar que Supabase está configurado
-    if (!supabase) {
+    // Validaciones completadas, llamar Edge Function
+    console.log(`📤 Llamando Edge Function para subir: ${archivo.name}`)
+
+    // Crear FormData para enviar archivo
+    const formData = new FormData()
+    formData.append('archivo', archivo)
+    formData.append('institucion_id', institucionId.toString())
+    formData.append('usuario_id', usuarioId.toString())
+
+    // Obtener URL de Supabase
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://tcqamchiwtijniiwbpde.supabase.co'
+    const edgeFunctionUrl = `${supabaseUrl}/functions/v1/upload-gasto-comprobante`
+
+    // Llamar Edge Function
+    const response = await fetch(edgeFunctionUrl, {
+      method: 'POST',
+      body: formData,
+      // NO incluir Content-Type header (FormData lo hace automáticamente)
+    })
+
+    // Verificar respuesta
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ error: 'Error desconocido' }))
+      console.error(`❌ Error en Edge Function (${response.status}):`, errorData)
+      
       return {
         success: false,
-        error: 'Supabase no está configurado correctamente'
+        error: errorData.error || `Error ${response.status}: ${response.statusText}`
       }
     }
 
-    // Generar nombre único
-    const timestamp = Date.now()
-    const extension = archivo.name.split('.').pop() || 'archivo'
-    const nombreArchivo = `gasto-${institucionId}-${timestamp}.${extension}`
-    const carpeta = `gastos/${institucionId}`
-    const ruta = `${carpeta}/${nombreArchivo}`
+    // Parsear respuesta exitosa
+    const data = await response.json()
 
-    console.log(`📤 Subiendo archivo: ${ruta}`)
-
-    // Subir a Supabase Storage
-    const { data, error: errorUpload } = await supabase.storage
-      .from('comprobantes')
-      .upload(ruta, archivo, {
-        cacheControl: '3600',
-        upsert: false,
-      })
-
-    if (errorUpload) {
-      console.error('❌ Error uploading to storage:', errorUpload)
-      console.error('Status:', errorUpload.status)
-      console.error('Message:', errorUpload.message)
-      console.error('Full error:', JSON.stringify(errorUpload, null, 2))
-      
-      // Manejo específico de errores
-      if (errorUpload.message?.includes('row-level security')) {
-        return {
-          success: false,
-          error: 'Error de permisos: Configura las políticas RLS en Supabase Storage (bucket: comprobantes)'
-        }
-      }
-      
-      if (errorUpload.message?.includes('Bucket not found')) {
-        return {
-          success: false,
-          error: 'Error: Bucket "comprobantes" no existe en Supabase Storage'
-        }
-      }
-
-      if (errorUpload.status === 400) {
-        return {
-          success: false,
-          error: `Error 400 - Bad Request. Verifica: 1) Bucket es público, 2) Políticas RLS configuradas, 3) Tipo de archivo válido. Detalles: ${errorUpload.message}`
-        }
-      }
-
+    if (!data.success) {
+      console.error('❌ Edge Function retornó error:', data.error)
       return {
         success: false,
-        error: `Error al subir archivo: ${errorUpload.message || 'Error desconocido'}`
+        error: data.error || 'Error desconocido en Edge Function'
       }
     }
 
-    // Obtener URL pública
-    const { data: datosPublicos } = supabase.storage
-      .from('comprobantes')
-      .getPublicUrl(ruta)
-
-    console.log(`✅ Archivo subido exitosamente: ${datosPublicos.publicUrl}`)
+    console.log(`✅ Archivo subido exitosamente: ${data.url}`)
 
     return {
       success: true,
-      url: datosPublicos.publicUrl,
-      tipoArchivo: archivo.type.includes('image') ? 'imagen' : 'pdf'
+      url: data.url,
+      tipoArchivo: data.tipoArchivo
     }
   } catch (err) {
     console.error('❌ Error en subirArchivoGasto:', err)
     const mensaje = err instanceof Error ? err.message : 'Error desconocido'
     return {
       success: false,
-      error: `Error desconocido al subir archivo: ${mensaje}`
+      error: `Error al subir archivo: ${mensaje}`
     }
-  }
-}
-
-/**
- * Elimina un archivo de comprobante de Supabase Storage
- * @param archivoUrl - URL pública del archivo
- * @param institucionId - ID de la institución
- */
-export const eliminarArchivoGasto = async (
-  archivoUrl: string,
-  institucionId: number
-): Promise<{ success: boolean; error?: string }> => {
-  try {
-    if (!archivoUrl) {
-      return { success: false, error: 'URL vacía' }
-    }
-
-    // Extraer ruta del archivo de la URL pública
-    // Formato: https://[supabase-url]/storage/v1/object/public/comprobantes/gastos/[institucionId]/[archivo]
-    const partes = archivoUrl.split('comprobantes/')
-    if (partes.length < 2) {
-      return { success: false, error: 'URL de archivo inválida' }
-    }
-
-    const ruta = partes[1]
-
-    const { error: errorDelete } = await supabase.storage
-      .from('comprobantes')
-      .remove([ruta])
-
-    if (errorDelete) {
-      console.error('Error deleting from storage:', errorDelete)
-      return { success: false, error: errorDelete.message }
-    }
-
-    return { success: true }
-  } catch (err) {
-    console.error('Error en eliminarArchivoGasto:', err)
-    return { success: false, error: 'Error desconocido al eliminar archivo' }
   }
 }
 
