@@ -36,6 +36,7 @@ export const App: React.FC = () => {
   const [supabaseConnected, setSupabaseConnected] = useState<boolean | null>(null)
   const [usuarioLoaded, setUsuarioLoaded] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [modalCambiarContrasenaAbierto, setModalCambiarContrasenaAbierto] = useState(false)
 
   // Cargar usuario desde localStorage si existe
   useEffect(() => {
@@ -146,6 +147,7 @@ export const App: React.FC = () => {
         esAdmin={usuarioActual?.rol === 'ADMIN'}
         isOpen={sidebarOpen}
         onToggle={() => setSidebarOpen(!sidebarOpen)}
+        onCambiarContrasena={() => setModalCambiarContrasenaAbierto(true)}
       />
 
       {/* Main content - scrolleable */}

@@ -35,6 +35,7 @@ interface SidebarProps {
   esAdmin?: boolean
   isOpen?: boolean
   onToggle?: () => void
+  onCambiarContrasena?: () => void
 }
 
 const NAV_ITEMS: NavItem[] = [
@@ -125,7 +126,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   usuarioActual, 
   esAdmin = false,
   isOpen = true,
-  onToggle
+  onToggle,
+  onCambiarContrasena
 }) => {
   const [hoveredItem, setHoveredItem] = useState<string | null>(null)
 
@@ -270,6 +272,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 </button>
               </div>
             )}
+            {/* Botón Cambiar Contraseña */}
+            <div className="mt-2">
+              <button
+                onClick={onCambiarContrasena}
+                className="w-full text-xs px-2 py-1 bg-blue-600/30 hover:bg-blue-600/50 text-blue-300 rounded border border-blue-500/30 font-semibold transition flex items-center justify-center gap-1"
+              >
+                <Lock size={14} />
+                🔑 Cambiar Contraseña
+              </button>
+            </div>
           </div>
         </div>
 
