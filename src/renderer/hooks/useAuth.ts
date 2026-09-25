@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { supabase } from '@renderer/lib/supabase'
+import { hashPassword, comparePassword, isPasswordHashed } from '@renderer/lib/passwordUtils'
 
 export interface Usuario {
   id: number
@@ -38,6 +39,7 @@ interface UseAuthStore {
   obtenerInstitucionesUsuario: (usuario_id: number) => Promise<any[]>
   actualizarPuedeCambiarInstitucion: (usuario_id: number, puede: boolean) => Promise<boolean>
   actualizarContraseniaUsuario: (usuario_id: number, contrasenia: string) => Promise<boolean>
+  cambiarContrasenia: (usuario_id: number, contraseniaActual: string, contrasenianueva: string) => Promise<boolean>
 }
 
 export const useAuth = create<UseAuthStore>((set, get) => {
@@ -78,7 +80,33 @@ export const useAuth = create<UseAuthStore>((set, get) => {
           return false
         }
 
-        if (usuarios.contraseña !== contraseña) {
+        // Verificar contraseña (soporta tanto texto plano como hasheado)
+        let contraseniaValida = false
+        
+        if (isPasswordHashed(usuarios.contraseña)) {
+          // Contraseña hasheada - usar bcrypt
+          contraseniaValida = await comparePassword(contraseña, usuarios.contraseña)
+        } else {
+          // Contraseña en texto plano (compatibilidad backward)
+          contraseniaValida = usuarios.contraseña === contraseña
+          
+          // Si coincide contraseña en texto plano, hashearla para próxima vez
+          if (contraseniaValida) {
+            try {
+              const hashedPassword = await hashPassword(contraseña)
+              await supabase
+                .from('usuarios')
+                .update({ contraseña: hashedPassword })
+                .eq('id', usuarios.id)
+              console.log('✅ Contraseña hasheada automáticamente para:', nombreCompleto)
+            } catch (hashErr) {
+              console.error('⚠️ No se pudo hashear contraseña:', hashErr)
+              // Continuar igualmente, la contraseña funciona
+            }
+          }
+        }
+
+        if (!contraseniaValida) {
           set({ error: 'Contraseña incorrecta' })
           return false
         }
@@ -391,19 +419,92 @@ export const useAuth = create<UseAuthStore>((set, get) => {
           throw new Error('La contraseña no puede estar vacía')
         }
 
+        if (contrasenia.length < 6) {
+          throw new Error('La contraseña debe tener mínimo 6 caracteres')
+        }
+
+        const hashedPassword = await hashPassword(contrasenia)
+
         const { error } = await supabase
           .from('usuarios')
-          .update({ contraseña: contrasenia })
+          .update({ contraseña: hashedPassword })
           .eq('id', usuario_id)
 
         if (error) throw error
 
-        console.log('Contraseña actualizada:', usuario_id)
+        console.log('✅ Contraseña actualizada (hasheada):', usuario_id)
         return true
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Error al actualizar contraseña'
         set({ error: message })
         console.error('Error actualizando contraseña:', err)
+        return false
+      } finally {
+        set({ loading: false })
+      }
+    },
+
+    cambiarContrasenia: async (usuario_id: number, contraseniaActual: string, contrasenianueva: string) => {
+      set({ loading: true, error: null })
+      try {
+        if (!contraseniaActual || contraseniaActual.trim().length === 0) {
+          throw new Error('Debes ingresar tu contraseña actual')
+        }
+
+        if (!contrasenianueva || contrasenianueva.trim().length === 0) {
+          throw new Error('La nueva contraseña no puede estar vacía')
+        }
+
+        if (contraseniaActual === contrasenianueva) {
+          throw new Error('La nueva contraseña debe ser diferente a la actual')
+        }
+
+        if (contrasenianueva.length < 6) {
+          throw new Error('La nueva contraseña debe tener mínimo 6 caracteres')
+        }
+
+        // Obtener usuario actual
+        const { data: usuario, error: errorBusqueda } = await supabase
+          .from('usuarios')
+          .select('*')
+          .eq('id', usuario_id)
+          .single()
+
+        if (errorBusqueda || !usuario) {
+          throw new Error('Usuario no encontrado')
+        }
+
+        // Verificar contraseña actual
+        let contraseniaValida = false
+        
+        if (isPasswordHashed(usuario.contraseña)) {
+          contraseniaValida = await comparePassword(contraseniaActual, usuario.contraseña)
+        } else {
+          contraseniaValida = usuario.contraseña === contraseniaActual
+        }
+
+        if (!contraseniaValida) {
+          throw new Error('Contraseña actual incorrecta')
+        }
+
+        // Hashear nueva contraseña
+        const hashedPassword = await hashPassword(contrasenianueva)
+
+        // Actualizar en BD
+        const { error: updateError } = await supabase
+          .from('usuarios')
+          .update({ contraseña: hashedPassword })
+          .eq('id', usuario_id)
+
+        if (updateError) throw updateError
+
+        console.log('✅ Contraseña cambiada exitosamente:', usuario_id)
+        set({ error: null })
+        return true
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Error al cambiar contraseña'
+        set({ error: message })
+        console.error('Error cambiando contraseña:', err)
         return false
       } finally {
         set({ loading: false })
