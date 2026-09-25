@@ -3,7 +3,8 @@ import { useInstitucion } from '@renderer/hooks/useInstitucion'
 import { useGastos } from '@renderer/hooks/useGastos'
 import { useAuth } from '@renderer/hooks/useAuth'
 import { formatoMoneda } from '@renderer/lib/helpers'
-import { TrendingDown, Plus, AlertCircle, PieChart, RefreshCw } from 'lucide-react'
+import { subirArchivoGasto, esImagenDelUrl } from '@renderer/lib/gastoStorageUtils'
+import { TrendingDown, Plus, AlertCircle, PieChart, RefreshCw, FileUp, X } from 'lucide-react'
 import { Pagination } from '@renderer/components/Pagination'
 import { AdvancedSearch } from '@renderer/components/AdvancedSearch'
 import { ExportButton } from '@renderer/components/ExportButton'
@@ -21,7 +22,9 @@ export const GastosModerno: React.FC = () => {
     descripcion: '',
     monto: '',
     metodo_pago: 'EFECTIVO' as 'EFECTIVO' | 'TRANSFERENCIA' | 'TARJETA' | 'CHEQUE',
+    archivo: null as File | null,
   })
+  const [archivoPreview, setArchivoPreview] = useState<string>('')
 
   const [registrando, setRegistrando] = useState(false)
   const [successMessage, setSuccessMessage] = useState('')
@@ -50,7 +53,29 @@ export const GastosModerno: React.FC = () => {
       const usuarioNombre = usuarioActual?.nombre_completo || 'SISTEMA'
       const notasConUsuario = `[${usuarioNombre}]`
       
-      await agregarGasto({
+      // Variables para archivo (opcional)
+      let archivoUrl: string | null = null
+      let tipoArchivo: string | null = null
+
+      // Si hay archivo, subirlo primero
+      if (formData.archivo) {
+        const resultadoUpload = await subirArchivoGasto(
+          formData.archivo,
+          institucionActiva.id
+        )
+
+        if (!resultadoUpload.success) {
+          alert(`Error al subir archivo: ${resultadoUpload.error}`)
+          setRegistrando(false)
+          return
+        }
+
+        archivoUrl = resultadoUpload.url || null
+        tipoArchivo = resultadoUpload.tipoArchivo || null
+      }
+
+      // Guardar gasto con URL del archivo (si existe)
+      const gastoData: any = {
         institucion_id: institucionActiva.id,
         categoria: formData.categoria,
         descripcion: formData.descripcion,
@@ -59,10 +84,21 @@ export const GastosModerno: React.FC = () => {
         comprobante_numero: null,
         fecha_gasto: new Date().toISOString().split('T')[0],
         notas: notasConUsuario
-      })
+      }
 
-      setSuccessMessage(`Gasto registrado: ${formData.descripcion}`)
-      setFormData({ categoria: 'Servicios', descripcion: '', monto: '', metodo_pago: 'EFECTIVO' })
+      // Agregar archivo_url y tipo_archivo si existen (columnas opcionales)
+      if (archivoUrl) {
+        gastoData.archivo_url = archivoUrl
+        gastoData.tipo_archivo = tipoArchivo
+        gastoData.fecha_subida = new Date().toISOString()
+      }
+
+      await agregarGasto(gastoData)
+
+      const mensajeArchivo = archivoUrl ? ' + Comprobante subido' : ''
+      setSuccessMessage(`Gasto registrado: ${formData.descripcion}${mensajeArchivo}`)
+      setFormData({ categoria: 'Servicios', descripcion: '', monto: '', metodo_pago: 'EFECTIVO', archivo: null })
+      setArchivoPreview('')
       await cargarDatos()
       setTimeout(() => setSuccessMessage(''), 3000)
     } catch (error) {
@@ -295,6 +331,74 @@ export const GastosModerno: React.FC = () => {
                 </div>
               </div>
 
+              <div>
+                <label className="block text-xs sm:text-sm font-bold text-slate-300 mb-1.5 sm:mb-2 flex items-center gap-2">
+                  <FileUp size={16} className="text-green-400" />
+                  📎 Factura/Foto (Opcional)
+                </label>
+                <div className="relative">
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,application/pdf"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0]
+                      if (file) {
+                        setFormData({ ...formData, archivo: file })
+                        // Preview para imágenes
+                        if (file.type.startsWith('image')) {
+                          const reader = new FileReader()
+                          reader.onload = (evt) => {
+                            setArchivoPreview(evt.target?.result as string)
+                          }
+                          reader.readAsDataURL(file)
+                        } else {
+                          setArchivoPreview(`📄 ${file.name}`)
+                        }
+                      }
+                    }}
+                    className="w-full px-3 sm:px-4 py-2 sm:py-3 bg-slate-700/50 border-2 border-dashed border-slate-600/50 rounded-lg text-xs sm:text-sm text-white placeholder-slate-400 focus:border-green-500/50 focus:outline-none transition cursor-pointer"
+                  />
+                  <span className="absolute right-3 top-2.5 text-slate-400 text-xs font-semibold">JPG, PNG, PDF (Máx 10MB)</span>
+                </div>
+                {archivoPreview && (
+                  <div className="mt-2 sm:mt-3 relative">
+                    {formData.archivo?.type.startsWith('image') ? (
+                      <div className="relative">
+                        <img
+                          src={archivoPreview}
+                          alt="Preview"
+                          className="max-h-32 sm:max-h-40 rounded-lg border border-slate-600/50 object-cover"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setFormData({ ...formData, archivo: null })
+                            setArchivoPreview('')
+                          }}
+                          className="absolute top-1 right-1 p-1 bg-red-600 hover:bg-red-700 rounded-full transition"
+                        >
+                          <X size={14} className="text-white" />
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="p-2 sm:p-3 bg-slate-700/50 rounded-lg border border-slate-600/50 flex items-center justify-between">
+                        <span className="text-xs sm:text-sm text-slate-300 truncate">{archivoPreview}</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setFormData({ ...formData, archivo: null })
+                            setArchivoPreview('')
+                          }}
+                          className="p-1 bg-red-600 hover:bg-red-700 rounded-full transition flex-shrink-0 ml-2"
+                        >
+                          <X size={14} className="text-white" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
               <button
                 type="submit"
                 disabled={registrando}
@@ -362,6 +466,7 @@ export const GastosModerno: React.FC = () => {
                           <th className="px-2 sm:px-4 py-2 sm:py-3 text-right text-slate-300 font-bold">Monto</th>
                           <th className="px-2 sm:px-4 py-2 sm:py-3 text-center text-slate-300 font-bold">Metodo</th>
                           <th className="px-2 sm:px-4 py-2 sm:py-3 text-left text-slate-300 font-bold hidden sm:table-cell">Usuario</th>
+                          <th className="px-2 sm:px-4 py-2 sm:py-3 text-center text-slate-300 font-bold hidden md:table-cell">Comprobante</th>
                           <th className="px-2 sm:px-4 py-2 sm:py-3 text-left text-slate-300 font-bold hidden md:table-cell">Fecha</th>
                         </tr>
                       </thead>
@@ -380,6 +485,20 @@ export const GastosModerno: React.FC = () => {
                               <span className="px-2 py-0.5 sm:px-3 sm:py-1 bg-purple-500/20 text-purple-300 rounded text-xs font-semibold">
                                 {extractUserFromGasto(gasto)}
                               </span>
+                            </td>
+                            <td className="px-2 sm:px-4 py-2 sm:py-3 text-center hidden md:table-cell">
+                              {gasto.archivo_url ? (
+                                <a
+                                  href={gasto.archivo_url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1 px-2 py-1 bg-green-500/20 text-green-300 hover:bg-green-500/30 rounded text-xs font-bold border border-green-500/50 transition"
+                                >
+                                  {esImagenDelUrl(gasto.archivo_url) ? '🖼️ Ver' : '📄 Ver'}
+                                </a>
+                              ) : (
+                                <span className="text-slate-500 text-xs">-</span>
+                              )}
                             </td>
                             <td className="px-2 sm:px-4 py-2 sm:py-3 text-slate-400 text-xs hidden md:table-cell">{gasto.fecha_gasto}</td>
                           </tr>
