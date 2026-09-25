@@ -8,10 +8,11 @@ interface UploadGastoArchivoResult {
 }
 
 /**
- * Sube un archivo de factura/comprobante usando Edge Function
+ * Sube un archivo de factura/comprobante directamente a Storage
+ * REQUIERE: Bucket "comprobantes" con RLS DESHABILITADO
  * @param archivo - File object del input
  * @param institucionId - ID de la institución
- * @param usuarioId - ID del usuario (para validación en Edge Function)
+ * @param usuarioId - ID del usuario (para logs)
  * @returns URL pública del archivo o error
  */
 export const subirArchivoGasto = async (
@@ -20,7 +21,7 @@ export const subirArchivoGasto = async (
   usuarioId: number
 ): Promise<UploadGastoArchivoResult> => {
   try {
-    // Validaciones locales (primeras defensas)
+    // Validaciones locales
     if (!archivo) {
       return { success: false, error: 'No se seleccionó archivo' }
     }
@@ -35,7 +36,7 @@ export const subirArchivoGasto = async (
     }
 
     // Validar tamaño (máximo 10 MB)
-    const maxTamano = 10 * 1024 * 1024 // 10 MB
+    const maxTamano = 10 * 1024 * 1024
     if (archivo.size > maxTamano) {
       return {
         success: false,
@@ -43,69 +44,70 @@ export const subirArchivoGasto = async (
       }
     }
 
-    // Validaciones completadas, llamar Edge Function
-    console.log(`📤 Llamando Edge Function para subir: ${archivo.name}`)
+    console.log(`📤 Subiendo archivo a Storage: ${archivo.name}`)
 
-    // Crear FormData para enviar archivo
-    const formData = new FormData()
-    formData.append('archivo', archivo)
-    formData.append('institucion_id', institucionId.toString())
-    formData.append('usuario_id', usuarioId.toString())
+    // Generar nombre único
+    const timestamp = Date.now()
+    const extension = archivo.name.split('.').pop() || 'archivo'
+    const nombreArchivo = `gasto-${institucionId}-${timestamp}.${extension}`
+    const carpeta = `gastos/${institucionId}`
+    const ruta = `${carpeta}/${nombreArchivo}`
 
-    // Obtener URL de Supabase
-    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://tcqamchiwtijniiwbpde.supabase.co'
-    const edgeFunctionUrl = `${supabaseUrl}/functions/v1/upload-gasto-comprobante`
+    // SUBIR DIRECTAMENTE A STORAGE (sin Edge Function)
+    const { data, error } = await supabase.storage
+      .from('comprobantes')
+      .upload(ruta, archivo, {
+        contentType: archivo.type,
+        cacheControl: '3600',
+        upsert: false,
+      })
 
-    // Obtener token Supabase (si existe sesión)
-    const token = localStorage.getItem('supabase.auth.token')
-    
-    const headers: HeadersInit = {}
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`
-    }
+    if (error) {
+      console.error('❌ Error uploading to Storage:', error)
+      console.error('Status:', error.status)
+      console.error('Message:', error.message)
 
-    // Llamar Edge Function
-    const response = await fetch(edgeFunctionUrl, {
-      method: 'POST',
-      body: formData,
-      headers: headers,
-    })
+      // Errores específicos
+      if (error.message?.includes('row-level security')) {
+        return {
+          success: false,
+          error: 'Error RLS: Deshabilita RLS en Supabase Storage (bucket: comprobantes)'
+        }
+      }
 
-    // Verificar respuesta
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ error: 'Error desconocido' }))
-      console.error(`❌ Error en Edge Function (${response.status}):`, errorData)
-      
+      if (error.message?.includes('Bucket not found')) {
+        return {
+          success: false,
+          error: 'Error: Bucket "comprobantes" no existe. Créalo en Supabase Storage.'
+        }
+      }
+
       return {
         success: false,
-        error: errorData.error || `Error ${response.status}: ${response.statusText}`
+        error: `Error al subir: ${error.message}`
       }
     }
 
-    // Parsear respuesta exitosa
-    const data = await response.json()
+    // Obtener URL pública
+    const { data: datosPublicos } = supabase.storage
+      .from('comprobantes')
+      .getPublicUrl(ruta)
 
-    if (!data.success) {
-      console.error('❌ Edge Function retornó error:', data.error)
-      return {
-        success: false,
-        error: data.error || 'Error desconocido en Edge Function'
-      }
-    }
+    const archivoUrl = datosPublicos.publicUrl
 
-    console.log(`✅ Archivo subido exitosamente: ${data.url}`)
+    console.log(`✅ Archivo subido: ${archivoUrl}`)
 
     return {
       success: true,
-      url: data.url,
-      tipoArchivo: data.tipoArchivo
+      url: archivoUrl,
+      tipoArchivo: archivo.type.includes('image') ? 'imagen' : 'pdf'
     }
   } catch (err) {
     console.error('❌ Error en subirArchivoGasto:', err)
     const mensaje = err instanceof Error ? err.message : 'Error desconocido'
     return {
       success: false,
-      error: `Error al subir archivo: ${mensaje}`
+      error: `Error: ${mensaje}`
     }
   }
 }
