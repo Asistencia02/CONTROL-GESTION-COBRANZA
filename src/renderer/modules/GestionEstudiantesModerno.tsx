@@ -92,9 +92,12 @@ export const GestionEstudiantesModerno: React.FC = () => {
       return true
     })
     .sort((a, b) => {
-      const nombreA = `${a.nombre} ${a.apellido}`.toLowerCase()
-      const nombreB = `${b.nombre} ${b.apellido}`.toLowerCase()
-      return nombreA.localeCompare(nombreB)
+      const apellidoA = a.apellido.toLowerCase()
+      const apellidoB = b.apellido.toLowerCase()
+      if (apellidoA === apellidoB) {
+        return a.nombre.toLowerCase().localeCompare(b.nombre.toLowerCase())
+      }
+      return apellidoA.localeCompare(apellidoB)
     })
 
   const estudiantesPaginados = estudiantesFiltrados.slice((currentPage - 1) * pageSize, currentPage * pageSize)
