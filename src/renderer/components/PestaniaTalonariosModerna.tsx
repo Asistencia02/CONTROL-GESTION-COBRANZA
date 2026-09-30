@@ -470,7 +470,7 @@ export const PestaniaTalonariosModerna: React.FC<PestaniaTalonariosModernaProps>
                 <option value="">-- Selecciona un estudiante --</option>
                 {estudiantesFiltrados.map((est) => (
                   <option key={est.id} value={est.id}>
-                    {est.nombre} {est.apellido} • {est.dni}
+                    {est.apellido}, {est.nombre} • {est.dni}
                   </option>
                 ))}
               </select>
@@ -711,7 +711,7 @@ export const PestaniaTalonariosModerna: React.FC<PestaniaTalonariosModernaProps>
 
             {estudiante && (
               <div className="mb-6 p-4 bg-slate-700/50 border border-blue-500/50 rounded-xl">
-                <p className="font-black text-white text-base">{estudiante.nombre} {estudiante.apellido}</p>
+                <p className="font-black text-white text-base">{estudiante.apellido}, {estudiante.nombre}</p>
                 <p className="text-xs text-slate-400 mt-2 flex items-center gap-1">
                   <span className="font-bold">DNI:</span> {estudiante.dni}
                 </p>

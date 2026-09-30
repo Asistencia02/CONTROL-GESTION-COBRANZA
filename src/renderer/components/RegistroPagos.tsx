@@ -284,7 +284,7 @@ export const RegistroPagos: React.FC<RegistroPagosProps> = ({
               <option value="">Todos</option>
               {estudiantes.map((est) => (
                 <option key={est.id} value={est.id}>
-                  {est.nombre} {est.apellido}
+                  {est.apellido}, {est.nombre}
                 </option>
               ))}
             </select>
@@ -358,7 +358,7 @@ export const RegistroPagos: React.FC<RegistroPagosProps> = ({
                   return (
                     <tr key={pago.id} className={`hover:bg-slate-700/20 transition border-slate-700/30 ${esAnulado(pago) ? 'bg-red-900/20' : ''}`}>
                       <td className="px-6 py-4 font-semibold text-white">
-                        {pago.estudiantes?.nombre} {pago.estudiantes?.apellido}
+                        {pago.estudiantes?.apellido}, {pago.estudiantes?.nombre}
                       </td>
                       <td className="px-6 py-4 text-slate-400 font-mono text-sm">{pago.estudiantes?.dni}</td>
                       <td className="px-6 py-4 text-slate-300">{pago.conceptos_pago?.nombre}</td>
@@ -483,7 +483,7 @@ export const RegistroPagos: React.FC<RegistroPagosProps> = ({
                 {pagosSinTalonario.map((pago) => (
                   <tr key={pago.id} className="hover:bg-orange-500/10 transition">
                     <td className="px-6 py-4 font-semibold text-white">
-                      {pago.estudiantes?.nombre} {pago.estudiantes?.apellido}
+                      {pago.estudiantes?.apellido}, {pago.estudiantes?.nombre}
                     </td>
                     <td className="px-6 py-4 text-orange-300 font-mono text-sm">{pago.estudiantes?.dni}</td>
                     <td className="px-6 py-4 text-orange-200">{pago.conceptos_pago?.nombre}</td>
