@@ -312,7 +312,7 @@ export const GestionEstudiantesModerno: React.FC = () => {
                   <tr key={estudiante.id} className="hover:bg-slate-700/30 transition">
                     <td className="px-2 sm:px-4 py-2 sm:py-4">
                       <p className="font-bold text-white text-xs sm:text-sm truncate">
-                        {estudiante.nombre} {estudiante.apellido}
+                        {estudiante.apellido}, {estudiante.nombre}
                       </p>
                       <p className="text-slate-400 text-xs sm:hidden">{estudiante.dni}</p>
                     </td>
