@@ -2,23 +2,28 @@ import React, { useState, useEffect } from 'react'
 import { useInstitucion } from '@renderer/hooks/useInstitucion'
 import { useVentaKiosco } from '@renderer/hooks/useVentaKiosco'
 import { useProductosKiosco } from '@renderer/hooks/useProductosKiosco'
+import { useFiados } from '@renderer/hooks/useFiados'
 import { formatoMoneda } from '@renderer/lib/helpers'
-import { ShoppingBag, Plus, TrendingUp, DollarSign, RefreshCw, AlertCircle, Lock, Unlock, History, Vault } from 'lucide-react'
+import { ShoppingBag, Plus, TrendingUp, DollarSign, RefreshCw, AlertCircle, Lock, Unlock, History, Vault, Users, CreditCard } from 'lucide-react'
 import { supabase } from '@renderer/lib/supabase'
 
-type TabVentaKiosco = 'registro' | 'historial' | 'caja' | 'cierres' | 'cajagrande' | 'resumen'
+type TabVentaKiosco = 'registro' | 'historial' | 'caja' | 'cierres' | 'cajagrande' | 'resumen' | 'fiados'
 
 export const VentaKioscoModerno: React.FC = () => {
   const { institucionActiva } = useInstitucion()
   const { ventasKiosco, cajaChica, cierresCaja, cajaGrande, cargarVentasKiosco, cargarCajaChicaActiva, cargarCierresCaja, cargarCajaGrande, abrirCajaChica, cerrarCajaChica, agregarVentaKiosco, totalVentasKiosco, totalEfectivo, totalCajaGrande, loading } = useVentaKiosco(institucionActiva.id)
 
   const { productos, cargarProductos, actualizarStock } = useProductosKiosco(institucionActiva.id)
+  const { fiados, cargarFiados, agregarCompraFiada, pagarFiado, obtenerOCrearFiado, detalles, cargarDetalles } = useFiados(institucionActiva.id)
 
   const [formData, setFormData] = useState({
     producto_id: 0,
     cantidad: 1,
-    metodo_pago: 'EFECTIVO' as 'EFECTIVO' | 'TRANSFERENCIA' | 'TARJETA' | 'CHEQUE',
+    metodo_pago: 'EFECTIVO' as 'EFECTIVO' | 'TRANSFERENCIA' | 'TARJETA' | 'CHEQUE' | 'A_CUENTA',
     monto_entregado: 0,
+    fiado_id: 0 as number | null,
+    nuevo_fiado_nombre: '',
+    nuevo_fiado_apellido: '',
   })
 
   const [saldoMinimoCaja, setSaldoMinimoCaja] = useState(5000)
@@ -28,11 +33,20 @@ export const VentaKioscoModerno: React.FC = () => {
   const [successMessage, setSuccessMessage] = useState('')
   const [errorMessage, setErrorMessage] = useState('')
   const [tabActiva, setTabActiva] = useState<TabVentaKiosco>('registro')
+  const [filadoSeleccionado, setFiadoSeleccionado] = useState<number | null>(null)
+  const [pagandoFiado, setPagandoFiado] = useState(false)
+  const [montoPago, setMontoPago] = useState(0)
 
   const productoSeleccionado = productos.find(p => p.id === formData.producto_id)
   const subtotal = formData.cantidad * (productoSeleccionado?.precio_unitario || 0)
   const cambio = Math.max(0, formData.monto_entregado - subtotal)
   const saldoActualCaja = cajaChica ? cajaChica.saldo_inicial + totalEfectivo : 0
+
+  const totalFiadosPendientes = fiados.filter(f => f.estado === 'activo').reduce((sum, f) => sum + f.monto_total_fiado, 0)
+
+  useEffect(() => {
+    cargarFiados()
+  }, [institucionActiva.id])
 
   const handleAbrirCaja = async () => {
     setCajaAbriendo(true)
@@ -87,15 +101,32 @@ export const VentaKioscoModerno: React.FC = () => {
       return
     }
 
+    if (formData.metodo_pago === 'A_CUENTA') {
+      if (!formData.fiado_id && (!formData.nuevo_fiado_nombre || !formData.nuevo_fiado_apellido)) {
+        setErrorMessage('Selecciona un cliente o ingresa nombre y apellido')
+        return
+      }
+    }
+
     setRegistrando(true)
     try {
+      if (formData.metodo_pago === 'A_CUENTA') {
+        let fiadoId = formData.fiado_id
+        if (!fiadoId) {
+          const nuevoFiado = await obtenerOCrearFiado(formData.nuevo_fiado_nombre, formData.nuevo_fiado_apellido)
+          fiadoId = nuevoFiado.id
+        }
+
+        await agregarCompraFiada(fiadoId, subtotal, `${productoSeleccionado.nombre} x${formData.cantidad}`)
+      }
+
       await agregarVentaKiosco({
         institucion_id: institucionActiva.id,
         producto: productoSeleccionado.nombre,
         cantidad: formData.cantidad,
         precio_unitario: productoSeleccionado.precio_unitario,
         subtotal,
-        metodo_pago: formData.metodo_pago,
+        metodo_pago: formData.metodo_pago === 'A_CUENTA' ? 'EFECTIVO' : formData.metodo_pago,
         monto_entregado: formData.metodo_pago === 'EFECTIVO' ? formData.monto_entregado : undefined,
         cambio: formData.metodo_pago === 'EFECTIVO' ? cambio : undefined,
         caja_chica_id: cajaChica?.id,
@@ -107,14 +138,49 @@ export const VentaKioscoModerno: React.FC = () => {
       await cargarProductos(institucionActiva.id)
 
       setSuccessMessage(`✓ Venta registrada: ${productoSeleccionado.nombre}`)
-      setFormData({ producto_id: 0, cantidad: 1, metodo_pago: 'EFECTIVO', monto_entregado: 0 })
+      setFormData({ 
+        producto_id: 0, 
+        cantidad: 1, 
+        metodo_pago: 'EFECTIVO', 
+        monto_entregado: 0,
+        fiado_id: 0,
+        nuevo_fiado_nombre: '',
+        nuevo_fiado_apellido: '',
+      })
       await cargarVentasKiosco(institucionActiva.id)
+      await cargarFiados()
       setTimeout(() => setSuccessMessage(''), 3000)
     } catch (error) {
       console.error('Error registrando venta:', error)
       setErrorMessage('Error al registrar venta')
     } finally {
       setRegistrando(false)
+    }
+  }
+
+  const handlePagarFiado = async () => {
+    if (!fiadoSeleccionado || montoPago <= 0) {
+      setErrorMessage('Ingresa un monto válido')
+      return
+    }
+
+    const fiado = fiados.find(f => f.id === fiadoSeleccionado)
+    if (!fiado || montoPago > fiado.monto_total_fiado) {
+      setErrorMessage('El monto no puede ser mayor a lo adeudado')
+      return
+    }
+
+    setPagandoFiado(true)
+    try {
+      await pagarFiado(fiadoSeleccionado, montoPago)
+      setSuccessMessage(`✓ Pago registrado: ${formatoMoneda(montoPago)}`)
+      setMontoPago(0)
+      setFiadoSeleccionado(null)
+      setTimeout(() => setSuccessMessage(''), 3000)
+    } catch (err) {
+      setErrorMessage(err instanceof Error ? err.message : 'Error al registrar pago')
+    } finally {
+      setPagandoFiado(false)
     }
   }
 
@@ -225,9 +291,9 @@ export const VentaKioscoModerno: React.FC = () => {
           <p className="text-xs text-slate-400 font-bold mb-1">Unidades Vendidas</p>
           <p className="text-2xl font-black text-yellow-400">{cantidadProductosVendidos}</p>
         </div>
-        <div className="p-4 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-xl hover:border-orange-600/50 transition-all">
-          <p className="text-xs text-slate-400 font-bold mb-1">Total Registros</p>
-          <p className="text-2xl font-black text-orange-600">{ventasKiosco.length}</p>
+        <div className="p-4 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-xl hover:border-red-600/50 transition-all">
+          <p className="text-xs text-slate-400 font-bold mb-1">Fiados Pendientes</p>
+          <p className="text-2xl font-black text-red-400">{formatoMoneda(totalFiadosPendientes)}</p>
         </div>
       </div>
 
@@ -255,6 +321,17 @@ export const VentaKioscoModerno: React.FC = () => {
           >
             <ShoppingBag size={20} />
             Historial ({ventasKiosco.length})
+          </button>
+          <button
+            onClick={() => setTabActiva('fiados')}
+            className={`px-6 py-3 rounded-lg font-bold transition-all duration-300 flex items-center gap-2 whitespace-nowrap ${
+              tabActiva === 'fiados'
+                ? 'bg-gradient-to-r from-red-600 to-rose-600 text-white shadow-lg shadow-red-500/50'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <CreditCard size={20} />
+            Fiados ({fiados.filter(f => f.estado === 'activo').length})
           </button>
           <button
             onClick={() => setTabActiva('caja')}
@@ -378,12 +455,13 @@ export const VentaKioscoModerno: React.FC = () => {
                 {/* Método de Pago */}
                 <div>
                   <label className="block text-sm font-bold text-slate-300 mb-3">Método de Pago</label>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-2">
                     {[
                       { value: 'EFECTIVO', label: '💵 Efectivo' },
                       { value: 'TRANSFERENCIA', label: '🏦 Transf.' },
                       { value: 'TARJETA', label: '💳 Tarjeta' },
                       { value: 'CHEQUE', label: '✓ Cheque' },
+                      { value: 'A_CUENTA', label: '📝 A Cuenta' },
                     ].map(opt => (
                       <label
                         key={opt.value}
@@ -405,6 +483,46 @@ export const VentaKioscoModerno: React.FC = () => {
                     ))}
                   </div>
                 </div>
+
+                {/* CAMPOS DE A CUENTA */}
+                {formData.metodo_pago === 'A_CUENTA' && (
+                  <div className="p-4 bg-red-500/10 border border-red-500/50 rounded-lg space-y-3">
+                    <div>
+                      <label className="block text-sm font-bold text-slate-300 mb-2">Seleccionar Cliente o Crear Nuevo</label>
+                      <select
+                        value={formData.fiado_id || ''}
+                        onChange={(e) => setFormData({ ...formData, fiado_id: e.target.value ? parseInt(e.target.value) : 0, nuevo_fiado_nombre: '', nuevo_fiado_apellido: '' })}
+                        className="w-full px-4 py-3 bg-slate-700/50 border border-red-500/50 rounded-lg text-white focus:border-red-400/50 focus:outline-none transition"
+                      >
+                        <option value="">-- Seleccionar Cliente --</option>
+                        {fiados.map(fiado => (
+                          <option key={fiado.id} value={fiado.id}>
+                            {fiado.apellido}, {fiado.nombre} - Debe: {formatoMoneda(fiado.monto_total_fiado)}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {!formData.fiado_id && (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <input
+                          type="text"
+                          placeholder="Nombre"
+                          value={formData.nuevo_fiado_nombre}
+                          onChange={(e) => setFormData({ ...formData, nuevo_fiado_nombre: e.target.value })}
+                          className="px-4 py-3 bg-slate-700/50 border border-red-500/50 rounded-lg text-white placeholder-slate-400 focus:border-red-400/50 focus:outline-none"
+                        />
+                        <input
+                          type="text"
+                          placeholder="Apellido"
+                          value={formData.nuevo_fiado_apellido}
+                          onChange={(e) => setFormData({ ...formData, nuevo_fiado_apellido: e.target.value })}
+                          className="px-4 py-3 bg-slate-700/50 border border-red-500/50 rounded-lg text-white placeholder-slate-400 focus:border-red-400/50 focus:outline-none"
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {/* CAMPOS DE EFECTIVO */}
                 {formData.metodo_pago === 'EFECTIVO' && (
@@ -501,6 +619,98 @@ export const VentaKioscoModerno: React.FC = () => {
           </div>
         )}
 
+        {/* TAB: FIADOS */}
+        {tabActiva === 'fiados' && (
+          <div className="space-y-6">
+            <div className="p-6 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-xl">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="p-3 bg-red-500/20 rounded-lg">
+                  <CreditCard size={24} className="text-red-400" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-white">Gestión de Cuentas Fiadas</h2>
+                  <p className="text-sm text-slate-400">Total pendiente: {formatoMoneda(totalFiadosPendientes)}</p>
+                </div>
+              </div>
+
+              {fiados.length === 0 ? (
+                <div className="text-center py-12">
+                  <Users size={32} className="text-slate-500 mx-auto mb-2" />
+                  <p className="text-slate-400 font-semibold">No hay cuentas fiadas registradas</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {fiados.map(fiado => (
+                    <div key={fiado.id} className={`p-4 rounded-lg border ${fiado.estado === 'activo' ? 'bg-red-500/10 border-red-500/50' : 'bg-green-500/10 border-green-500/50'}`}>
+                      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-3">
+                        <div className="flex-1">
+                          <p className="font-bold text-white text-lg">{fiado.apellido}, {fiado.nombre}</p>
+                          <p className="text-xs text-slate-400 mt-1">Desde: {fiado.fecha_inicio} • Última compra: {fiado.ultima_compra}</p>
+                          <p className={`text-sm font-bold mt-2 ${fiado.estado === 'activo' ? 'text-red-400' : 'text-green-400'}`}>
+                            {fiado.estado === 'activo' ? '🔴 Pendiente de pago' : '✓ Pagado'}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-xs text-slate-400 mb-1">Total Fiado</p>
+                          <p className="text-2xl font-black text-red-400">{formatoMoneda(fiado.monto_total_fiado)}</p>
+                        </div>
+                      </div>
+
+                      {fiado.estado === 'activo' && fiado.id === fiadoSeleccionado && (
+                        <div className="mt-4 pt-4 border-t border-red-500/30 space-y-3">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div>
+                              <label className="block text-xs font-bold text-slate-300 mb-2">Monto a Pagar</label>
+                              <input
+                                type="number"
+                                max={fiado.monto_total_fiado}
+                                value={montoPago || ''}
+                                onChange={(e) => setMontoPago(parseInt(e.target.value) || 0)}
+                                className="w-full px-3 py-2 bg-slate-700/50 border border-red-500/50 rounded-lg text-white text-center font-bold focus:outline-none"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-bold text-slate-300 mb-2">Saldo Después del Pago</label>
+                              <p className="text-2xl font-black text-green-400">{formatoMoneda(Math.max(0, fiado.monto_total_fiado - montoPago))}</p>
+                            </div>
+                          </div>
+                          <div className="flex gap-2 justify-end">
+                            <button
+                              onClick={() => setFiadoSeleccionado(null)}
+                              className="px-4 py-2 bg-slate-600 hover:bg-slate-700 text-white rounded-lg font-semibold transition"
+                            >
+                              Cancelar
+                            </button>
+                            <button
+                              onClick={handlePagarFiado}
+                              disabled={pagandoFiado || montoPago <= 0}
+                              className="px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-slate-600 text-white rounded-lg font-semibold transition"
+                            >
+                              {pagandoFiado ? 'Registrando...' : 'Registrar Pago'}
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {fiado.estado === 'activo' && fiado.id !== fiadoSeleccionado && (
+                        <button
+                          onClick={() => {
+                            setFiadoSeleccionado(fiado.id)
+                            setMontoPago(0)
+                          }}
+                          className="mt-3 w-full px-4 py-2 bg-green-600/30 hover:bg-green-600/50 text-green-300 rounded-lg font-semibold transition border border-green-500/30"
+                        >
+                          💰 Registrar Pago
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* TAB: CAJA CHICA */}
         {tabActiva === 'caja' && (
           <div className="space-y-6">
@@ -565,7 +775,7 @@ export const VentaKioscoModerno: React.FC = () => {
           </div>
         )}
 
-        {/* TAB: HISTORIAL DE CIERRES */}
+        {/* TAB: CIERRES */}
         {tabActiva === 'cierres' && (
           <div className="space-y-6">
             <div className="p-6 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-xl">
@@ -680,6 +890,7 @@ export const VentaKioscoModerno: React.FC = () => {
             </div>
           </div>
         )}
+
         {/* TAB: RESUMEN */}
         {tabActiva === 'resumen' && (
           <div className="space-y-6">
@@ -720,10 +931,3 @@ export const VentaKioscoModerno: React.FC = () => {
 }
 
 export default VentaKioscoModerno
-
-
-
-
-
-
-
