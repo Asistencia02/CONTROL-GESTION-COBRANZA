@@ -3,7 +3,7 @@ import { useInstitucion } from '@renderer/hooks/useInstitucion'
 import { useReportesFinancieros } from '@renderer/hooks/useReportesFinancieros'
 import { useConfiguracion } from '@renderer/hooks/useConfiguracion'
 import { useReportesAvanzados } from '@renderer/hooks/useReportesAvanzados'
-import { formatoMoneda } from '@renderer/lib/helpers'
+import { formatoMoneda, formatarNombreCompleto } from '@renderer/lib/helpers'
 import { BarChart3, TrendingUp, AlertCircle, Users, RefreshCw, Target, Zap, DollarSign, Gauge, TrendingDown, Award, Clock, PieChart, CheckCircle, Activity, Calendar } from 'lucide-react'
 import { Chart as ChartJS, ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, Title } from 'chart.js'
 import { Bar, Pie } from 'react-chartjs-2'
@@ -458,7 +458,7 @@ export const ReportesFinancierosModerno: React.FC = () => {
               <tbody>{topEstudiantesMora.map((e) => (
                 <tr key={e.ranking} className="border-b border-slate-700/30 hover:bg-slate-900/40 transition-colors">
                   <td className="px-4 py-4 text-center"><span className={'px-4 py-2 rounded-lg text-white font-bold text-sm ' + getRankingClass(e.ranking)}>#{e.ranking}</span></td>
-                  <td className="px-4 py-4 font-bold text-slate-200">{e.nombre_completo}</td>
+                  <td className="px-4 py-4 font-bold text-slate-200">{formatarNombreCompleto(e.nombre_completo)}</td>
                   <td className="px-4 py-4 text-slate-400">{e.carrera}</td>
                   <td className="px-4 py-4 text-right"><span className="px-3 py-2 bg-red-600/30 text-red-300 rounded-lg font-bold text-lg">{formatoMoneda(e.deuda_monto)}</span></td>
                   <td className="px-4 py-4 text-center"><span className="px-3 py-1 bg-orange-500/30 text-orange-300 rounded-lg font-bold">{e.meses_adeudados}</span></td>
@@ -846,7 +846,7 @@ case 'aldia':
             <tbody>
               {(estudiantesAlDia || []).map((e, i) => (
                 <tr key={i} className="border-b border-slate-700/30 hover:bg-slate-900/40 transition-colors">
-                  <td className="px-4 py-4 font-bold text-slate-200">{e.nombre_completo}</td>
+                  <td className="px-4 py-4 font-bold text-slate-200">{formatarNombreCompleto(e.nombre_completo)}</td>
                   <td className="px-4 py-4 text-slate-400">{e.carrera}</td>
                   <td className="px-4 py-4 text-right text-blue-400 font-bold">{formatoMoneda(e.total_responsable)}</td>
                   <td className="px-4 py-4 text-right text-green-400 font-bold">{formatoMoneda(e.total_pagado)}</td>
@@ -915,6 +915,7 @@ case 'aldia':
 }
 
 export default ReportesFinancierosModerno
+
 
 
 

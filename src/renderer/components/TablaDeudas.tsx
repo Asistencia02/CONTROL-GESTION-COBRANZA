@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react'
 import { AlertCircle, Filter, Search, TrendingDown, ChevronDown } from 'lucide-react'
-import { formatoMoneda } from '@renderer/lib/helpers'
+import { formatoMoneda, formatarNombreCompleto } from '@renderer/lib/helpers'
 import type { Deuda } from '@renderer/hooks/useDeudas'
 
 interface TablaDeudasProps {
@@ -45,7 +45,14 @@ export const TablaDeudas: React.FC<TablaDeudasProps> = ({
     if (ordenar === 'deuda') {
       resultado.sort((a, b) => b.saldo_adeudado - a.saldo_adeudado)
     } else {
-      resultado.sort((a, b) => a.nombre_completo.localeCompare(b.nombre_completo))
+      resultado.sort((a, b) => {
+        const apellidoA = a.nombre_completo.split(' ').pop()?.toLowerCase() || ''
+        const apellidoB = b.nombre_completo.split(' ').pop()?.toLowerCase() || ''
+        if (apellidoA === apellidoB) {
+          return a.nombre_completo.localeCompare(b.nombre_completo)
+        }
+        return apellidoA.localeCompare(apellidoB)
+      })
     }
 
     return resultado
@@ -214,7 +221,7 @@ export const TablaDeudas: React.FC<TablaDeudasProps> = ({
                         onClick={() => onSeleccionar?.(deuda.estudiante_id)}
                       >
                         <td className="px-4 py-4 font-semibold text-white">
-                          {deuda.nombre_completo}
+                          {formatarNombreCompleto(deuda.nombre_completo)}
                         </td>
                         <td className="px-4 py-4 text-slate-400 font-mono">{deuda.dni}</td>
                         <td className="px-4 py-4 text-slate-400">{deuda.carrera}</td>

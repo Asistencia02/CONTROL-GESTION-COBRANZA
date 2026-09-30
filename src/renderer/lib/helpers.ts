@@ -145,3 +145,15 @@ export const estaMora = (fechaVencimiento: Date | string, tolerancia = 30): bool
   const dias = calcularDiasEntre(fechaVencimiento, obtenerFechaLocal())
   return dias > tolerancia
 }
+
+/**
+ * Formatea nombre completo como "Apellido, Nombre"
+ */
+export const formatarNombreCompleto = (nombreCompleto: string): string => {
+  if (!nombreCompleto) return ''
+  const partes = nombreCompleto.trim().split(' ')
+  if (partes.length <= 1) return nombreCompleto
+  const apellido = partes[partes.length - 1]
+  const nombres = partes.slice(0, -1).join(' ')
+  return `${apellido}, ${nombres}`
+}
