@@ -48,6 +48,24 @@ export const useGlobal = () => {
 
       console.log('🔵 INSTITUCIONES:', instituciones)
 
+      // DEBUG: Obtener primeros registros SIN FILTRO
+      const { data: pruebaPageos } = await supabase.from('pagos').select('*').limit(5)
+      const { data: pruebaGastos } = await supabase.from('gastos').select('*').limit(5)
+      const { data: pruebaCaja } = await supabase.from('caja_grande').select('*').limit(5)
+
+      console.log('🔍 DEBUG - Primeros 5 PAGOS (sin filtro):', pruebaPageos)
+      console.log('🔍 DEBUG - Primeros 5 GASTOS (sin filtro):', pruebaGastos)
+      console.log('🔍 DEBUG - Primeros 5 CAJA (sin filtro):', pruebaCaja)
+
+      // Ver qué institucion_id tienen los datos
+      const pagosIDs = pruebaPageos?.map(p => p.institucion_id) || []
+      const gastosIDs = pruebaGastos?.map(g => g.institucion_id) || []
+      const cajaIDs = pruebaCaja?.map(c => c.institucion_id) || []
+
+      console.log('📊 institucion_id EN PAGOS:', [...new Set(pagosIDs)])
+      console.log('📊 institucion_id EN GASTOS:', [...new Set(gastosIDs)])
+      console.log('📊 institucion_id EN CAJA:', [...new Set(cajaIDs)])
+
       const datos: DatosGlobales[] = []
 
       for (const inst of instituciones || []) {
