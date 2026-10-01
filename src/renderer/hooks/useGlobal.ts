@@ -46,15 +46,19 @@ export const useGlobal = () => {
 
       if (errInst) throw errInst
 
+      console.log('🔵 INSTITUCIONES:', instituciones)
+
       const datos: DatosGlobales[] = []
 
       for (const inst of instituciones || []) {
         try {
           // Obtener pagos
-          const { data: pagosData } = await supabase
+          const { data: pagosData, error: pagosErr } = await supabase
             .from('pagos')
             .select('*')
             .eq('institucion_id', inst.id)
+
+          console.log(`🟢 PAGOS inst ${inst.id}:`, pagosData?.length || 0, 'error:', pagosErr)
 
           const cuotas = (pagosData || []).filter(p => p.concepto === 'cuota')
           const cuotasTotal = cuotas.reduce((sum, p) => sum + (p.monto || 0), 0)
@@ -66,18 +70,22 @@ export const useGlobal = () => {
           const seguroTotal = seguros.reduce((sum, p) => sum + (p.monto || 0), 0)
 
           // Gastos
-          const { data: gastosData } = await supabase
+          const { data: gastosData, error: gastosErr } = await supabase
             .from('gastos')
             .select('*')
             .eq('institucion_id', inst.id)
 
+          console.log(`🟡 GASTOS inst ${inst.id}:`, gastosData?.length || 0, 'error:', gastosErr)
+
           const gastosTotal = (gastosData || []).reduce((sum, g) => sum + (g.monto || 0), 0)
 
           // Caja Grande
-          const { data: cajaData } = await supabase
+          const { data: cajaData, error: cajaErr } = await supabase
             .from('caja_grande')
             .select('*')
             .eq('institucion_id', inst.id)
+
+          console.log(`🔴 CAJA GRANDE inst ${inst.id}:`, cajaData?.length || 0, 'error:', cajaErr)
 
           const cajaGrandeTotal = (cajaData || []).reduce((sum, c) => sum + (c.monto || 0), 0)
 
@@ -91,7 +99,7 @@ export const useGlobal = () => {
 
             insumosTotal = (insumosData || []).reduce((sum, i) => sum + (i.subtotal || 0), 0)
           } catch (e) {
-            // Tabla no existe
+            console.log('⚠️ INSUMOS no existe')
           }
 
           // Deudas
@@ -107,8 +115,12 @@ export const useGlobal = () => {
               deudasTotal = deudas.reduce((sum, d) => sum + (d.monto_adeudado || 0), 0)
             }
           } catch (e) {
-            // Tabla no existe
+            console.log('⚠️ DEUDAS no existe')
           }
+
+          console.log(
+            `💰 TOTALES inst ${inst.id}: cuotas=${cuotasTotal}, inscripcion=${inscripcionTotal}, seguro=${seguroTotal}, gastos=${gastosTotal}, caja=${cajaGrandeTotal}`
+          )
 
           const subtotalCobranza = cuotasTotal + inscripcionTotal + seguroTotal
           const subtotalOtros = cajaGrandeTotal + insumosTotal
@@ -135,6 +147,7 @@ export const useGlobal = () => {
         }
       }
 
+      console.log('✅ DATOS GLOBALES FINAL:', datos)
       setDatosGlobales(datos)
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Error cargando datos'
@@ -157,39 +170,34 @@ export const useGlobal = () => {
       // Obtener TODOS los datos
       let pagosData: any[] = []
       try {
-        const { data } = await supabase
-          .from('pagos')
-          .select('*')
+        const { data } = await supabase.from('pagos').select('*')
         pagosData = data || []
+        console.log('PAGOS TOTAL:', pagosData.length)
       } catch (e) {
         console.error('Error cargando pagos:', e)
       }
 
       let gastosData: any[] = []
       try {
-        const { data } = await supabase
-          .from('gastos')
-          .select('*')
+        const { data } = await supabase.from('gastos').select('*')
         gastosData = data || []
+        console.log('GASTOS TOTAL:', gastosData.length)
       } catch (e) {
         console.error('Error cargando gastos:', e)
       }
 
       let cajaData: any[] = []
       try {
-        const { data } = await supabase
-          .from('caja_grande')
-          .select('*')
+        const { data } = await supabase.from('caja_grande').select('*')
         cajaData = data || []
+        console.log('CAJA TOTAL:', cajaData.length)
       } catch (e) {
         console.error('Error cargando caja_grande:', e)
       }
 
       let insumosData: any[] = []
       try {
-        const { data } = await supabase
-          .from('ventas_insumo')
-          .select('*')
+        const { data } = await supabase.from('ventas_insumo').select('*')
         insumosData = data || []
       } catch (e) {
         console.error('Error cargando ventas_insumo:', e)
