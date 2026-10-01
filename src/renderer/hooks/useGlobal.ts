@@ -47,49 +47,45 @@ export const useGlobal = () => {
 
       console.log('🔵 INSTITUCIONES:', instituciones)
 
-      // Cargar TODOS los pagos globales (sin filtro de institucion_id)
-      let allPagos: any[] = []
-      let page = 0
-      const pageSize = 1000
-      let hasMore = true
-
-      while (hasMore) {
-        const { data } = await supabase
-          .from('pagos')
-          .select(`
-            *,
-            conceptos_pago(nombre)
-          `)
-          .order('fecha_pago', { ascending: false })
-          .range(page * pageSize, (page + 1) * pageSize - 1)
-
-        if (!data || data.length === 0) {
-          hasMore = false
-        } else {
-          allPagos = [...allPagos, ...data]
-          if (data.length < pageSize) {
-            hasMore = false
-          }
-          page++
-        }
-      }
-
-      console.log('📊 PAGOS GLOBALES TOTAL:', allPagos.length)
-
       const datos: DatosGlobales[] = []
 
       for (const inst of instituciones || []) {
         try {
-          // Filtrar pagos para esta institución
-          const pagosPorInst = allPagos.filter(p => p.institucion_id === inst.id)
+          // CARGAR PAGOS POR INSTITUCIÓN (igual a usePagos)
+          let allPagos: any[] = []
+          let page = 0
+          const pageSize = 1000
+          let hasMore = true
 
-          console.log(`✅ PAGOS inst ${inst.id}:`, pagosPorInst.length, 'registros')
+          while (hasMore) {
+            const { data } = await supabase
+              .from('pagos')
+              .select(`
+                *,
+                conceptos_pago(nombre)
+              `)
+              .eq('institucion_id', inst.id)
+              .order('fecha_pago', { ascending: false })
+              .range(page * pageSize, (page + 1) * pageSize - 1)
+
+            if (!data || data.length === 0) {
+              hasMore = false
+            } else {
+              allPagos = [...allPagos, ...data]
+              if (data.length < pageSize) {
+                hasMore = false
+              }
+              page++
+            }
+          }
+
+          console.log(`✅ PAGOS inst ${inst.id}:`, allPagos.length, 'registros')
 
           let cuotasTotal = 0
           let inscripcionTotal = 0
           let seguroTotal = 0
 
-          pagosPorInst.forEach(p => {
+          allPagos.forEach(p => {
             const concepto = (p as any).conceptos_pago?.nombre || ''
             const monto = p.monto_pagado || 0
 
@@ -177,30 +173,38 @@ export const useGlobal = () => {
       const mesActualNum = new Date().getMonth() + 1
       const mesFinLoop = esAnual ? 12 : mesActualNum
 
-      // Cargar TODOS los pagos globales
+      // Obtener instituciones
+      const { data: instituciones } = await supabase
+        .from('instituciones')
+        .select('id')
+
+      // Cargar TODOS los pagos de TODAS las instituciones
       let allPagos: any[] = []
-      let page = 0
-      const pageSize = 1000
-      let hasMore = true
+      for (const inst of instituciones || []) {
+        let page = 0
+        const pageSize = 1000
+        let hasMore = true
 
-      while (hasMore) {
-        const { data } = await supabase
-          .from('pagos')
-          .select(`
-            *,
-            conceptos_pago(nombre)
-          `)
-          .order('fecha_pago', { ascending: false })
-          .range(page * pageSize, (page + 1) * pageSize - 1)
+        while (hasMore) {
+          const { data } = await supabase
+            .from('pagos')
+            .select(`
+              *,
+              conceptos_pago(nombre)
+            `)
+            .eq('institucion_id', inst.id)
+            .order('fecha_pago', { ascending: false })
+            .range(page * pageSize, (page + 1) * pageSize - 1)
 
-        if (!data || data.length === 0) {
-          hasMore = false
-        } else {
-          allPagos = [...allPagos, ...data]
-          if (data.length < pageSize) {
+          if (!data || data.length === 0) {
             hasMore = false
+          } else {
+            allPagos = [...allPagos, ...data]
+            if (data.length < pageSize) {
+              hasMore = false
+            }
+            page++
           }
-          page++
         }
       }
 
@@ -236,7 +240,7 @@ export const useGlobal = () => {
         let inscripcionTotal = 0
         let seguroTotal = 0
 
-        // Filtrar pagos por mes (GLOBALES, todas las instituciones)
+        // Filtrar pagos por mes (TODOS)
         allPagos.forEach(p => {
           const fechaPago = new Date(p.fecha_pago)
           const mesDelPago = (fechaPago.getMonth() + 1).toString().padStart(2, '0')
@@ -256,14 +260,14 @@ export const useGlobal = () => {
           }
         })
 
-        // Filtrar gastos por mes (GLOBALES)
+        // Filtrar gastos por mes
         const gastosDelMes = gastosData.filter(g => {
           const fechaGasto = new Date(g.fecha_gasto)
           return fechaGasto.getMonth() + 1 === mes && fechaGasto.getFullYear() === anoActual
         })
         const gastosTotal = gastosDelMes.reduce((sum, g) => sum + (g.monto || 0), 0)
 
-        // Filtrar caja por mes (GLOBALES)
+        // Filtrar caja por mes
         const cajaDelMes = cajaData.filter(c => {
           const fechaCaja = new Date(c.fecha_transferencia)
           return fechaCaja.getMonth() + 1 === mes && fechaCaja.getFullYear() === anoActual
