@@ -1,6 +1,4 @@
 import { useState, useCallback } from 'react'
-import { usePagos } from './usePagos'
-import { useInstitucion } from './useInstitucion'
 import { supabase } from '@renderer/lib/supabase'
 
 export interface DatosGlobales {
@@ -38,9 +36,6 @@ export const useGlobal = () => {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const { pagos: pagosCargados } = usePagos()
-  const { institucionActiva } = useInstitucion()
-
   const cargarDatosGlobales = useCallback(async (esAnual: boolean) => {
     setLoading(true)
     setError(null)
@@ -51,14 +46,42 @@ export const useGlobal = () => {
         .select('id, nombre')
 
       console.log('🔵 INSTITUCIONES:', instituciones)
-      console.log('📊 PAGOS EN MEMORIA (usePagos):', pagosCargados.length)
+
+      // Cargar TODOS los pagos globales (sin filtro de institucion_id)
+      let allPagos: any[] = []
+      let page = 0
+      const pageSize = 1000
+      let hasMore = true
+
+      while (hasMore) {
+        const { data } = await supabase
+          .from('pagos')
+          .select(`
+            *,
+            conceptos_pago(nombre)
+          `)
+          .order('fecha_pago', { ascending: false })
+          .range(page * pageSize, (page + 1) * pageSize - 1)
+
+        if (!data || data.length === 0) {
+          hasMore = false
+        } else {
+          allPagos = [...allPagos, ...data]
+          if (data.length < pageSize) {
+            hasMore = false
+          }
+          page++
+        }
+      }
+
+      console.log('📊 PAGOS GLOBALES TOTAL:', allPagos.length)
 
       const datos: DatosGlobales[] = []
 
       for (const inst of instituciones || []) {
         try {
-          // Usar pagos ya cargados en memoria
-          const pagosPorInst = pagosCargados.filter(p => p.institucion_id === inst.id)
+          // Filtrar pagos para esta institución
+          const pagosPorInst = allPagos.filter(p => p.institucion_id === inst.id)
 
           console.log(`✅ PAGOS inst ${inst.id}:`, pagosPorInst.length, 'registros')
 
@@ -79,7 +102,7 @@ export const useGlobal = () => {
             }
           })
 
-          // GASTOS - usa fecha_gasto, no fecha
+          // GASTOS
           let gastosTotal = 0
           try {
             const { data: gastosData } = await supabase
@@ -143,7 +166,7 @@ export const useGlobal = () => {
     } finally {
       setLoading(false)
     }
-  }, [pagosCargados])
+  }, [])
 
   const cargarDatosPorMes = useCallback(async (esAnual: boolean) => {
     setLoading(true)
@@ -154,8 +177,34 @@ export const useGlobal = () => {
       const mesActualNum = new Date().getMonth() + 1
       const mesFinLoop = esAnual ? 12 : mesActualNum
 
-      // Usar pagos cargados en memoria
-      console.log('📊 PAGOS PARA POR MES:', pagosCargados.length)
+      // Cargar TODOS los pagos globales
+      let allPagos: any[] = []
+      let page = 0
+      const pageSize = 1000
+      let hasMore = true
+
+      while (hasMore) {
+        const { data } = await supabase
+          .from('pagos')
+          .select(`
+            *,
+            conceptos_pago(nombre)
+          `)
+          .order('fecha_pago', { ascending: false })
+          .range(page * pageSize, (page + 1) * pageSize - 1)
+
+        if (!data || data.length === 0) {
+          hasMore = false
+        } else {
+          allPagos = [...allPagos, ...data]
+          if (data.length < pageSize) {
+            hasMore = false
+          }
+          page++
+        }
+      }
+
+      console.log('📊 PAGOS PARA POR MES TOTAL:', allPagos.length)
 
       let gastosData: any[] = []
       try {
@@ -187,8 +236,8 @@ export const useGlobal = () => {
         let inscripcionTotal = 0
         let seguroTotal = 0
 
-        // Filtrar pagos por mes
-        pagosCargados.forEach(p => {
+        // Filtrar pagos por mes (GLOBALES, todas las instituciones)
+        allPagos.forEach(p => {
           const fechaPago = new Date(p.fecha_pago)
           const mesDelPago = (fechaPago.getMonth() + 1).toString().padStart(2, '0')
           const anoDelPago = fechaPago.getFullYear()
@@ -207,14 +256,14 @@ export const useGlobal = () => {
           }
         })
 
-        // Filtrar gastos por mes - usa fecha_gasto
+        // Filtrar gastos por mes (GLOBALES)
         const gastosDelMes = gastosData.filter(g => {
           const fechaGasto = new Date(g.fecha_gasto)
           return fechaGasto.getMonth() + 1 === mes && fechaGasto.getFullYear() === anoActual
         })
         const gastosTotal = gastosDelMes.reduce((sum, g) => sum + (g.monto || 0), 0)
 
-        // Filtrar caja por mes - usa fecha_transferencia
+        // Filtrar caja por mes (GLOBALES)
         const cajaDelMes = cajaData.filter(c => {
           const fechaCaja = new Date(c.fecha_transferencia)
           return fechaCaja.getMonth() + 1 === mes && fechaCaja.getFullYear() === anoActual
@@ -246,7 +295,7 @@ export const useGlobal = () => {
     } finally {
       setLoading(false)
     }
-  }, [pagosCargados])
+  }, [])
 
   return {
     datosGlobales,
