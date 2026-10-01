@@ -1,4 +1,6 @@
 import { useState, useCallback } from 'react'
+import { usePagos } from './usePagos'
+import { useInstitucion } from './useInstitucion'
 import { supabase } from '@renderer/lib/supabase'
 
 export interface DatosGlobales {
@@ -36,33 +38,35 @@ export const useGlobal = () => {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  const { pagos: pagosCargados } = usePagos()
+  const { institucionActiva } = useInstitucion()
+
   const cargarDatosGlobales = useCallback(async (esAnual: boolean) => {
     setLoading(true)
     setError(null)
     try {
+      // Obtener instituciones
       const { data: instituciones } = await supabase
         .from('instituciones')
         .select('id, nombre')
 
       console.log('🔵 INSTITUCIONES:', instituciones)
+      console.log('📊 PAGOS EN MEMORIA (usePagos):', pagosCargados.length)
 
       const datos: DatosGlobales[] = []
 
       for (const inst of instituciones || []) {
         try {
-          // 1. PAGOS - usa monto_pagado
-          const { data: pagosData } = await supabase
-            .from('pagos')
-            .select('monto_pagado, concepto_id, conceptos_pago(nombre, tipo)')
-            .eq('institucion_id', inst.id)
+          // Usar pagos ya cargados en memoria
+          const pagosPorInst = pagosCargados.filter(p => p.institucion_id === inst.id)
 
-          console.log(`✅ PAGOS inst ${inst.id}:`, pagosData?.length || 0, 'registros')
+          console.log(`✅ PAGOS inst ${inst.id}:`, pagosPorInst.length, 'registros')
 
           let cuotasTotal = 0
           let inscripcionTotal = 0
           let seguroTotal = 0
 
-          pagosData?.forEach(p => {
+          pagosPorInst.forEach(p => {
             const concepto = (p as any).conceptos_pago?.nombre || ''
             const monto = p.monto_pagado || 0
 
@@ -75,7 +79,7 @@ export const useGlobal = () => {
             }
           })
 
-          // 2. GASTOS (si la tabla existe)
+          // GASTOS
           let gastosTotal = 0
           try {
             const { data: gastosData } = await supabase
@@ -89,7 +93,7 @@ export const useGlobal = () => {
             console.log(`⚠️ GASTOS no disponible para inst ${inst.id}`)
           }
 
-          // 3. CAJA GRANDE / KIOSCO (si la tabla existe)
+          // CAJA GRANDE
           let cajaGrandeTotal = 0
           try {
             const { data: cajaData } = await supabase
@@ -139,7 +143,7 @@ export const useGlobal = () => {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [pagosCargados])
 
   const cargarDatosPorMes = useCallback(async (esAnual: boolean) => {
     setLoading(true)
@@ -150,17 +154,8 @@ export const useGlobal = () => {
       const mesActualNum = new Date().getMonth() + 1
       const mesFinLoop = esAnual ? 12 : mesActualNum
 
-      // Obtener TODOS los pagos sin filtro
-      let pagosData: any[] = []
-      try {
-        const { data } = await supabase
-          .from('pagos')
-          .select('monto_pagado, concepto_id, fecha_pago, conceptos_pago(nombre)')
-        pagosData = data || []
-        console.log('📊 PAGOS TOTAL:', pagosData.length)
-      } catch (e) {
-        console.error('Error cargando pagos:', e)
-      }
+      // Usar pagos cargados en memoria
+      console.log('📊 PAGOS PARA POR MES:', pagosCargados.length)
 
       let gastosData: any[] = []
       try {
@@ -186,26 +181,45 @@ export const useGlobal = () => {
 
       for (let mes = 1; mes <= mesFinLoop; mes++) {
         const nombreMes = new Date(anoActual, mes - 1).toLocaleString('es-ES', { month: 'long' })
+        const mesStr = mes.toString().padStart(2, '0')
 
         let cuotasTotal = 0
         let inscripcionTotal = 0
         let seguroTotal = 0
 
-        pagosData.forEach(p => {
-          const concepto = (p as any).conceptos_pago?.nombre || ''
-          const monto = p.monto_pagado || 0
+        // Filtrar pagos por mes
+        pagosCargados.forEach(p => {
+          const fechaPago = new Date(p.fecha_pago)
+          const mesDelPago = (fechaPago.getMonth() + 1).toString().padStart(2, '0')
+          const anoDelPago = fechaPago.getFullYear()
 
-          if (concepto.toLowerCase().includes('cuota')) {
-            cuotasTotal += monto
-          } else if (concepto.toLowerCase().includes('inscripción') || concepto.toLowerCase().includes('inscripcion')) {
-            inscripcionTotal += monto
-          } else if (concepto.toLowerCase().includes('seguro')) {
-            seguroTotal += monto
+          if (anoDelPago === anoActual && mesDelPago === mesStr) {
+            const concepto = (p as any).conceptos_pago?.nombre || ''
+            const monto = p.monto_pagado || 0
+
+            if (concepto.toLowerCase().includes('cuota')) {
+              cuotasTotal += monto
+            } else if (concepto.toLowerCase().includes('inscripción') || concepto.toLowerCase().includes('inscripcion')) {
+              inscripcionTotal += monto
+            } else if (concepto.toLowerCase().includes('seguro')) {
+              seguroTotal += monto
+            }
           }
         })
 
-        const gastosTotal = gastosData.reduce((sum, g) => sum + (g.monto || 0), 0)
-        const kioscoTotal = cajaData.reduce((sum, c) => sum + (c.monto || 0), 0)
+        // Filtrar gastos por mes
+        const gastosDelMes = gastosData.filter(g => {
+          const fechaGasto = new Date(g.fecha)
+          return fechaGasto.getMonth() + 1 === mes && fechaGasto.getFullYear() === anoActual
+        })
+        const gastosTotal = gastosDelMes.reduce((sum, g) => sum + (g.monto || 0), 0)
+
+        // Filtrar caja por mes
+        const cajaDelMes = cajaData.filter(c => {
+          const fechaCaja = new Date(c.fecha_transferencia)
+          return fechaCaja.getMonth() + 1 === mes && fechaCaja.getFullYear() === anoActual
+        })
+        const kioscoTotal = cajaDelMes.reduce((sum, c) => sum + (c.monto || 0), 0)
 
         meses.push({
           mes,
@@ -232,7 +246,7 @@ export const useGlobal = () => {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [pagosCargados])
 
   return {
     datosGlobales,
