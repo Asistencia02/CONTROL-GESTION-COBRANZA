@@ -198,6 +198,7 @@ export const useAuth = create<UseAuthStore>((set, get) => {
             'gastos',
             'estudiantes',
             'reportes',
+            'global',
             'reportesejecutivos',
             'reportefinanciero',
             'cierre',

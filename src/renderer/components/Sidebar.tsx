@@ -143,6 +143,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     if (item.id === 'dashboard') return modulosPermitidos.includes('dashboard')
     return modulosPermitidos.includes(item.id)
   })
+  console.log('itemsVisibles:', itemsVisibles.map(i => i.id), 'esAdmin:', esAdmin)
 
   // Overlay en mobile - SOLO mostrar si está ABIERTO
   const showOverlay = isOpen && onToggle
