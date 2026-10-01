@@ -75,6 +75,26 @@ export const App: React.FC = () => {
       return <AdminPermisosModerno />
     }
 
+    // Admin siempre tiene acceso a TODO
+    if (usuarioActual?.rol === 'ADMIN') {
+      switch (activeModule) {
+        case 'dashboard': return <DashboardModerno />
+        case 'cobranzas': return <Cobranzas />
+        case 'deudas': return <DeudasModerno />
+        case 'ventas': return <VentasModerno />
+        case 'ventakiosco': return <VentaKioscoModerno />
+        case 'gastos': return <GastosModerno />
+        case 'estudiantes': return <GestionEstudiantesModerno />
+        case 'reportes': return <ReportesFinancierosModerno />
+        case 'global': return <GlobalModerno />
+        case 'cierre': return <CierreModerno />
+        case 'kioscoconfig': return <KioscoConfiguracionModerno />
+        case 'sincronizacion': return <Sincronizacion />
+        case 'configuracion': return <ConfiguracionModerno />
+        default: return <DashboardModerno />
+      }
+    }
+
     if (!modulosPermitidos.includes(activeModule) && activeModule !== 'dashboard' && activeModule !== 'admin') {
       return (
         <div className="flex items-center justify-center h-screen">
