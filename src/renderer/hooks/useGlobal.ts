@@ -62,8 +62,8 @@ export const useGlobal = () => {
           .select('monto')
           .eq('institucion_id', inst.id)
           .eq('concepto', 'cuota')
-          .gte('fecha', `${anoActual}-${mesInicio.toString().padStart(2, '0')}-01`)
-          .lte('fecha', `${anoActual}-${mesFinMes.toString().padStart(2, '0')}-${mesFinDia.toString().padStart(2, '0')}`)
+          .filter('fecha', 'gte', `${anoActual}-${mesInicio.toString().padStart(2, '0')}-01`)
+          .filter('fecha', 'lte', `${anoActual}-${mesFinMes.toString().padStart(2, '0')}-${mesFinDia.toString().padStart(2, '0')}`)
 
         const cuotasTotal = (cuotas || []).reduce((sum, p) => sum + (p.monto || 0), 0)
 
@@ -73,8 +73,8 @@ export const useGlobal = () => {
           .select('monto')
           .eq('institucion_id', inst.id)
           .eq('concepto', 'inscripción')
-          .gte('fecha', `${anoActual}-${mesInicio.toString().padStart(2, '0')}-01`)
-          .lte('fecha', `${anoActual}-${mesFinMes.toString().padStart(2, '0')}-${mesFinDia.toString().padStart(2, '0')}`)
+          .filter('fecha', 'gte', `${anoActual}-${mesInicio.toString().padStart(2, '0')}-01`)
+          .filter('fecha', 'lte', `${anoActual}-${mesFinMes.toString().padStart(2, '0')}-${mesFinDia.toString().padStart(2, '0')}`)
 
         const inscripcionTotal = (inscripcion || []).reduce((sum, p) => sum + (p.monto || 0), 0)
 
@@ -84,8 +84,8 @@ export const useGlobal = () => {
           .select('monto')
           .eq('institucion_id', inst.id)
           .eq('concepto', 'seguro')
-          .gte('fecha', `${anoActual}-${mesInicio.toString().padStart(2, '0')}-01`)
-          .lte('fecha', `${anoActual}-${mesFinMes.toString().padStart(2, '0')}-${mesFinDia.toString().padStart(2, '0')}`)
+          .filter('fecha', 'gte', `${anoActual}-${mesInicio.toString().padStart(2, '0')}-01`)
+          .filter('fecha', 'lte', `${anoActual}-${mesFinMes.toString().padStart(2, '0')}-${mesFinDia.toString().padStart(2, '0')}`)
 
         const seguroTotal = (seguro || []).reduce((sum, p) => sum + (p.monto || 0), 0)
 
@@ -110,8 +110,8 @@ export const useGlobal = () => {
           .from('gastos')
           .select('monto')
           .eq('institucion_id', inst.id)
-          .gte('fecha', `${anoActual}-${mesInicio.toString().padStart(2, '0')}-01`)
-          .lte('fecha', `${anoActual}-${mesFinMes.toString().padStart(2, '0')}-${mesFinDia.toString().padStart(2, '0')}`)
+          .filter('fecha', 'gte', `${anoActual}-${mesInicio.toString().padStart(2, '0')}-01`)
+          .filter('fecha', 'lte', `${anoActual}-${mesFinMes.toString().padStart(2, '0')}-${mesFinDia.toString().padStart(2, '0')}`)
 
         const gastosTotal = (gastos || []).reduce((sum, g) => sum + (g.monto || 0), 0)
 
@@ -120,8 +120,8 @@ export const useGlobal = () => {
           .from('caja_grande')
           .select('monto')
           .eq('institucion_id', inst.id)
-          .gte('fecha_transferencia', `${anoActual}-${mesInicio.toString().padStart(2, '0')}-01`)
-          .lte('fecha_transferencia', `${anoActual}-${mesFinMes.toString().padStart(2, '0')}-${mesFinDia.toString().padStart(2, '0')}`)
+          .filter('fecha_transferencia', 'gte', `${anoActual}-${mesInicio.toString().padStart(2, '0')}-01`)
+          .filter('fecha_transferencia', 'lte', `${anoActual}-${mesFinMes.toString().padStart(2, '0')}-${mesFinDia.toString().padStart(2, '0')}`)
 
         const cajaGrandeTotal = (cajaGrande || []).reduce((sum, c) => sum + (c.monto || 0), 0)
 
@@ -132,8 +132,8 @@ export const useGlobal = () => {
             .from('ventas_insumo')
             .select('subtotal')
             .eq('institucion_id', inst.id)
-            .gte('fecha_venta', `${anoActual}-${mesInicio.toString().padStart(2, '0')}-01`)
-            .lte('fecha_venta', `${anoActual}-${mesFinMes.toString().padStart(2, '0')}-${mesFinDia.toString().padStart(2, '0')}`)
+            .filter('fecha_venta', 'gte', `${anoActual}-${mesInicio.toString().padStart(2, '0')}-01`)
+            .filter('fecha_venta', 'lte', `${anoActual}-${mesFinMes.toString().padStart(2, '0')}-${mesFinDia.toString().padStart(2, '0')}`)
 
           if (insumos) {
             insumosTotal = (insumos || []).reduce((sum, i) => sum + (i.subtotal || 0), 0)
@@ -193,8 +193,8 @@ export const useGlobal = () => {
           .from('pagos')
           .select('monto')
           .eq('concepto', 'cuota')
-          .gte('fecha', `${anoActual}-${mesStr}-01`)
-          .lte('fecha', `${anoActual}-${mesStr}-${ultimoDiaDelMes.toString().padStart(2, '0')}`)
+          .filter('fecha', 'gte', `${anoActual}-${mesStr}-01`)
+          .filter('fecha', 'lte', `${anoActual}-${mesStr}-${ultimoDiaDelMes.toString().padStart(2, '0')}`)
 
         const cuotasTotal = (cuotas || []).reduce((sum, p) => sum + (p.monto || 0), 0)
 
@@ -203,8 +203,8 @@ export const useGlobal = () => {
           .from('pagos')
           .select('monto')
           .eq('concepto', 'inscripción')
-          .gte('fecha', `${anoActual}-${mesStr}-01`)
-          .lte('fecha', `${anoActual}-${mesStr}-${ultimoDiaDelMes.toString().padStart(2, '0')}`)
+          .filter('fecha', 'gte', `${anoActual}-${mesStr}-01`)
+          .filter('fecha', 'lte', `${anoActual}-${mesStr}-${ultimoDiaDelMes.toString().padStart(2, '0')}`)
 
         const inscripcionTotal = (inscripcion || []).reduce((sum, p) => sum + (p.monto || 0), 0)
 
@@ -213,8 +213,8 @@ export const useGlobal = () => {
           .from('pagos')
           .select('monto')
           .eq('concepto', 'seguro')
-          .gte('fecha', `${anoActual}-${mesStr}-01`)
-          .lte('fecha', `${anoActual}-${mesStr}-${ultimoDiaDelMes.toString().padStart(2, '0')}`)
+          .filter('fecha', 'gte', `${anoActual}-${mesStr}-01`)
+          .filter('fecha', 'lte', `${anoActual}-${mesStr}-${ultimoDiaDelMes.toString().padStart(2, '0')}`)
 
         const seguroTotal = (seguro || []).reduce((sum, p) => sum + (p.monto || 0), 0)
 
@@ -237,8 +237,8 @@ export const useGlobal = () => {
         const { data: gastos } = await supabase
           .from('gastos')
           .select('monto')
-          .gte('fecha', `${anoActual}-${mesStr}-01`)
-          .lte('fecha', `${anoActual}-${mesStr}-${ultimoDiaDelMes.toString().padStart(2, '0')}`)
+          .filter('fecha', 'gte', `${anoActual}-${mesStr}-01`)
+          .filter('fecha', 'lte', `${anoActual}-${mesStr}-${ultimoDiaDelMes.toString().padStart(2, '0')}`)
 
         const gastosTotal = (gastos || []).reduce((sum, g) => sum + (g.monto || 0), 0)
 
@@ -246,8 +246,8 @@ export const useGlobal = () => {
         const { data: kiosco } = await supabase
           .from('caja_grande')
           .select('monto')
-          .gte('fecha_transferencia', `${anoActual}-${mesStr}-01`)
-          .lte('fecha_transferencia', `${anoActual}-${mesStr}-${ultimoDiaDelMes.toString().padStart(2, '0')}`)
+          .filter('fecha_transferencia', 'gte', `${anoActual}-${mesStr}-01`)
+          .filter('fecha_transferencia', 'lte', `${anoActual}-${mesStr}-${ultimoDiaDelMes.toString().padStart(2, '0')}`)
 
         const kioscoTotal = (kiosco || []).reduce((sum, c) => sum + (c.monto || 0), 0)
 
@@ -257,8 +257,8 @@ export const useGlobal = () => {
           const { data: insumo } = await supabase
             .from('ventas_insumo')
             .select('subtotal')
-            .gte('fecha_venta', `${anoActual}-${mesStr}-01`)
-            .lte('fecha_venta', `${anoActual}-${mesStr}-${ultimoDiaDelMes.toString().padStart(2, '0')}`)
+            .filter('fecha_venta', 'gte', `${anoActual}-${mesStr}-01`)
+            .filter('fecha_venta', 'lte', `${anoActual}-${mesStr}-${ultimoDiaDelMes.toString().padStart(2, '0')}`)
 
           if (insumo) {
             insumoTotal = (insumo || []).reduce((sum, i) => sum + (i.subtotal || 0), 0)
