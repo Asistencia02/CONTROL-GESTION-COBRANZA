@@ -40,6 +40,14 @@ export const useGlobal = () => {
     setLoading(true)
     setError(null)
     try {
+      // DEBUG: Obtener lista de tablas
+      const { data: tablas } = await supabase
+        .from('information_schema.tables')
+        .select('table_name')
+        .eq('table_schema', 'public')
+
+      console.log('📋 TABLAS EN LA BD:', tablas?.map((t: any) => t.table_name))
+
       const { data: instituciones, error: errInst } = await supabase
         .from('instituciones')
         .select('id, nombre')
@@ -48,100 +56,84 @@ export const useGlobal = () => {
 
       console.log('🔵 INSTITUCIONES:', instituciones)
 
-      // DEBUG: Obtener primeros registros SIN FILTRO
-      const { data: pruebaPageos } = await supabase.from('pagos').select('*').limit(5)
-      const { data: pruebaGastos } = await supabase.from('gastos').select('*').limit(5)
-      const { data: pruebaCaja } = await supabase.from('caja_grande').select('*').limit(5)
+      // DEBUG: Obtener primeros registros SIN FILTRO de cada tabla
+      const { data: pruebaPageos } = await supabase.from('pagos').select('*').limit(3)
+      const { data: pruebaGastos } = await supabase.from('gastos').select('*').limit(3)
+      const { data: pruebaCaja } = await supabase.from('caja_grande').select('*').limit(3)
+      const { data: pruebaCobranzas } = await supabase.from('cobranzas').select('*').limit(3)
 
-      console.log('🔍 DEBUG - Primeros 5 PAGOS (sin filtro):', pruebaPageos)
-      console.log('🔍 DEBUG - Primeros 5 GASTOS (sin filtro):', pruebaGastos)
-      console.log('🔍 DEBUG - Primeros 5 CAJA (sin filtro):', pruebaCaja)
-
-      // Ver qué institucion_id tienen los datos
-      const pagosIDs = pruebaPageos?.map(p => p.institucion_id) || []
-      const gastosIDs = pruebaGastos?.map(g => g.institucion_id) || []
-      const cajaIDs = pruebaCaja?.map(c => c.institucion_id) || []
-
-      console.log('📊 institucion_id EN PAGOS:', [...new Set(pagosIDs)])
-      console.log('📊 institucion_id EN GASTOS:', [...new Set(gastosIDs)])
-      console.log('📊 institucion_id EN CAJA:', [...new Set(cajaIDs)])
+      console.log('🔍 Primeros 3 PAGOS:', pruebaPageos)
+      console.log('🔍 Primeros 3 GASTOS:', pruebaGastos)
+      console.log('🔍 Primeros 3 CAJA GRANDE:', pruebaCaja)
+      console.log('🔍 Primeros 3 COBRANZAS:', pruebaCobranzas)
 
       const datos: DatosGlobales[] = []
 
+      // Intentar con todas las tablas posibles
       for (const inst of instituciones || []) {
         try {
-          // Obtener pagos
-          const { data: pagosData, error: pagosErr } = await supabase
+          let cuotasTotal = 0
+          let inscripcionTotal = 0
+          let seguroTotal = 0
+          let gastosTotal = 0
+          let cajaGrandeTotal = 0
+
+          // Intentar COBRANZAS en lugar de PAGOS
+          const { data: cobranzasData } = await supabase
+            .from('cobranzas')
+            .select('*')
+            .eq('institucion_id', inst.id)
+
+          if (cobranzasData && cobranzasData.length > 0) {
+            console.log(`✅ COBRANZAS inst ${inst.id}: ${cobranzasData.length} registros`)
+            const cuotas = cobranzasData.filter(p => p.concepto === 'cuota')
+            cuotasTotal = cuotas.reduce((sum, p) => sum + (p.monto || 0), 0)
+
+            const inscripciones = cobranzasData.filter(p => p.concepto === 'inscripción')
+            inscripcionTotal = inscripciones.reduce((sum, p) => sum + (p.monto || 0), 0)
+
+            const seguros = cobranzasData.filter(p => p.concepto === 'seguro')
+            seguroTotal = seguros.reduce((sum, p) => sum + (p.monto || 0), 0)
+          } else {
+            console.log(`❌ COBRANZAS inst ${inst.id}: sin datos`)
+          }
+
+          // Intentar PAGOS como backup
+          const { data: pagosData } = await supabase
             .from('pagos')
             .select('*')
             .eq('institucion_id', inst.id)
 
-          console.log(`🟢 PAGOS inst ${inst.id}:`, pagosData?.length || 0, 'error:', pagosErr)
-
-          const cuotas = (pagosData || []).filter(p => p.concepto === 'cuota')
-          const cuotasTotal = cuotas.reduce((sum, p) => sum + (p.monto || 0), 0)
-
-          const inscripciones = (pagosData || []).filter(p => p.concepto === 'inscripción')
-          const inscripcionTotal = inscripciones.reduce((sum, p) => sum + (p.monto || 0), 0)
-
-          const seguros = (pagosData || []).filter(p => p.concepto === 'seguro')
-          const seguroTotal = seguros.reduce((sum, p) => sum + (p.monto || 0), 0)
+          if (pagosData && pagosData.length > 0) {
+            console.log(`✅ PAGOS inst ${inst.id}: ${pagosData.length} registros`)
+            const cuotas = pagosData.filter(p => p.concepto === 'cuota')
+            cuotasTotal = Math.max(cuotasTotal, cuotas.reduce((sum, p) => sum + (p.monto || 0), 0))
+          }
 
           // Gastos
-          const { data: gastosData, error: gastosErr } = await supabase
+          const { data: gastosData } = await supabase
             .from('gastos')
             .select('*')
             .eq('institucion_id', inst.id)
 
-          console.log(`🟡 GASTOS inst ${inst.id}:`, gastosData?.length || 0, 'error:', gastosErr)
-
-          const gastosTotal = (gastosData || []).reduce((sum, g) => sum + (g.monto || 0), 0)
+          if (gastosData && gastosData.length > 0) {
+            console.log(`✅ GASTOS inst ${inst.id}: ${gastosData.length} registros`)
+            gastosTotal = gastosData.reduce((sum, g) => sum + (g.monto || 0), 0)
+          }
 
           // Caja Grande
-          const { data: cajaData, error: cajaErr } = await supabase
+          const { data: cajaData } = await supabase
             .from('caja_grande')
             .select('*')
             .eq('institucion_id', inst.id)
 
-          console.log(`🔴 CAJA GRANDE inst ${inst.id}:`, cajaData?.length || 0, 'error:', cajaErr)
-
-          const cajaGrandeTotal = (cajaData || []).reduce((sum, c) => sum + (c.monto || 0), 0)
-
-          // Insumos
-          let insumosTotal = 0
-          try {
-            const { data: insumosData } = await supabase
-              .from('ventas_insumo')
-              .select('*')
-              .eq('institucion_id', inst.id)
-
-            insumosTotal = (insumosData || []).reduce((sum, i) => sum + (i.subtotal || 0), 0)
-          } catch (e) {
-            console.log('⚠️ INSUMOS no existe')
+          if (cajaData && cajaData.length > 0) {
+            console.log(`✅ CAJA GRANDE inst ${inst.id}: ${cajaData.length} registros`)
+            cajaGrandeTotal = cajaData.reduce((sum, c) => sum + (c.monto || 0), 0)
           }
-
-          // Deudas
-          let deudasTotal = 0
-          try {
-            const { data: deudas } = await supabase
-              .from('deudas_estudiantes')
-              .select('*')
-              .eq('institucion_id', inst.id)
-              .eq('estado', 'activa')
-
-            if (deudas) {
-              deudasTotal = deudas.reduce((sum, d) => sum + (d.monto_adeudado || 0), 0)
-            }
-          } catch (e) {
-            console.log('⚠️ DEUDAS no existe')
-          }
-
-          console.log(
-            `💰 TOTALES inst ${inst.id}: cuotas=${cuotasTotal}, inscripcion=${inscripcionTotal}, seguro=${seguroTotal}, gastos=${gastosTotal}, caja=${cajaGrandeTotal}`
-          )
 
           const subtotalCobranza = cuotasTotal + inscripcionTotal + seguroTotal
-          const subtotalOtros = cajaGrandeTotal + insumosTotal
+          const subtotalOtros = cajaGrandeTotal
           const totalIngresos = subtotalCobranza + subtotalOtros
           const balance = totalIngresos - gastosTotal
 
@@ -152,10 +144,10 @@ export const useGlobal = () => {
             inscripcion_recaudada: inscripcionTotal,
             seguro_recaudado: seguroTotal,
             subtotal_cobranza: subtotalCobranza,
-            total_deudas: deudasTotal,
+            total_deudas: 0,
             total_gastos: gastosTotal,
             caja_grande_kiosco: cajaGrandeTotal,
-            ventas_insumo: insumosTotal,
+            ventas_insumo: 0,
             subtotal_otros_ingresos: subtotalOtros,
             total_ingresos: totalIngresos,
             balance,
@@ -190,7 +182,6 @@ export const useGlobal = () => {
       try {
         const { data } = await supabase.from('pagos').select('*')
         pagosData = data || []
-        console.log('PAGOS TOTAL:', pagosData.length)
       } catch (e) {
         console.error('Error cargando pagos:', e)
       }
@@ -199,7 +190,6 @@ export const useGlobal = () => {
       try {
         const { data } = await supabase.from('gastos').select('*')
         gastosData = data || []
-        console.log('GASTOS TOTAL:', gastosData.length)
       } catch (e) {
         console.error('Error cargando gastos:', e)
       }
@@ -208,28 +198,8 @@ export const useGlobal = () => {
       try {
         const { data } = await supabase.from('caja_grande').select('*')
         cajaData = data || []
-        console.log('CAJA TOTAL:', cajaData.length)
       } catch (e) {
         console.error('Error cargando caja_grande:', e)
-      }
-
-      let insumosData: any[] = []
-      try {
-        const { data } = await supabase.from('ventas_insumo').select('*')
-        insumosData = data || []
-      } catch (e) {
-        console.error('Error cargando ventas_insumo:', e)
-      }
-
-      let deudasData: any[] = []
-      try {
-        const { data } = await supabase
-          .from('deudas_estudiantes')
-          .select('*')
-          .eq('estado', 'activa')
-        deudasData = data || []
-      } catch (e) {
-        console.error('Error cargando deudas:', e)
       }
 
       for (let mes = 1; mes <= mesFinLoop; mes++) {
@@ -247,8 +217,6 @@ export const useGlobal = () => {
 
         const gastosTotal = gastosData.reduce((sum, g) => sum + (g.monto || 0), 0)
         const kioscoTotal = cajaData.reduce((sum, c) => sum + (c.monto || 0), 0)
-        const insumoTotal = insumosData.reduce((sum, i) => sum + (i.subtotal || 0), 0)
-        const deudasTotal = deudasData.reduce((sum, d) => sum + (d.monto_adeudado || 0), 0)
 
         meses.push({
           mes,
@@ -256,10 +224,10 @@ export const useGlobal = () => {
           cuotas: cuotasTotal,
           inscripcion: inscripcionTotal,
           seguro: seguroTotal,
-          deudas: deudasTotal,
+          deudas: 0,
           gastos: gastosTotal,
           kiosco: kioscoTotal,
-          insumo: insumoTotal,
+          insumo: 0,
         })
       }
 
