@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react'
+import { usePagos } from './usePagos'
 import { supabase } from '@renderer/lib/supabase'
 
 export interface DatosGlobales {
@@ -36,23 +37,27 @@ export const useGlobal = () => {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  const { pagos: pagosEnMemoria } = usePagos()
+
   const cargarDatosGlobales = useCallback(async (esAnual: boolean) => {
     setLoading(true)
     setError(null)
     try {
-      // Obtener instituciones
       const { data: instituciones } = await supabase
         .from('instituciones')
         .select('id, nombre')
 
       console.log('🔵 INSTITUCIONES:', instituciones)
+      console.log('📊 PAGOS EN MEMORIA:', pagosEnMemoria.length)
 
       const datos: DatosGlobales[] = []
 
-      for (const inst of instituciones || []) {
-        try {
-          // CARGAR PAGOS POR INSTITUCIÓN (igual a usePagos)
-          let allPagos: any[] = []
+      // SI HAY PAGOS EN MEMORIA, USARLOS. SINO, CARGAR DE BD
+      let allPagos = pagosEnMemoria.length > 0 ? pagosEnMemoria : []
+
+      if (allPagos.length === 0) {
+        console.log('⚠️ Sin pagos en memoria, cargando de BD...')
+        for (const inst of instituciones || []) {
           let page = 0
           const pageSize = 1000
           let hasMore = true
@@ -78,14 +83,22 @@ export const useGlobal = () => {
               page++
             }
           }
+        }
+      }
 
-          console.log(`✅ PAGOS inst ${inst.id}:`, allPagos.length, 'registros')
+      console.log('✅ PAGOS TOTALES:', allPagos.length)
+
+      for (const inst of instituciones || []) {
+        try {
+          const pagosPorInst = allPagos.filter(p => p.institucion_id === inst.id)
+
+          console.log(`✅ PAGOS inst ${inst.id}:`, pagosPorInst.length, 'registros')
 
           let cuotasTotal = 0
           let inscripcionTotal = 0
           let seguroTotal = 0
 
-          allPagos.forEach(p => {
+          pagosPorInst.forEach(p => {
             const concepto = (p as any).conceptos_pago?.nombre || ''
             const monto = p.monto_pagado || 0
 
@@ -98,7 +111,6 @@ export const useGlobal = () => {
             }
           })
 
-          // GASTOS
           let gastosTotal = 0
           try {
             const { data: gastosData } = await supabase
@@ -106,13 +118,12 @@ export const useGlobal = () => {
               .select('monto')
               .eq('institucion_id', inst.id)
 
-            console.log(`✅ GASTOS inst ${inst.id}:`, gastosData?.length || 0, 'registros')
+            console.log(`✅ GASTOS inst ${inst.id}:`, gastosData?.length || 0)
             gastosTotal = (gastosData || []).reduce((sum, g) => sum + (g.monto || 0), 0)
           } catch (e) {
-            console.log(`⚠️ GASTOS no disponible para inst ${inst.id}`)
+            console.log(`⚠️ GASTOS error inst ${inst.id}`)
           }
 
-          // CAJA GRANDE
           let cajaGrandeTotal = 0
           try {
             const { data: cajaData } = await supabase
@@ -120,13 +131,11 @@ export const useGlobal = () => {
               .select('monto')
               .eq('institucion_id', inst.id)
 
-            console.log(`✅ CAJA GRANDE inst ${inst.id}:`, cajaData?.length || 0, 'registros')
+            console.log(`✅ CAJA GRANDE inst ${inst.id}:`, cajaData?.length || 0)
             cajaGrandeTotal = (cajaData || []).reduce((sum, c) => sum + (c.monto || 0), 0)
           } catch (e) {
-            console.log(`⚠️ CAJA GRANDE no disponible para inst ${inst.id}`)
+            console.log(`⚠️ CAJA GRANDE error inst ${inst.id}`)
           }
-
-          console.log(`💰 INST ${inst.id}: cuotas=${cuotasTotal}, inscripcion=${inscripcionTotal}, seguro=${seguroTotal}, gastos=${gastosTotal}, caja=${cajaGrandeTotal}`)
 
           const subtotalCobranza = cuotasTotal + inscripcionTotal + seguroTotal
           const subtotalOtros = cajaGrandeTotal
@@ -149,20 +158,19 @@ export const useGlobal = () => {
             balance,
           })
         } catch (err) {
-          console.error(`❌ Error procesando institución ${inst.id}:`, err)
+          console.error(`❌ Error inst ${inst.id}:`, err)
         }
       }
 
-      console.log('✅ DATOS GLOBALES FINAL:', datos)
       setDatosGlobales(datos)
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Error cargando datos'
       setError(msg)
-      console.error('Error cargarDatosGlobales:', err)
+      console.error('Error:', err)
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [pagosEnMemoria])
 
   const cargarDatosPorMes = useCallback(async (esAnual: boolean) => {
     setLoading(true)
@@ -173,42 +181,41 @@ export const useGlobal = () => {
       const mesActualNum = new Date().getMonth() + 1
       const mesFinLoop = esAnual ? 12 : mesActualNum
 
-      // Obtener instituciones
-      const { data: instituciones } = await supabase
-        .from('instituciones')
-        .select('id')
+      let allPagos = pagosEnMemoria.length > 0 ? pagosEnMemoria : []
 
-      // Cargar TODOS los pagos de TODAS las instituciones
-      let allPagos: any[] = []
-      for (const inst of instituciones || []) {
-        let page = 0
-        const pageSize = 1000
-        let hasMore = true
+      if (allPagos.length === 0) {
+        const { data: instituciones } = await supabase
+          .from('instituciones')
+          .select('id')
 
-        while (hasMore) {
-          const { data } = await supabase
-            .from('pagos')
-            .select(`
-              *,
-              conceptos_pago(nombre)
-            `)
-            .eq('institucion_id', inst.id)
-            .order('fecha_pago', { ascending: false })
-            .range(page * pageSize, (page + 1) * pageSize - 1)
+        for (const inst of instituciones || []) {
+          let page = 0
+          const pageSize = 1000
+          let hasMore = true
 
-          if (!data || data.length === 0) {
-            hasMore = false
-          } else {
-            allPagos = [...allPagos, ...data]
-            if (data.length < pageSize) {
+          while (hasMore) {
+            const { data } = await supabase
+              .from('pagos')
+              .select(`
+                *,
+                conceptos_pago(nombre)
+              `)
+              .eq('institucion_id', inst.id)
+              .order('fecha_pago', { ascending: false })
+              .range(page * pageSize, (page + 1) * pageSize - 1)
+
+            if (!data || data.length === 0) {
               hasMore = false
+            } else {
+              allPagos = [...allPagos, ...data]
+              if (data.length < pageSize) {
+                hasMore = false
+              }
+              page++
             }
-            page++
           }
         }
       }
-
-      console.log('📊 PAGOS PARA POR MES TOTAL:', allPagos.length)
 
       let gastosData: any[] = []
       try {
@@ -216,9 +223,8 @@ export const useGlobal = () => {
           .from('gastos')
           .select('monto, fecha_gasto')
         gastosData = data || []
-        console.log('📊 GASTOS TOTAL:', gastosData.length)
       } catch (e) {
-        console.error('Error cargando gastos:', e)
+        console.error('Error gastos:', e)
       }
 
       let cajaData: any[] = []
@@ -227,9 +233,8 @@ export const useGlobal = () => {
           .from('caja_grande')
           .select('monto, fecha_transferencia')
         cajaData = data || []
-        console.log('📊 CAJA TOTAL:', cajaData.length)
       } catch (e) {
-        console.error('Error cargando caja_grande:', e)
+        console.error('Error caja:', e)
       }
 
       for (let mes = 1; mes <= mesFinLoop; mes++) {
@@ -240,7 +245,6 @@ export const useGlobal = () => {
         let inscripcionTotal = 0
         let seguroTotal = 0
 
-        // Filtrar pagos por mes (TODOS)
         allPagos.forEach(p => {
           const fechaPago = new Date(p.fecha_pago)
           const mesDelPago = (fechaPago.getMonth() + 1).toString().padStart(2, '0')
@@ -260,14 +264,12 @@ export const useGlobal = () => {
           }
         })
 
-        // Filtrar gastos por mes
         const gastosDelMes = gastosData.filter(g => {
           const fechaGasto = new Date(g.fecha_gasto)
           return fechaGasto.getMonth() + 1 === mes && fechaGasto.getFullYear() === anoActual
         })
         const gastosTotal = gastosDelMes.reduce((sum, g) => sum + (g.monto || 0), 0)
 
-        // Filtrar caja por mes
         const cajaDelMes = cajaData.filter(c => {
           const fechaCaja = new Date(c.fecha_transferencia)
           return fechaCaja.getMonth() + 1 === mes && fechaCaja.getFullYear() === anoActual
@@ -295,11 +297,11 @@ export const useGlobal = () => {
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Error cargando datos por mes'
       setError(msg)
-      console.error('Error cargarDatosPorMes:', err)
+      console.error('Error:', err)
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [pagosEnMemoria])
 
   return {
     datosGlobales,
