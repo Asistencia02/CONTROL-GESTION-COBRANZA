@@ -57,19 +57,19 @@ export const useGlobal = () => {
         const fechaInicio = `${anoActual}-${mesInicio.toString().padStart(2, '0')}-01`
         const fechaFin = `${anoActual}-${mesFinMes.toString().padStart(2, '0')}-${mesFinDia.toString().padStart(2, '0')}`
 
-        // Cuotas
+        // Cuotas - obtener sin filtro de fecha
         const { data: pagosData } = await supabase
           .from('pagos')
-          .select('monto, concepto, fecha')
+          .select('monto, concepto')
           .eq('institucion_id', inst.id)
 
-        const cuotas = pagosData?.filter(p => p.concepto === 'cuota' && p.fecha >= fechaInicio && p.fecha <= fechaFin) || []
+        const cuotas = pagosData?.filter(p => p.concepto === 'cuota') || []
         const cuotasTotal = cuotas.reduce((sum, p) => sum + (p.monto || 0), 0)
 
-        const inscripciones = pagosData?.filter(p => p.concepto === 'inscripción' && p.fecha >= fechaInicio && p.fecha <= fechaFin) || []
+        const inscripciones = pagosData?.filter(p => p.concepto === 'inscripción') || []
         const inscripcionTotal = inscripciones.reduce((sum, p) => sum + (p.monto || 0), 0)
 
-        const seguros = pagosData?.filter(p => p.concepto === 'seguro' && p.fecha >= fechaInicio && p.fecha <= fechaFin) || []
+        const seguros = pagosData?.filter(p => p.concepto === 'seguro') || []
         const seguroTotal = seguros.reduce((sum, p) => sum + (p.monto || 0), 0)
 
         // Deudas
@@ -91,31 +91,28 @@ export const useGlobal = () => {
         // Gastos
         const { data: gastosData } = await supabase
           .from('gastos')
-          .select('monto, fecha')
+          .select('monto')
           .eq('institucion_id', inst.id)
 
-        const gastos = gastosData?.filter(g => g.fecha >= fechaInicio && g.fecha <= fechaFin) || []
-        const gastosTotal = gastos.reduce((sum, g) => sum + (g.monto || 0), 0)
+        const gastosTotal = (gastosData || []).reduce((sum, g) => sum + (g.monto || 0), 0)
 
         // Caja Grande
         const { data: cajaData } = await supabase
           .from('caja_grande')
-          .select('monto, fecha_transferencia')
+          .select('monto')
           .eq('institucion_id', inst.id)
 
-        const cajaGrande = cajaData?.filter(c => c.fecha_transferencia >= fechaInicio && c.fecha_transferencia <= fechaFin) || []
-        const cajaGrandeTotal = cajaGrande.reduce((sum, c) => sum + (c.monto || 0), 0)
+        const cajaGrandeTotal = (cajaData || []).reduce((sum, c) => sum + (c.monto || 0), 0)
 
         // Insumos
         let insumosTotal = 0
         try {
           const { data: insumosData } = await supabase
             .from('ventas_insumo')
-            .select('subtotal, fecha_venta')
+            .select('subtotal')
             .eq('institucion_id', inst.id)
 
-          const insumos = insumosData?.filter(i => i.fecha_venta >= fechaInicio && i.fecha_venta <= fechaFin) || []
-          insumosTotal = insumos.reduce((sum, i) => sum + (i.subtotal || 0), 0)
+          insumosTotal = (insumosData || []).reduce((sum, i) => sum + (i.subtotal || 0), 0)
         } catch (e) {
           // Tabla no existe
         }
@@ -164,21 +161,21 @@ export const useGlobal = () => {
       // Obtener TODOS los datos sin filtro de fecha
       const { data: pagosData } = await supabase
         .from('pagos')
-        .select('monto, concepto, fecha')
+        .select('monto, concepto')
 
       const { data: gastosData } = await supabase
         .from('gastos')
-        .select('monto, fecha')
+        .select('monto')
 
       const { data: cajaData } = await supabase
         .from('caja_grande')
-        .select('monto, fecha_transferencia')
+        .select('monto')
 
       let insumosData: any[] = []
       try {
         const { data: insumosRaw } = await supabase
           .from('ventas_insumo')
-          .select('subtotal, fecha_venta')
+          .select('subtotal')
         insumosData = insumosRaw || []
       } catch (e) {
         // Tabla no existe
@@ -198,30 +195,21 @@ export const useGlobal = () => {
       for (let mes = 1; mes <= mesFinLoop; mes++) {
         const mesStr = mes.toString().padStart(2, '0')
         const nombreMes = new Date(anoActual, mes - 1).toLocaleString('es-ES', { month: 'long' })
-        const ultimoDiaDelMes = new Date(anoActual, mes, 0).getDate()
-        const fechaInicio = `${anoActual}-${mesStr}-01`
-        const fechaFin = `${anoActual}-${mesStr}-${ultimoDiaDelMes.toString().padStart(2, '0')}`
 
         // Filtrar en memoria
-        const cuotas = pagosData?.filter(p => p.concepto === 'cuota' && p.fecha >= fechaInicio && p.fecha <= fechaFin) || []
+        const cuotas = pagosData?.filter(p => p.concepto === 'cuota') || []
         const cuotasTotal = cuotas.reduce((sum, p) => sum + (p.monto || 0), 0)
 
-        const inscripciones = pagosData?.filter(p => p.concepto === 'inscripción' && p.fecha >= fechaInicio && p.fecha <= fechaFin) || []
+        const inscripciones = pagosData?.filter(p => p.concepto === 'inscripción') || []
         const inscripcionTotal = inscripciones.reduce((sum, p) => sum + (p.monto || 0), 0)
 
-        const seguros = pagosData?.filter(p => p.concepto === 'seguro' && p.fecha >= fechaInicio && p.fecha <= fechaFin) || []
+        const seguros = pagosData?.filter(p => p.concepto === 'seguro') || []
         const seguroTotal = seguros.reduce((sum, p) => sum + (p.monto || 0), 0)
 
-        const gastos = gastosData?.filter(g => g.fecha >= fechaInicio && g.fecha <= fechaFin) || []
-        const gastosTotal = gastos.reduce((sum, g) => sum + (g.monto || 0), 0)
-
-        const kiosco = cajaData?.filter(c => c.fecha_transferencia >= fechaInicio && c.fecha_transferencia <= fechaFin) || []
-        const kioscoTotal = kiosco.reduce((sum, c) => sum + (c.monto || 0), 0)
-
-        const insumos = insumosData.filter(i => i.fecha_venta >= fechaInicio && i.fecha_venta <= fechaFin) || []
-        const insumoTotal = insumos.reduce((sum, i) => sum + (i.subtotal || 0), 0)
-
-        const deudasTotal = deudasData.reduce((sum, d) => sum + (d.monto_adeudado || 0), 0)
+        const gastosTotal = (gastosData || []).reduce((sum, g) => sum + (g.monto || 0), 0)
+        const kioscoTotal = (cajaData || []).reduce((sum, c) => sum + (c.monto || 0), 0)
+        const insumoTotal = (insumosData || []).reduce((sum, i) => sum + (i.subtotal || 0), 0)
+        const deudasTotal = (deudasData || []).reduce((sum, d) => sum + (d.monto_adeudado || 0), 0)
 
         meses.push({
           mes,
