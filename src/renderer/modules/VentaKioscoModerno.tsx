@@ -4,17 +4,26 @@ import { useVentaKiosco } from '@renderer/hooks/useVentaKiosco'
 import { useProductosKiosco } from '@renderer/hooks/useProductosKiosco'
 import { useFiados } from '@renderer/hooks/useFiados'
 import { formatoMoneda } from '@renderer/lib/helpers'
-import { ShoppingBag, Plus, TrendingUp, DollarSign, RefreshCw, AlertCircle, Lock, Unlock, History, Vault, Users, CreditCard } from 'lucide-react'
+import { ShoppingBag, Plus, TrendingUp, DollarSign, RefreshCw, AlertCircle, Lock, Unlock, History, Vault, Users, CreditCard, Trash2, ShoppingCart } from 'lucide-react'
 import { supabase } from '@renderer/lib/supabase'
 
 type TabVentaKiosco = 'registro' | 'historial' | 'caja' | 'cierres' | 'cajagrande' | 'resumen' | 'fiados'
+
+interface ItemCarrito {
+  id: string
+  producto_id: number
+  nombre: string
+  cantidad: number
+  precio_unitario: number
+  subtotal: number
+}
 
 export const VentaKioscoModerno: React.FC = () => {
   const { institucionActiva } = useInstitucion()
   const { ventasKiosco, cajaChica, cierresCaja, cajaGrande, cargarVentasKiosco, cargarCajaChicaActiva, cargarCierresCaja, cargarCajaGrande, abrirCajaChica, cerrarCajaChica, agregarVentaKiosco, totalVentasKiosco, totalEfectivo, totalCajaGrande, loading } = useVentaKiosco(institucionActiva.id)
 
   const { productos, cargarProductos, actualizarStock } = useProductosKiosco(institucionActiva.id)
-  const { fiados, cargarFiados, agregarCompraFiada, pagarFiado, obtenerOCrearFiado, detalles, cargarDetalles } = useFiados(institucionActiva.id)
+  const { fiados, cargarFiados, agregarCompraFiada, pagarFiado, obtenerOCrearFiado } = useFiados(institucionActiva.id)
 
   const [formData, setFormData] = useState({
     producto_id: 0,
@@ -26,6 +35,7 @@ export const VentaKioscoModerno: React.FC = () => {
     nuevo_fiado_apellido: '',
   })
 
+  const [carrito, setCarrito] = useState<ItemCarrito[]>([])
   const [saldoMinimoCaja, setSaldoMinimoCaja] = useState(5000)
   const [cajaAbriendo, setCajaAbriendo] = useState(false)
   const [cajaCerrando, setCajaCerrando] = useState(false)
@@ -33,15 +43,17 @@ export const VentaKioscoModerno: React.FC = () => {
   const [successMessage, setSuccessMessage] = useState('')
   const [errorMessage, setErrorMessage] = useState('')
   const [tabActiva, setTabActiva] = useState<TabVentaKiosco>('registro')
-  const [filadoSeleccionado, setFiadoSeleccionado] = useState<number | null>(null)
+  const [fiadoSeleccionado, setFiadoSeleccionado] = useState<number | null>(null)
   const [pagandoFiado, setPagandoFiado] = useState(false)
   const [montoPago, setMontoPago] = useState(0)
 
   const productoSeleccionado = productos.find(p => p.id === formData.producto_id)
-  const subtotal = formData.cantidad * (productoSeleccionado?.precio_unitario || 0)
-  const cambio = Math.max(0, formData.monto_entregado - subtotal)
+  const subtotalProducto = formData.cantidad * (productoSeleccionado?.precio_unitario || 0)
+  const cambio = Math.max(0, formData.monto_entregado - subtotalProducto)
   const saldoActualCaja = cajaChica ? cajaChica.saldo_inicial + totalEfectivo : 0
 
+  const totalCarrito = carrito.reduce((sum, item) => sum + item.subtotal, 0)
+  const cambioCarrito = Math.max(0, formData.monto_entregado - totalCarrito)
   const totalFiadosPendientes = fiados.filter(f => f.estado === 'activo').reduce((sum, f) => sum + f.monto_total_fiado, 0)
 
   useEffect(() => {
@@ -77,7 +89,7 @@ export const VentaKioscoModerno: React.FC = () => {
     }
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const agregarAlCarrito = (e: React.FormEvent) => {
     e.preventDefault()
     setErrorMessage('')
 
@@ -96,8 +108,82 @@ export const VentaKioscoModerno: React.FC = () => {
       return
     }
 
-    if (formData.metodo_pago === 'EFECTIVO' && formData.monto_entregado < subtotal) {
-      setErrorMessage('El monto entregado debe ser mayor o igual al subtotal')
+    // Verificar si el producto ya está en el carrito
+    const itemExistente = carrito.find(item => item.producto_id === formData.producto_id)
+    
+    if (itemExistente) {
+      const cantidadTotal = itemExistente.cantidad + formData.cantidad
+      if (cantidadTotal > productoSeleccionado.stock_actual) {
+        setErrorMessage(`Cantidad total excede el stock disponible (${productoSeleccionado.stock_actual})`)
+        return
+      }
+      
+      // Actualizar cantidad si ya existe
+      setCarrito(carrito.map(item =>
+        item.producto_id === formData.producto_id
+          ? {
+              ...item,
+              cantidad: cantidadTotal,
+              subtotal: cantidadTotal * item.precio_unitario,
+            }
+          : item
+      ))
+    } else {
+      // Agregar nuevo producto al carrito
+      setCarrito([
+        ...carrito,
+        {
+          id: Math.random().toString(),
+          producto_id: formData.producto_id,
+          nombre: productoSeleccionado.nombre,
+          cantidad: formData.cantidad,
+          precio_unitario: productoSeleccionado.precio_unitario,
+          subtotal: subtotalProducto,
+        },
+      ])
+    }
+
+    setSuccessMessage(`✓ ${productoSeleccionado.nombre} agregado al carrito`)
+    setFormData({
+      producto_id: 0,
+      cantidad: 1,
+      metodo_pago: 'EFECTIVO',
+      monto_entregado: 0,
+      fiado_id: 0,
+      nuevo_fiado_nombre: '',
+      nuevo_fiado_apellido: '',
+    })
+    setTimeout(() => setSuccessMessage(''), 2000)
+  }
+
+  const eliminarDelCarrito = (id: string) => {
+    setCarrito(carrito.filter(item => item.id !== id))
+  }
+
+  const limpiarCarrito = () => {
+    setCarrito([])
+    setFormData({
+      producto_id: 0,
+      cantidad: 1,
+      metodo_pago: 'EFECTIVO',
+      monto_entregado: 0,
+      fiado_id: 0,
+      nuevo_fiado_nombre: '',
+      nuevo_fiado_apellido: '',
+    })
+  }
+
+  const registrarVentaCarrito = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setErrorMessage('')
+
+    if (carrito.length === 0) {
+      setErrorMessage('El carrito está vacío')
+      return
+    }
+
+    if (formData.metodo_pago === 'EFECTIVO' && formData.monto_entregado < totalCarrito) {
+      setErrorMessage('El monto entregado debe ser mayor o igual al total')
       return
     }
 
@@ -110,43 +196,43 @@ export const VentaKioscoModerno: React.FC = () => {
 
     setRegistrando(true)
     try {
-      if (formData.metodo_pago === 'A_CUENTA') {
-        let fiadoId = formData.fiado_id
-        if (!fiadoId) {
-          const nuevoFiado = await obtenerOCrearFiado(formData.nuevo_fiado_nombre, formData.nuevo_fiado_apellido)
-          fiadoId = nuevoFiado.id
-        }
+      let fiadoIdParaUsar: number | null = null
 
-        await agregarCompraFiada(fiadoId, subtotal, `${productoSeleccionado.nombre} x${formData.cantidad}`)
+      if (formData.metodo_pago === 'A_CUENTA') {
+        fiadoIdParaUsar = formData.fiado_id
+        if (!fiadoIdParaUsar) {
+          const nuevoFiado = await obtenerOCrearFiado(formData.nuevo_fiado_nombre, formData.nuevo_fiado_apellido)
+          fiadoIdParaUsar = nuevoFiado.id
+        }
       }
 
-      await agregarVentaKiosco({
-        institucion_id: institucionActiva.id,
-        producto: productoSeleccionado.nombre,
-        cantidad: formData.cantidad,
-        precio_unitario: productoSeleccionado.precio_unitario,
-        subtotal,
-        metodo_pago: formData.metodo_pago === 'A_CUENTA' ? 'EFECTIVO' : formData.metodo_pago,
-        monto_entregado: formData.metodo_pago === 'EFECTIVO' ? formData.monto_entregado : undefined,
-        cambio: formData.metodo_pago === 'EFECTIVO' ? cambio : undefined,
-        caja_chica_id: cajaChica?.id,
-        fecha_venta: new Date().toISOString().split('T')[0],
-      })
+      // Registrar cada producto del carrito como venta individual
+      for (const item of carrito) {
+        if (formData.metodo_pago === 'A_CUENTA' && fiadoIdParaUsar) {
+          await agregarCompraFiada(fiadoIdParaUsar, item.subtotal, `${item.nombre} x${item.cantidad}`)
+        }
 
-      const nuevoStock = productoSeleccionado.stock_actual - formData.cantidad
-      await actualizarStock(formData.producto_id, nuevoStock)
+        await agregarVentaKiosco({
+          institucion_id: institucionActiva.id,
+          producto: item.nombre,
+          cantidad: item.cantidad,
+          precio_unitario: item.precio_unitario,
+          subtotal: item.subtotal,
+          metodo_pago: formData.metodo_pago === 'A_CUENTA' ? 'EFECTIVO' : formData.metodo_pago,
+          monto_entregado: formData.metodo_pago === 'EFECTIVO' ? formData.monto_entregado : undefined,
+          cambio: formData.metodo_pago === 'EFECTIVO' ? cambioCarrito : undefined,
+          caja_chica_id: cajaChica?.id,
+          fecha_venta: new Date().toISOString().split('T')[0],
+        })
+
+        // Actualizar stock
+        const nuevoStock = (productoSeleccionado?.stock_actual || 0) - item.cantidad
+        await actualizarStock(item.producto_id, nuevoStock)
+      }
+
       await cargarProductos(institucionActiva.id)
-
-      setSuccessMessage(`✓ Venta registrada: ${productoSeleccionado.nombre}`)
-      setFormData({ 
-        producto_id: 0, 
-        cantidad: 1, 
-        metodo_pago: 'EFECTIVO', 
-        monto_entregado: 0,
-        fiado_id: 0,
-        nuevo_fiado_nombre: '',
-        nuevo_fiado_apellido: '',
-      })
+      setSuccessMessage(`✓ Venta registrada: ${carrito.length} producto(s)`)
+      limpiarCarrito()
       await cargarVentasKiosco(institucionActiva.id)
       await cargarFiados()
       setTimeout(() => setSuccessMessage(''), 3000)
@@ -291,9 +377,9 @@ export const VentaKioscoModerno: React.FC = () => {
           <p className="text-xs text-slate-400 font-bold mb-1">Unidades Vendidas</p>
           <p className="text-2xl font-black text-yellow-400">{cantidadProductosVendidos}</p>
         </div>
-        <div className="p-4 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-xl hover:border-red-600/50 transition-all">
-          <p className="text-xs text-slate-400 font-bold mb-1">Fiados Pendientes</p>
-          <p className="text-2xl font-black text-red-400">{formatoMoneda(totalFiadosPendientes)}</p>
+        <div className="p-4 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-xl hover:border-blue-600/50 transition-all">
+          <p className="text-xs text-slate-400 font-bold mb-1">En Carrito</p>
+          <p className="text-2xl font-black text-blue-400">{formatoMoneda(totalCarrito)}</p>
         </div>
       </div>
 
@@ -343,7 +429,7 @@ export const VentaKioscoModerno: React.FC = () => {
           >
             <Lock size={20} />
             Caja
-            </button>
+          </button>
           <button
             onClick={() => setTabActiva('cierres')}
             className={`px-6 py-3 rounded-lg font-bold transition-all duration-300 flex items-center gap-2 whitespace-nowrap ${
@@ -384,78 +470,155 @@ export const VentaKioscoModerno: React.FC = () => {
       <div className="transition-all duration-500">
         {/* TAB: REGISTRO */}
         {tabActiva === 'registro' && (
-          <div className="space-y-6">
-            <div className="p-6 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-xl">
-              <div className="flex items-center gap-3 mb-6">
-                <div className="p-3 bg-orange-500/20 rounded-lg">
-                  <Plus size={24} className="text-orange-400" />
-                </div>
-                <h2 className="text-xl font-bold text-white">Registrar Nueva Venta</h2>
-              </div>
-
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* Producto */}
-                  <div>
-                    <label className="block text-sm font-bold text-slate-300 mb-2">Producto</label>
-                    <select
-                      value={formData.producto_id}
-                      onChange={(e) => setFormData({ ...formData, producto_id: parseInt(e.target.value) || 0 })}
-                      className="w-full px-4 py-3 bg-slate-700/50 border border-slate-600/50 rounded-lg text-white focus:border-orange-500/50 focus:outline-none transition"
-                    >
-                      <option value="0">Selecciona un producto...</option>
-                      {productos.map(prod => (
-                        <option key={prod.id} value={prod.id}>
-                          {prod.nombre} - Stock: {prod.stock_actual}
-                        </option>
-                      ))}
-                    </select>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* FORMULARIO */}
+            <div className="lg:col-span-2 space-y-6">
+              <div className="p-6 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-xl">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="p-3 bg-orange-500/20 rounded-lg">
+                    <Plus size={24} className="text-orange-400" />
                   </div>
-
-                  {/* Cantidad */}
-                  <div>
-                    <label className="block text-sm font-bold text-slate-300 mb-2">Cantidad</label>
-                    <input
-                      type="number"
-                      min="1"
-                      max={productoSeleccionado?.stock_actual || 1}
-                      value={formData.cantidad}
-                      onChange={(e) => setFormData({ ...formData, cantidad: parseInt(e.target.value) || 1 })}
-                      className="w-full px-4 py-3 bg-slate-700/50 border border-slate-600/50 rounded-lg text-white placeholder-slate-400 focus:border-orange-500/50 focus:outline-none transition"
-                    />
-                  </div>
+                  <h2 className="text-xl font-bold text-white">Agregar Productos</h2>
                 </div>
 
-                {/* Información del Producto */}
-                {productoSeleccionado && (
-                  <div className="p-4 bg-slate-700/30 border border-slate-600/50 rounded-lg">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-                      <div>
-                        <p className="text-xs text-slate-400 mb-1">Precio Unitario</p>
-                        <p className="text-xl font-black text-orange-400">{formatoMoneda(productoSeleccionado.precio_unitario)}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-slate-400 mb-1">Categoría</p>
-                        <p className="text-lg font-bold text-slate-300">{productoSeleccionado.categoria}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-slate-400 mb-1">Subtotal</p>
-                        <p className="text-xl font-black text-amber-400">{formatoMoneda(subtotal)}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-slate-400 mb-1">Stock</p>
-                        <p className={`text-lg font-bold ${productoSeleccionado.stock_actual <= productoSeleccionado.stock_minimo ? 'text-red-400' : 'text-green-400'}`}>
-                          {productoSeleccionado.stock_actual}
-                        </p>
+                <form onSubmit={agregarAlCarrito} className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Producto */}
+                    <div>
+                      <label className="block text-sm font-bold text-slate-300 mb-2">Producto</label>
+                      <select
+                        value={formData.producto_id}
+                        onChange={(e) => setFormData({ ...formData, producto_id: parseInt(e.target.value) || 0 })}
+                        className="w-full px-4 py-3 bg-slate-700/50 border border-slate-600/50 rounded-lg text-white focus:border-orange-500/50 focus:outline-none transition"
+                      >
+                        <option value="0">Selecciona un producto...</option>
+                        {productos.map(prod => (
+                          <option key={prod.id} value={prod.id}>
+                            {prod.nombre} - Stock: {prod.stock_actual}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Cantidad */}
+                    <div>
+                      <label className="block text-sm font-bold text-slate-300 mb-2">Cantidad</label>
+                      <input
+                        type="number"
+                        min="1"
+                        max={productoSeleccionado?.stock_actual || 1}
+                        value={formData.cantidad}
+                        onChange={(e) => setFormData({ ...formData, cantidad: parseInt(e.target.value) || 1 })}
+                        className="w-full px-4 py-3 bg-slate-700/50 border border-slate-600/50 rounded-lg text-white placeholder-slate-400 focus:border-orange-500/50 focus:outline-none transition"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Información del Producto */}
+                  {productoSeleccionado && (
+                    <div className="p-4 bg-slate-700/30 border border-slate-600/50 rounded-lg">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+                        <div>
+                          <p className="text-xs text-slate-400 mb-1">Precio Unitario</p>
+                          <p className="text-xl font-black text-orange-400">{formatoMoneda(productoSeleccionado.precio_unitario)}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-slate-400 mb-1">Categoría</p>
+                          <p className="text-lg font-bold text-slate-300">{productoSeleccionado.categoria}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-slate-400 mb-1">Subtotal</p>
+                          <p className="text-xl font-black text-amber-400">{formatoMoneda(subtotalProducto)}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-slate-400 mb-1">Stock</p>
+                          <p className={`text-lg font-bold ${productoSeleccionado.stock_actual <= productoSeleccionado.stock_minimo ? 'text-red-400' : 'text-green-400'}`}>
+                            {productoSeleccionado.stock_actual}
+                          </p>
+                        </div>
                       </div>
                     </div>
+                  )}
+
+                  <button
+                    type="submit"
+                    disabled={!formData.producto_id || !productoSeleccionado || !cajaChica}
+                    className={`w-full py-4 px-6 rounded-xl font-bold text-white flex items-center justify-center gap-2 transition ${
+                      !formData.producto_id || !productoSeleccionado || !cajaChica
+                        ? 'bg-slate-600 cursor-not-allowed opacity-50'
+                        : 'bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 shadow-lg shadow-blue-500/50'
+                    }`}
+                  >
+                    <Plus size={20} />
+                    {!cajaChica ? 'Abre caja' : 'Agregar al Carrito'}
+                  </button>
+                </form>
+              </div>
+            </div>
+
+            {/* CARRITO */}
+            <div className="space-y-6">
+              <div className="p-6 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-xl">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="p-3 bg-blue-500/20 rounded-lg">
+                    <ShoppingCart size={24} className="text-blue-400" />
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-bold text-white">Carrito</h2>
+                    <p className="text-sm text-slate-400">{carrito.length} producto(s)</p>
+                  </div>
+                </div>
+
+                {carrito.length === 0 ? (
+                  <div className="text-center py-8">
+                    <ShoppingCart size={32} className="text-slate-600 mx-auto mb-2" />
+                    <p className="text-slate-400 font-semibold">Carrito vacío</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3 mb-6">
+                    {carrito.map(item => (
+                      <div key={item.id} className="p-3 bg-slate-700/30 border border-slate-600/50 rounded-lg">
+                        <div className="flex justify-between items-start mb-2">
+                          <div className="flex-1">
+                            <p className="font-bold text-white text-sm">{item.nombre}</p>
+                            <p className="text-xs text-slate-400">x{item.cantidad} @ {formatoMoneda(item.precio_unitario)}</p>
+                          </div>
+                          <button
+                            onClick={() => eliminarDelCarrito(item.id)}
+                            className="p-1 text-red-400 hover:text-red-300 transition"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+                        <p className="text-right font-bold text-amber-400">{formatoMoneda(item.subtotal)}</p>
+                      </div>
+                    ))}
                   </div>
                 )}
 
-                {/* Método de Pago */}
-                <div>
-                  <label className="block text-sm font-bold text-slate-300 mb-3">Método de Pago</label>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-2">
+                <div className="border-t border-slate-600/50 pt-4 space-y-3">
+                  <div className="flex justify-between items-center">
+                    <p className="text-slate-400 font-bold">Total:</p>
+                    <p className="text-2xl font-black text-amber-400">{formatoMoneda(totalCarrito)}</p>
+                  </div>
+
+                  {carrito.length > 0 && (
+                    <button
+                      onClick={limpiarCarrito}
+                      className="w-full px-4 py-2 bg-red-600/30 hover:bg-red-600/50 text-red-300 rounded-lg font-semibold transition border border-red-500/30"
+                    >
+                      Limpiar Carrito
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* PAGO */}
+              {carrito.length > 0 && (
+                <form onSubmit={registrarVentaCarrito} className="p-6 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-xl space-y-4">
+                  <h3 className="text-lg font-bold text-white">Método de Pago</h3>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     {[
                       { value: 'EFECTIVO', label: '💵 Efectivo' },
                       { value: 'TRANSFERENCIA', label: '🏦 Transf.' },
@@ -482,87 +645,84 @@ export const VentaKioscoModerno: React.FC = () => {
                       </label>
                     ))}
                   </div>
-                </div>
 
-                {/* CAMPOS DE A CUENTA */}
-                {formData.metodo_pago === 'A_CUENTA' && (
-                  <div className="p-4 bg-red-500/10 border border-red-500/50 rounded-lg space-y-3">
-                    <div>
-                      <label className="block text-sm font-bold text-slate-300 mb-2">Seleccionar Cliente o Crear Nuevo</label>
+                  {/* CAMPOS DE A CUENTA */}
+                  {formData.metodo_pago === 'A_CUENTA' && (
+                    <div className="p-4 bg-red-500/10 border border-red-500/50 rounded-lg space-y-3">
                       <select
                         value={formData.fiado_id || ''}
-                        onChange={(e) => setFormData({ ...formData, fiado_id: e.target.value ? parseInt(e.target.value) : 0, nuevo_fiado_nombre: '', nuevo_fiado_apellido: '' })}
-                        className="w-full px-4 py-3 bg-slate-700/50 border border-red-500/50 rounded-lg text-white focus:border-red-400/50 focus:outline-none transition"
+                        onChange={(e) => setFormData({ ...formData, fiado_id: e.target.value ? parseInt(e.target.value) : 0 })}
+                        className="w-full px-4 py-3 bg-slate-700/50 border border-red-500/50 rounded-lg text-white focus:border-red-400/50 focus:outline-none transition text-sm"
                       >
                         <option value="">-- Seleccionar Cliente --</option>
                         {fiados.map(fiado => (
                           <option key={fiado.id} value={fiado.id}>
-                            {fiado.apellido}, {fiado.nombre} - Debe: {formatoMoneda(fiado.monto_total_fiado)}
+                            {fiado.apellido}, {fiado.nombre}
                           </option>
                         ))}
                       </select>
+
+                      {!formData.fiado_id && (
+                        <div className="grid grid-cols-2 gap-2">
+                          <input
+                            type="text"
+                            placeholder="Nombre"
+                            value={formData.nuevo_fiado_nombre}
+                            onChange={(e) => setFormData({ ...formData, nuevo_fiado_nombre: e.target.value })}
+                            className="px-3 py-2 bg-slate-700/50 border border-red-500/50 rounded-lg text-white placeholder-slate-400 focus:border-red-400/50 focus:outline-none text-sm"
+                          />
+                          <input
+                            type="text"
+                            placeholder="Apellido"
+                            value={formData.nuevo_fiado_apellido}
+                            onChange={(e) => setFormData({ ...formData, nuevo_fiado_apellido: e.target.value })}
+                            className="px-3 py-2 bg-slate-700/50 border border-red-500/50 rounded-lg text-white placeholder-slate-400 focus:border-red-400/50 focus:outline-none text-sm"
+                          />
+                        </div>
+                      )}
                     </div>
+                  )}
 
-                    {!formData.fiado_id && (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <input
-                          type="text"
-                          placeholder="Nombre"
-                          value={formData.nuevo_fiado_nombre}
-                          onChange={(e) => setFormData({ ...formData, nuevo_fiado_nombre: e.target.value })}
-                          className="px-4 py-3 bg-slate-700/50 border border-red-500/50 rounded-lg text-white placeholder-slate-400 focus:border-red-400/50 focus:outline-none"
-                        />
-                        <input
-                          type="text"
-                          placeholder="Apellido"
-                          value={formData.nuevo_fiado_apellido}
-                          onChange={(e) => setFormData({ ...formData, nuevo_fiado_apellido: e.target.value })}
-                          className="px-4 py-3 bg-slate-700/50 border border-red-500/50 rounded-lg text-white placeholder-slate-400 focus:border-red-400/50 focus:outline-none"
-                        />
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* CAMPOS DE EFECTIVO */}
-                {formData.metodo_pago === 'EFECTIVO' && (
-                  <div className="p-4 bg-green-500/10 border border-green-500/50 rounded-lg space-y-3">
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                      <div>
-                        <p className="text-xs text-slate-400 mb-1">Subtotal</p>
-                        <p className="text-2xl font-black text-amber-400">{formatoMoneda(subtotal)}</p>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-bold text-slate-300 mb-2">Monto Entregado</label>
-                        <input
-                          type="number"
-                          min={subtotal}
-                          value={formData.monto_entregado || ''}
-                          onChange={(e) => setFormData({ ...formData, monto_entregado: parseInt(e.target.value) || 0 })}
-                          className="w-full px-3 py-2 bg-slate-700/50 border border-green-500/50 rounded-lg text-white text-center font-bold focus:outline-none"
-                        />
+                  {/* CAMPOS DE EFECTIVO */}
+                  {formData.metodo_pago === 'EFECTIVO' && (
+                    <div className="p-4 bg-green-500/10 border border-green-500/50 rounded-lg space-y-3">
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <p className="text-xs text-slate-400 mb-1">Total</p>
+                          <p className="text-lg font-black text-amber-400">{formatoMoneda(totalCarrito)}</p>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold text-slate-300 mb-1">Monto</label>
+                          <input
+                            type="number"
+                            min={totalCarrito}
+                            value={formData.monto_entregado || ''}
+                            onChange={(e) => setFormData({ ...formData, monto_entregado: parseInt(e.target.value) || 0 })}
+                            className="w-full px-2 py-1 bg-slate-700/50 border border-green-500/50 rounded-lg text-white text-center font-bold focus:outline-none text-sm"
+                          />
+                        </div>
                       </div>
                       <div>
                         <p className="text-xs text-slate-400 mb-1">Cambio</p>
-                        <p className="text-2xl font-black text-green-400">{formatoMoneda(cambio)}</p>
+                        <p className="text-lg font-black text-green-400">{formatoMoneda(cambioCarrito)}</p>
                       </div>
                     </div>
-                  </div>
-                )}
+                  )}
 
-                <button
-                  type="submit"
-                  disabled={registrando || !formData.producto_id || !productoSeleccionado || !cajaChica}
-                  className={`w-full py-4 px-6 rounded-xl font-bold text-white flex items-center justify-center gap-2 transition ${
-                    registrando || !formData.producto_id || !productoSeleccionado || !cajaChica
-                      ? 'bg-slate-600 cursor-not-allowed opacity-50'
-                      : 'bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-700 hover:to-amber-700 shadow-lg shadow-orange-500/50'
-                  }`}
-                >
-                  <ShoppingBag size={20} />
-                  {!cajaChica ? 'Abre caja para registrar' : registrando ? 'Registrando...' : 'Registrar Venta'}
-                </button>
-              </form>
+                  <button
+                    type="submit"
+                    disabled={registrando || !cajaChica}
+                    className={`w-full py-3 px-4 rounded-xl font-bold text-white flex items-center justify-center gap-2 transition ${
+                      registrando || !cajaChica
+                        ? 'bg-slate-600 cursor-not-allowed opacity-50'
+                        : 'bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 shadow-lg shadow-green-500/50'
+                    }`}
+                  >
+                    <ShoppingCart size={20} />
+                    {registrando ? 'Registrando...' : 'Confirmar Venta'}
+                  </button>
+                </form>
+              )}
             </div>
           </div>
         )}
@@ -670,7 +830,7 @@ export const VentaKioscoModerno: React.FC = () => {
                               />
                             </div>
                             <div>
-                              <label className="block text-xs font-bold text-slate-300 mb-2">Saldo Después del Pago</label>
+                              <label className="block text-xs font-bold text-slate-300 mb-2">Saldo Después</label>
                               <p className="text-2xl font-black text-green-400">{formatoMoneda(Math.max(0, fiado.monto_total_fiado - montoPago))}</p>
                             </div>
                           </div>
@@ -711,7 +871,7 @@ export const VentaKioscoModerno: React.FC = () => {
           </div>
         )}
 
-        {/* TAB: CAJA CHICA */}
+        {/* TAB: CAJA CHICA - Simplificado */}
         {tabActiva === 'caja' && (
           <div className="space-y-6">
             <div className="p-6 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-xl">
@@ -775,7 +935,7 @@ export const VentaKioscoModerno: React.FC = () => {
           </div>
         )}
 
-        {/* TAB: CIERRES */}
+        {/* TAB: CIERRES - Simplificado */}
         {tabActiva === 'cierres' && (
           <div className="space-y-6">
             <div className="p-6 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-xl">
@@ -796,7 +956,6 @@ export const VentaKioscoModerno: React.FC = () => {
                         <th className="px-4 py-3 text-right text-slate-300 font-bold">Saldo Inicial</th>
                         <th className="px-4 py-3 text-right text-slate-300 font-bold">Saldo Final</th>
                         <th className="px-4 py-3 text-right text-slate-300 font-bold">Transferido</th>
-                        <th className="px-4 py-3 text-right text-slate-300 font-bold">Residual</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-700/50">
@@ -807,7 +966,6 @@ export const VentaKioscoModerno: React.FC = () => {
                           <td className="px-4 py-3 text-right text-blue-400 font-semibold">{formatoMoneda(cierre.saldo_inicial)}</td>
                           <td className="px-4 py-3 text-right text-orange-400 font-semibold">{cierre.saldo_final ? formatoMoneda(cierre.saldo_final) : '-'}</td>
                           <td className="px-4 py-3 text-right text-green-400 font-semibold">{cierre.monto_transferido ? formatoMoneda(cierre.monto_transferido) : '-'}</td>
-                          <td className="px-4 py-3 text-right text-amber-400 font-semibold">{formatoMoneda(cierre.saldo_residual)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -818,7 +976,7 @@ export const VentaKioscoModerno: React.FC = () => {
           </div>
         )}
 
-        {/* TAB: CAJA GRANDE */}
+        {/* TAB: CAJA GRANDE - Simplificado */}
         {tabActiva === 'cajagrande' && (
           <div className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
@@ -832,7 +990,6 @@ export const VentaKioscoModerno: React.FC = () => {
                     <p className="text-3xl font-black text-purple-400">{formatoMoneda(totalCajaGrande || 0)}</p>
                   </div>
                 </div>
-                <p className="text-xs text-slate-400">{cajaGrande?.length || 0} transferencia(s)</p>
               </div>
 
               <div className="p-6 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-xl">
@@ -845,17 +1002,16 @@ export const VentaKioscoModerno: React.FC = () => {
                     <p className="text-3xl font-black text-green-400">{cajaGrande && cajaGrande.length > 0 ? formatoMoneda((totalCajaGrande || 0) / cajaGrande.length) : '$0'}</p>
                   </div>
                 </div>
-                <p className="text-xs text-slate-400">Ganancias netas acumuladas</p>
               </div>
             </div>
 
             <div className="p-6 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-xl">
-              <h2 className="text-xl font-bold text-white mb-4">Transferencias Realizadas ({cajaGrande?.length || 0})</h2>
+              <h2 className="text-xl font-bold text-white mb-4">Transferencias ({cajaGrande?.length || 0})</h2>
 
               {!cajaGrande || cajaGrande.length === 0 ? (
                 <div className="text-center py-12">
                   <Vault size={32} className="text-slate-500 mx-auto mb-2" />
-                  <p className="text-slate-400 font-semibold">No hay transferencias registradas</p>
+                  <p className="text-slate-400 font-semibold">No hay transferencias</p>
                 </div>
               ) : (
                 <div className="overflow-x-auto">
@@ -865,7 +1021,6 @@ export const VentaKioscoModerno: React.FC = () => {
                         <th className="px-4 py-3 text-left text-slate-300 font-bold">Fecha</th>
                         <th className="px-4 py-3 text-right text-slate-300 font-bold">Monto</th>
                         <th className="px-4 py-3 text-center text-slate-300 font-bold">Estado</th>
-                        <th className="px-4 py-3 text-left text-slate-300 font-bold">Origen</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-700/50">
@@ -877,9 +1032,6 @@ export const VentaKioscoModerno: React.FC = () => {
                             <span className="px-3 py-1 rounded bg-green-500/30 text-green-300 font-bold text-xs">
                               {transfer.estado}
                             </span>
-                          </td>
-                          <td className="px-4 py-3 text-slate-400">
-                            {transfer.origen_caja_chica_id ? `Caja #${transfer.origen_caja_chica_id}` : 'Manual'}
                           </td>
                         </tr>
                       ))}
@@ -905,9 +1057,6 @@ export const VentaKioscoModerno: React.FC = () => {
                     <p className="text-2xl font-black text-orange-400">{formatoMoneda(totalVentasHoy)}</p>
                   </div>
                 </div>
-                <p className="text-xs text-slate-400">
-                  {ventasKiosco.filter(v => v.fecha_venta === new Date().toISOString().split('T')[0]).length} venta(s)
-                </p>
               </div>
 
               <div className="p-6 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-xl">
@@ -920,7 +1069,6 @@ export const VentaKioscoModerno: React.FC = () => {
                     <p className="text-2xl font-black text-amber-400">{formatoMoneda(totalVentasKiosco)}</p>
                   </div>
                 </div>
-                <p className="text-xs text-slate-400">{ventasKiosco.length} transacción(es)</p>
               </div>
             </div>
           </div>
