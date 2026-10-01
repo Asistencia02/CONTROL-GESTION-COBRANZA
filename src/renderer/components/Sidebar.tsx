@@ -90,7 +90,7 @@ const NAV_ITEMS: NavItem[] = [
   {
     id: 'global',
     label: 'Reporte Global',
-    icon: <TrendingDown size={20} />,
+    icon: <Globe size={20} />,
     color: 'from-cyan-500 to-blue-500',
   },
   {
