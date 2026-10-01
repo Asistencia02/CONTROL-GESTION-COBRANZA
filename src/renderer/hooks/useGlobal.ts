@@ -79,7 +79,7 @@ export const useGlobal = () => {
             }
           })
 
-          // GASTOS
+          // GASTOS - usa fecha_gasto, no fecha
           let gastosTotal = 0
           try {
             const { data: gastosData } = await supabase
@@ -161,7 +161,7 @@ export const useGlobal = () => {
       try {
         const { data } = await supabase
           .from('gastos')
-          .select('monto, fecha')
+          .select('monto, fecha_gasto')
         gastosData = data || []
         console.log('📊 GASTOS TOTAL:', gastosData.length)
       } catch (e) {
@@ -207,14 +207,14 @@ export const useGlobal = () => {
           }
         })
 
-        // Filtrar gastos por mes
+        // Filtrar gastos por mes - usa fecha_gasto
         const gastosDelMes = gastosData.filter(g => {
-          const fechaGasto = new Date(g.fecha)
+          const fechaGasto = new Date(g.fecha_gasto)
           return fechaGasto.getMonth() + 1 === mes && fechaGasto.getFullYear() === anoActual
         })
         const gastosTotal = gastosDelMes.reduce((sum, g) => sum + (g.monto || 0), 0)
 
-        // Filtrar caja por mes
+        // Filtrar caja por mes - usa fecha_transferencia
         const cajaDelMes = cajaData.filter(c => {
           const fechaCaja = new Date(c.fecha_transferencia)
           return fechaCaja.getMonth() + 1 === mes && fechaCaja.getFullYear() === anoActual
