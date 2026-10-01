@@ -54,7 +54,7 @@ export const useGlobal = () => {
       for (const inst of instituciones || []) {
         const mesInicio = esAnual ? 1 : 1
         const mesFinMes = esAnual ? 12 : mesActual
-        const mesFinDia = new Date(anoActual, mesFinMes, 0).getDate() // Último día del mes
+        const mesFinDia = new Date(anoActual, mesFinMes, 0).getDate()
 
         // Cuotas recaudadas
         const { data: cuotas } = await supabase
@@ -89,17 +89,20 @@ export const useGlobal = () => {
 
         const seguroTotal = (seguro || []).reduce((sum, p) => sum + (p.monto || 0), 0)
 
-        // Deudas pendientes (intentar con tabla correcta)
+        // Deudas pendientes
         let deudasTotal = 0
-        const { data: deudas } = await supabase
-          .from('deudas_estudiantes')
-          .select('monto_adeudado')
-          .eq('institucion_id', inst.id)
-          .eq('estado', 'activa')
-          .catchError(() => null)
+        try {
+          const { data: deudas } = await supabase
+            .from('deudas_estudiantes')
+            .select('monto_adeudado')
+            .eq('institucion_id', inst.id)
+            .eq('estado', 'activa')
 
-        if (deudas) {
-          deudasTotal = (deudas || []).reduce((sum, d) => sum + (d.monto_adeudado || 0), 0)
+          if (deudas) {
+            deudasTotal = (deudas || []).reduce((sum, d) => sum + (d.monto_adeudado || 0), 0)
+          }
+        } catch (e) {
+          // Tabla no existe, ignorar
         }
 
         // Gastos
@@ -122,18 +125,21 @@ export const useGlobal = () => {
 
         const cajaGrandeTotal = (cajaGrande || []).reduce((sum, c) => sum + (c.monto || 0), 0)
 
-        // Ventas Insumo (intentar con tabla correcta)
+        // Ventas Insumo
         let insumosTotal = 0
-        const { data: insumos } = await supabase
-          .from('ventas_insumo')
-          .select('subtotal')
-          .eq('institucion_id', inst.id)
-          .gte('fecha_venta', `${anoActual}-${mesInicio.toString().padStart(2, '0')}-01`)
-          .lte('fecha_venta', `${anoActual}-${mesFinMes.toString().padStart(2, '0')}-${mesFinDia.toString().padStart(2, '0')}`)
-          .catchError(() => null)
+        try {
+          const { data: insumos } = await supabase
+            .from('ventas_insumo')
+            .select('subtotal')
+            .eq('institucion_id', inst.id)
+            .gte('fecha_venta', `${anoActual}-${mesInicio.toString().padStart(2, '0')}-01`)
+            .lte('fecha_venta', `${anoActual}-${mesFinMes.toString().padStart(2, '0')}-${mesFinDia.toString().padStart(2, '0')}`)
 
-        if (insumos) {
-          insumosTotal = (insumos || []).reduce((sum, i) => sum + (i.subtotal || 0), 0)
+          if (insumos) {
+            insumosTotal = (insumos || []).reduce((sum, i) => sum + (i.subtotal || 0), 0)
+          }
+        } catch (e) {
+          // Tabla no existe, ignorar
         }
 
         const subtotalCobranza = cuotasTotal + inscripcionTotal + seguroTotal
@@ -180,7 +186,7 @@ export const useGlobal = () => {
       for (let mes = 1; mes <= mesFinLoop; mes++) {
         const mesStr = mes.toString().padStart(2, '0')
         const nombreMes = new Date(anoActual, mes - 1).toLocaleString('es-ES', { month: 'long' })
-        const ultimoDiaDelMes = new Date(anoActual, mes, 0).getDate() // Último día del mes
+        const ultimoDiaDelMes = new Date(anoActual, mes, 0).getDate()
 
         // Cuotas
         const { data: cuotas } = await supabase
@@ -214,14 +220,17 @@ export const useGlobal = () => {
 
         // Deudas
         let deudasTotal = 0
-        const { data: deudas } = await supabase
-          .from('deudas_estudiantes')
-          .select('monto_adeudado')
-          .eq('estado', 'activa')
-          .catchError(() => null)
+        try {
+          const { data: deudas } = await supabase
+            .from('deudas_estudiantes')
+            .select('monto_adeudado')
+            .eq('estado', 'activa')
 
-        if (deudas) {
-          deudasTotal = (deudas || []).reduce((sum, d) => sum + (d.monto_adeudado || 0), 0)
+          if (deudas) {
+            deudasTotal = (deudas || []).reduce((sum, d) => sum + (d.monto_adeudado || 0), 0)
+          }
+        } catch (e) {
+          // Tabla no existe, ignorar
         }
 
         // Gastos
@@ -244,15 +253,18 @@ export const useGlobal = () => {
 
         // Insumo
         let insumoTotal = 0
-        const { data: insumo } = await supabase
-          .from('ventas_insumo')
-          .select('subtotal')
-          .gte('fecha_venta', `${anoActual}-${mesStr}-01`)
-          .lte('fecha_venta', `${anoActual}-${mesStr}-${ultimoDiaDelMes.toString().padStart(2, '0')}`)
-          .catchError(() => null)
+        try {
+          const { data: insumo } = await supabase
+            .from('ventas_insumo')
+            .select('subtotal')
+            .gte('fecha_venta', `${anoActual}-${mesStr}-01`)
+            .lte('fecha_venta', `${anoActual}-${mesStr}-${ultimoDiaDelMes.toString().padStart(2, '0')}`)
 
-        if (insumo) {
-          insumoTotal = (insumo || []).reduce((sum, i) => sum + (i.subtotal || 0), 0)
+          if (insumo) {
+            insumoTotal = (insumo || []).reduce((sum, i) => sum + (i.subtotal || 0), 0)
+          }
+        } catch (e) {
+          // Tabla no existe, ignorar
         }
 
         meses.push({
