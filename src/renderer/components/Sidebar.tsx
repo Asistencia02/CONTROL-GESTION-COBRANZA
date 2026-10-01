@@ -15,6 +15,7 @@ import {
   Download,
   X,
   Users,
+  Globe,
 } from 'lucide-react'
 import { InstitucionSwitcher } from './InstitucionSwitcher'
 import { DarkModeToggle } from './DarkModeToggle'
@@ -85,6 +86,12 @@ const NAV_ITEMS: NavItem[] = [
     label: 'Reportes Financieros',
     icon: <BarChart3 size={20} />,
     color: 'from-purple-500 to-pink-500',
+  },
+  {
+    id: 'global',
+    label: 'Reporte Global',
+    icon: <TrendingDown size={20} />,
+    color: 'from-cyan-500 to-blue-500',
   },
   {
     id: 'cierre',
