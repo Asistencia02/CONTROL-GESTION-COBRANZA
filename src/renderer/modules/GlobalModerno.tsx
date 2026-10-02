@@ -1,18 +1,342 @@
 import React, { useState, useEffect } from 'react'
-import { useGlobal } from '@renderer/hooks/useGlobal'
+import { useInstitucion } from '@renderer/hooks/useInstitucion'
+import { useReporteConceptos } from '@renderer/hooks/useReporteConceptos'
+import { supabase } from '@renderer/lib/supabase'
 import { formatoMoneda } from '@renderer/lib/helpers'
 import { TrendingUp, RefreshCw, AlertCircle } from 'lucide-react'
 
 type VistaGlobal = 'anual' | 'mes-actual'
 
+export interface DatosGlobales {
+  institucion_id: number
+  institucion_nombre: string
+  cuotas_recaudadas: number
+  inscripcion_recaudada: number
+  seguro_recaudado: number
+  subtotal_cobranza: number
+  total_deudas: number
+  total_gastos: number
+  caja_grande_kiosco: number
+  ventas_insumo: number
+  subtotal_otros_ingresos: number
+  total_ingresos: number
+  balance: number
+}
+
+export interface DatosGlobalesPorMes {
+  mes: number
+  mes_nombre: string
+  cuotas: number
+  inscripcion: number
+  seguro: number
+  deudas: number
+  gastos: number
+  kiosco: number
+  insumo: number
+}
+
 export const GlobalModerno: React.FC = () => {
-  const { datosGlobales, datosPorMesAnual, datosPorMesActual, loading, error, cargarDatosGlobales, cargarDatosPorMes } = useGlobal()
+  const { institucionActiva } = useInstitucion()
+  const { reporteConceptos: reporteConceptosISIP } = useReporteConceptos()
+  
   const [vistaActiva, setVistaActiva] = useState<VistaGlobal>('anual')
+  const [datosGlobales, setDatosGlobales] = useState<DatosGlobales[]>([])
+  const [datosPorMesAnual, setDatosPorMesAnual] = useState<DatosGlobalesPorMes[]>([])
+  const [datosPorMesActual, setDatosPorMesActual] = useState<DatosGlobalesPorMes[]>([])
+  const [loading, setLoading] = useState(false)
+
+  const cargarDatosGlobales = async () => {
+    setLoading(true)
+    try {
+      const { data: instituciones } = await supabase
+        .from('instituciones')
+        .select('id, nombre')
+
+      const datos: DatosGlobales[] = []
+
+      for (const inst of instituciones || []) {
+        try {
+          // Cargar reporteConceptos para esta institución
+          const { data: conceptos } = await supabase
+            .from('conceptos_pago')
+            .select('id, nombre, tipo, monto, mes, año')
+            .eq('institucion_id', inst.id)
+            .eq('activo', true)
+
+          const today = new Date()
+          const mesActual = today.getMonth() + 1
+          const anoActual = today.getFullYear()
+
+          const conceptosFiltrados = (conceptos || []).filter(c => {
+            if (!c.mes || !c.año) return true
+            if (c.año < anoActual) return true
+            if (c.año === anoActual && c.mes <= mesActual) return true
+            return false
+          })
+
+          // Cargar pagos individuales
+          let todosPagos: any[] = []
+          let pagina = 0
+          let tieneRangoMas = true
+
+          while (tieneRangoMas) {
+            const desde = pagina * 1000
+            const hasta = desde + 999
+            
+            const { data: pagosBloques } = await supabase
+              .from('pagos')
+              .select('concepto_id, estudiante_id, monto_pagado, estado')
+              .eq('institucion_id', inst.id)
+              .range(desde, hasta)
+
+            if (!pagosBloques || pagosBloques.length === 0) {
+              tieneRangoMas = false
+            } else {
+              const pagosValidos = pagosBloques.filter((p: any) => p.estado !== 'ANULADO')
+              todosPagos = [...todosPagos, ...pagosValidos]
+              if (pagosBloques.length < 1000) {
+                tieneRangoMas = false
+              }
+              pagina++
+            }
+          }
+
+          // Cargar pagos múltiples
+          const { data: pagosMultiplesData } = await supabase
+            .from('pagos_multiples')
+            .select(`
+              id,
+              institucion_id,
+              estado,
+              pagos_multiples_detalle(
+                concepto_id,
+                monto_pagado
+              )
+            `)
+            .eq('institucion_id', inst.id)
+
+          if (pagosMultiplesData) {
+            pagosMultiplesData.forEach((pm: any) => {
+              if (pm.estado !== 'ANULADO' && pm.pagos_multiples_detalle && Array.isArray(pm.pagos_multiples_detalle)) {
+                pm.pagos_multiples_detalle.forEach((detalle: any) => {
+                  todosPagos.push({
+                    concepto_id: detalle.concepto_id,
+                    estudiante_id: pm.estudiante_id,
+                    monto_pagado: detalle.monto_pagado
+                  })
+                })
+              }
+            })
+          }
+
+          // Obtener estudiantes activos
+          const { data: estudiantesData } = await supabase
+            .from('estudiantes')
+            .select('id')
+            .eq('institucion_id', inst.id)
+            .neq('estado', 'NO_VIENE_MAS')
+
+          const totalEstudiantes = estudiantesData?.length || 0
+
+          // Calcular totales por concepto
+          let cuotasTotal = 0
+          let inscripcionTotal = 0
+          let seguroTotal = 0
+          let totalDeudas = 0
+
+          conceptosFiltrados.forEach(concepto => {
+            const pagosDelConcepto = todosPagos.filter((p: any) => p.concepto_id === concepto.id)
+            const montoTotalRequerido = concepto.monto * totalEstudiantes
+            const montoTotalPagado = pagosDelConcepto.reduce((sum: number, p: any) => sum + (p.monto_pagado || 0), 0)
+            const montoAdeudado = montoTotalRequerido - montoTotalPagado
+
+            totalDeudas += montoAdeudado
+
+            // Sumar recaudos
+            pagosDelConcepto.forEach(p => {
+              if (concepto.nombre.toLowerCase().includes('cuota')) {
+                cuotasTotal += p.monto_pagado
+              } else if (concepto.nombre.toLowerCase().includes('inscripción') || concepto.nombre.toLowerCase().includes('inscripcion')) {
+                inscripcionTotal += p.monto_pagado
+              } else if (concepto.nombre.toLowerCase().includes('seguro')) {
+                seguroTotal += p.monto_pagado
+              }
+            })
+          })
+
+          let gastosTotal = 0
+          const { data: gastosData } = await supabase
+            .from('gastos')
+            .select('monto')
+            .eq('institucion_id', inst.id)
+
+          gastosTotal = (gastosData || []).reduce((sum, g) => sum + (g.monto || 0), 0)
+
+          let cajaGrandeTotal = 0
+          const { data: cajaData } = await supabase
+            .from('caja_grande')
+            .select('monto')
+            .eq('institucion_id', inst.id)
+
+          cajaGrandeTotal = (cajaData || []).reduce((sum, c) => sum + (c.monto || 0), 0)
+
+          const subtotalCobranza = cuotasTotal + inscripcionTotal + seguroTotal
+          const subtotalOtros = cajaGrandeTotal
+          const totalIngresos = subtotalCobranza + subtotalOtros
+          const balance = totalIngresos - gastosTotal
+
+          console.log(`✅ ${inst.nombre}: Deudas=${totalDeudas}, Cuotas=${cuotasTotal}`)
+
+          datos.push({
+            institucion_id: inst.id,
+            institucion_nombre: inst.nombre,
+            cuotas_recaudadas: cuotasTotal,
+            inscripcion_recaudada: inscripcionTotal,
+            seguro_recaudado: seguroTotal,
+            subtotal_cobranza: subtotalCobranza,
+            total_deudas: totalDeudas,
+            total_gastos: gastosTotal,
+            caja_grande_kiosco: cajaGrandeTotal,
+            ventas_insumo: 0,
+            subtotal_otros_ingresos: subtotalOtros,
+            total_ingresos: totalIngresos,
+            balance,
+          })
+        } catch (err) {
+          console.error(`Error inst ${inst.id}:`, err)
+        }
+      }
+
+      setDatosGlobales(datos)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const cargarDatosPorMes = async () => {
+    setLoading(true)
+    try {
+      const meses: DatosGlobalesPorMes[] = []
+      const anoActual = new Date().getFullYear()
+      const mesActualNum = new Date().getMonth() + 1
+      const mesFinLoop = vistaActiva === 'anual' ? 12 : mesActualNum
+
+      // Cargar todos los pagos de ambas instituciones
+      let todosPagos: any[] = []
+      const { data: instituciones } = await supabase
+        .from('instituciones')
+        .select('id')
+
+      for (const inst of instituciones || []) {
+        let pagina = 0
+        let tieneRangoMas = true
+
+        while (tieneRangoMas) {
+          const desde = pagina * 1000
+          const hasta = desde + 999
+          
+          const { data: pagosBloques } = await supabase
+            .from('pagos')
+            .select(`
+              concepto_id,
+              estudiante_id,
+              monto_pagado,
+              estado,
+              conceptos_pago(nombre, mes, año)
+            `)
+            .eq('institucion_id', inst.id)
+            .range(desde, hasta)
+
+          if (!pagosBloques || pagosBloques.length === 0) {
+            tieneRangoMas = false
+          } else {
+            const pagosValidos = pagosBloques.filter((p: any) => p.estado !== 'ANULADO')
+            todosPagos = [...todosPagos, ...pagosValidos]
+            if (pagosBloques.length < 1000) {
+              tieneRangoMas = false
+            }
+            pagina++
+          }
+        }
+      }
+
+      let gastosData: any[] = []
+      const { data: gastos } = await supabase
+        .from('gastos')
+        .select('monto, fecha_gasto')
+      gastosData = gastos || []
+
+      let cajaData: any[] = []
+      const { data: caja } = await supabase
+        .from('caja_grande')
+        .select('monto, fecha_transferencia')
+      cajaData = caja || []
+
+      for (let mes = 1; mes <= mesFinLoop; mes++) {
+        const nombreMes = new Date(anoActual, mes - 1).toLocaleString('es-ES', { month: 'long' })
+
+        let cuotasTotal = 0
+        let inscripcionTotal = 0
+        let seguroTotal = 0
+
+        todosPagos.forEach(p => {
+          const concepto = (p as any).conceptos_pago
+
+          if (concepto?.mes && concepto?.año) {
+            if (concepto.año === anoActual && concepto.mes === mes) {
+              const nombre = concepto.nombre || ''
+              const monto = p.monto_pagado || 0
+
+              if (nombre.toLowerCase().includes('cuota')) {
+                cuotasTotal += monto
+              } else if (nombre.toLowerCase().includes('inscripción') || nombre.toLowerCase().includes('inscripcion')) {
+                inscripcionTotal += monto
+              } else if (nombre.toLowerCase().includes('seguro')) {
+                seguroTotal += monto
+              }
+            }
+          }
+        })
+
+        const gastosDelMes = gastosData.filter(g => {
+          const fechaGasto = new Date(g.fecha_gasto)
+          return fechaGasto.getMonth() + 1 === mes && fechaGasto.getFullYear() === anoActual
+        })
+        const gastosTotal = gastosDelMes.reduce((sum, g) => sum + (g.monto || 0), 0)
+
+        const cajaDelMes = cajaData.filter(c => {
+          const fechaCaja = new Date(c.fecha_transferencia)
+          return fechaCaja.getMonth() + 1 === mes && fechaCaja.getFullYear() === anoActual
+        })
+        const kioscoTotal = cajaDelMes.reduce((sum, c) => sum + (c.monto || 0), 0)
+
+        meses.push({
+          mes,
+          mes_nombre: nombreMes,
+          cuotas: cuotasTotal,
+          inscripcion: inscripcionTotal,
+          seguro: seguroTotal,
+          deudas: 0,
+          gastos: gastosTotal,
+          kiosco: kioscoTotal,
+          insumo: 0,
+        })
+      }
+
+      if (vistaActiva === 'anual') {
+        setDatosPorMesAnual(meses)
+      } else {
+        setDatosPorMesActual(meses)
+      }
+    } finally {
+      setLoading(false)
+    }
+  }
 
   useEffect(() => {
     cargarDatosGlobales()
-    cargarDatosPorMes(vistaActiva === 'anual')
-  }, [vistaActiva, cargarDatosGlobales, cargarDatosPorMes])
+    cargarDatosPorMes()
+  }, [vistaActiva])
 
   const datosPorMes = vistaActiva === 'anual' ? datosPorMesAnual : datosPorMesActual
 
@@ -52,7 +376,7 @@ export const GlobalModerno: React.FC = () => {
           <button
             onClick={() => {
               cargarDatosGlobales()
-              cargarDatosPorMes(vistaActiva === 'anual')
+              cargarDatosPorMes()
             }}
             disabled={loading}
             className="p-3 bg-slate-800/50 hover:bg-slate-700/50 border border-slate-700/50 rounded-xl text-slate-400 hover:text-purple-400 transition-all duration-300"
@@ -60,13 +384,6 @@ export const GlobalModerno: React.FC = () => {
             <RefreshCw size={24} className={loading ? 'animate-spin' : ''} />
           </button>
         </div>
-
-        {error && (
-          <div className="p-4 bg-gradient-to-r from-red-500/20 to-rose-500/20 border border-red-500/50 rounded-lg text-red-400 font-semibold flex items-center gap-2 mb-6">
-            <AlertCircle size={20} />
-            {error}
-          </div>
-        )}
       </div>
 
       {/* TABS */}
