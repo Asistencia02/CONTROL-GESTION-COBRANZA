@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { usePagos } from './usePagos'
 import { supabase } from '@renderer/lib/supabase'
 
@@ -37,7 +37,23 @@ export const useGlobal = () => {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const { pagos: pagosEnMemoria } = usePagos()
+  const { pagos: pagosEnMemoria, cargarPagos } = usePagos()
+
+  // Cargar pagos de AMBAS instituciones al montar
+  useEffect(() => {
+    const cargarTodosPagos = async () => {
+      const { data: instituciones } = await supabase
+        .from('instituciones')
+        .select('id')
+
+      // Cargar pagos de cada institución
+      for (const inst of instituciones || []) {
+        await cargarPagos(inst.id)
+      }
+    }
+
+    cargarTodosPagos()
+  }, [cargarPagos])
 
   const cargarDatosGlobales = useCallback(async (esAnual: boolean) => {
     setLoading(true)
@@ -52,45 +68,10 @@ export const useGlobal = () => {
 
       const datos: DatosGlobales[] = []
 
-      // SI HAY PAGOS EN MEMORIA, USARLOS. SINO, CARGAR DE BD
-      let allPagos = pagosEnMemoria.length > 0 ? pagosEnMemoria : []
-
-      if (allPagos.length === 0) {
-        console.log('⚠️ Sin pagos en memoria, cargando de BD...')
-        for (const inst of instituciones || []) {
-          let page = 0
-          const pageSize = 1000
-          let hasMore = true
-
-          while (hasMore) {
-            const { data } = await supabase
-              .from('pagos')
-              .select(`
-                *,
-                conceptos_pago(nombre)
-              `)
-              .eq('institucion_id', inst.id)
-              .order('fecha_pago', { ascending: false })
-              .range(page * pageSize, (page + 1) * pageSize - 1)
-
-            if (!data || data.length === 0) {
-              hasMore = false
-            } else {
-              allPagos = [...allPagos, ...data]
-              if (data.length < pageSize) {
-                hasMore = false
-              }
-              page++
-            }
-          }
-        }
-      }
-
-      console.log('✅ PAGOS TOTALES:', allPagos.length)
-
       for (const inst of instituciones || []) {
         try {
-          const pagosPorInst = allPagos.filter(p => p.institucion_id === inst.id)
+          // Filtrar pagos de esta institución desde memoria
+          const pagosPorInst = pagosEnMemoria.filter(p => p.institucion_id === inst.id)
 
           console.log(`✅ PAGOS inst ${inst.id}:`, pagosPorInst.length, 'registros')
 
@@ -181,42 +162,6 @@ export const useGlobal = () => {
       const mesActualNum = new Date().getMonth() + 1
       const mesFinLoop = esAnual ? 12 : mesActualNum
 
-      let allPagos = pagosEnMemoria.length > 0 ? pagosEnMemoria : []
-
-      if (allPagos.length === 0) {
-        const { data: instituciones } = await supabase
-          .from('instituciones')
-          .select('id')
-
-        for (const inst of instituciones || []) {
-          let page = 0
-          const pageSize = 1000
-          let hasMore = true
-
-          while (hasMore) {
-            const { data } = await supabase
-              .from('pagos')
-              .select(`
-                *,
-                conceptos_pago(nombre)
-              `)
-              .eq('institucion_id', inst.id)
-              .order('fecha_pago', { ascending: false })
-              .range(page * pageSize, (page + 1) * pageSize - 1)
-
-            if (!data || data.length === 0) {
-              hasMore = false
-            } else {
-              allPagos = [...allPagos, ...data]
-              if (data.length < pageSize) {
-                hasMore = false
-              }
-              page++
-            }
-          }
-        }
-      }
-
       let gastosData: any[] = []
       try {
         const { data } = await supabase
@@ -245,7 +190,8 @@ export const useGlobal = () => {
         let inscripcionTotal = 0
         let seguroTotal = 0
 
-        allPagos.forEach(p => {
+        // Filtrar pagos por mes desde memoria
+        pagosEnMemoria.forEach(p => {
           const fechaPago = new Date(p.fecha_pago)
           const mesDelPago = (fechaPago.getMonth() + 1).toString().padStart(2, '0')
           const anoDelPago = fechaPago.getFullYear()
