@@ -52,6 +52,7 @@ export const useGlobal = () => {
 
       for (const inst of instituciones || []) {
         try {
+          // Filtrar pagos de esta institución desde los ya cargados
           const pagosPorInst = pagos.filter(p => p.institucion_id === inst.id)
 
           console.log(`✅ PAGOS inst ${inst.id}:`, pagosPorInst.length, 'registros')
@@ -238,16 +239,12 @@ export const useGlobal = () => {
     }
   }, [])
 
-  // Cargar pagos de AMBAS instituciones
+  // Cargar TODOS los pagos SIN FILTRO DE INSTITUCIÓN
   useEffect(() => {
     const cargarTodosPagos = async () => {
-      const { data: instituciones } = await supabase
-        .from('instituciones')
-        .select('id')
-
-      let allPagos: any[] = []
-
-      for (const inst of instituciones || []) {
+      try {
+        // Cargar pagos SIN FILTRO para ver qué existe
+        let allPagos: any[] = []
         let page = 0
         const pageSize = 1000
         let hasMore = true
@@ -259,7 +256,6 @@ export const useGlobal = () => {
               *,
               conceptos_pago(nombre, mes, año)
             `)
-            .eq('institucion_id', inst.id)
             .order('fecha_pago', { ascending: false })
             .range(page * pageSize, (page + 1) * pageSize - 1)
 
@@ -273,14 +269,20 @@ export const useGlobal = () => {
             page++
           }
         }
+
+        console.log('✅ TODOS LOS PAGOS ACUMULADOS:', allPagos.length)
+        if (allPagos.length > 0) {
+          console.log('🏢 institucion_id únicos:', [...new Set(allPagos.map(p => p.institucion_id))])
+        }
+
+        setTodosPagos(allPagos)
+
+        // Cargar datos después de obtener pagos
+        await cargarDatosGlobales(true, allPagos)
+        await cargarDatosPorMes(true, allPagos)
+      } catch (err) {
+        console.error('Error cargando pagos:', err)
       }
-
-      console.log('✅ TODOS LOS PAGOS ACUMULADOS:', allPagos.length)
-      setTodosPagos(allPagos)
-
-      // Cargar datos después de obtener pagos
-      await cargarDatosGlobales(true, allPagos)
-      await cargarDatosPorMes(true, allPagos)
     }
 
     cargarTodosPagos()
