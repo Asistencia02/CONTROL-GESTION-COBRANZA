@@ -10,9 +10,9 @@ export const GlobalModerno: React.FC = () => {
   const [vistaActiva, setVistaActiva] = useState<VistaGlobal>('anual')
 
   useEffect(() => {
-    cargarDatosGlobales(vistaActiva === 'anual')
+    cargarDatosGlobales()
     cargarDatosPorMes(vistaActiva === 'anual')
-  }, [vistaActiva])
+  }, [vistaActiva, cargarDatosGlobales, cargarDatosPorMes])
 
   const datosPorMes = vistaActiva === 'anual' ? datosPorMesAnual : datosPorMesActual
 
@@ -51,7 +51,7 @@ export const GlobalModerno: React.FC = () => {
           </div>
           <button
             onClick={() => {
-              cargarDatosGlobales(vistaActiva === 'anual')
+              cargarDatosGlobales()
               cargarDatosPorMes(vistaActiva === 'anual')
             }}
             disabled={loading}
@@ -231,6 +231,19 @@ export const GlobalModerno: React.FC = () => {
                     {formatoMoneda(inst.balance)}
                   </td>
                 ))}
+              </tr>
+
+              {/* BALANCE GLOBAL (SUMA DE AMBAS) */}
+              <tr className="bg-gradient-to-r from-blue-600/40 to-cyan-600/40 border-y border-blue-500/50">
+                <td className="px-4 py-3 font-black text-white text-lg">🌍 BALANCE GLOBAL TOTAL</td>
+                <td
+                  colSpan={datosGlobales.length}
+                  className={`px-4 py-3 text-right font-black text-2xl ${
+                    datosGlobales.reduce((sum, inst) => sum + inst.balance, 0) >= 0 ? 'text-cyan-300' : 'text-red-300'
+                  }`}
+                >
+                  {formatoMoneda(datosGlobales.reduce((sum, inst) => sum + inst.balance, 0))}
+                </td>
               </tr>
             </tbody>
           </table>

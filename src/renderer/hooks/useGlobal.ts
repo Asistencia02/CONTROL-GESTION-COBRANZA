@@ -51,6 +51,7 @@ export const useGlobal = () => {
       console.log('📊 PAGOS EN MEMORIA:', pagos.length)
 
       const datos: DatosGlobales[] = []
+      let balanceGlobalTotal = 0
 
       for (const inst of instituciones || []) {
         try {
@@ -75,6 +76,50 @@ export const useGlobal = () => {
               seguroTotal += monto
             }
           })
+
+          // Cargar conceptos vencidos para calcular deudas
+          let totalDeudas = 0
+          try {
+            const { data: conceptos } = await supabase
+              .from('conceptos_pago')
+              .select('*')
+              .eq('institucion_id', inst.id)
+              .eq('activo', true)
+
+            const anoActual = new Date().getFullYear()
+            const mesActual = new Date().getMonth() + 1
+
+            // Para cada concepto vencido, contar estudiantes y calcular deuda
+            if (conceptos && conceptos.length > 0) {
+              const { data: estudiantes } = await supabase
+                .from('estudiantes')
+                .select('id')
+                .eq('institucion_id', inst.id)
+                .neq('estado', 'NO_VIENE_MAS')
+
+              const estudiantesActivos = estudiantes?.length || 0
+              const pagosSet = new Set(pagosPorInst.map(p => `${p.estudiante_id}-${p.concepto_id}`))
+
+              conceptos.forEach(concepto => {
+                // Solo contar si tiene mes/año definido
+                if (concepto.mes && concepto.año) {
+                  if (
+                    concepto.año < anoActual ||
+                    (concepto.año === anoActual && concepto.mes <= mesActual)
+                  ) {
+                    // Deuda = estudiantes activos que no pagaron * monto concepto
+                    for (let estId = 1; estId <= estudiantesActivos; estId++) {
+                      if (!pagosSet.has(`${estId}-${concepto.id}`)) {
+                        totalDeudas += concepto.monto
+                      }
+                    }
+                  }
+                }
+              })
+            }
+          } catch (e) {
+            console.error(`Error calculando deudas inst ${inst.id}:`, e)
+          }
 
           let gastosTotal = 0
           try {
@@ -105,6 +150,8 @@ export const useGlobal = () => {
           const totalIngresos = subtotalCobranza + subtotalOtros
           const balance = totalIngresos - gastosTotal
 
+          balanceGlobalTotal += balance
+
           datos.push({
             institucion_id: inst.id,
             institucion_nombre: inst.nombre,
@@ -112,7 +159,7 @@ export const useGlobal = () => {
             inscripcion_recaudada: inscripcionTotal,
             seguro_recaudado: seguroTotal,
             subtotal_cobranza: subtotalCobranza,
-            total_deudas: 0,
+            total_deudas: totalDeudas,
             total_gastos: gastosTotal,
             caja_grande_kiosco: cajaGrandeTotal,
             ventas_insumo: 0,
@@ -134,12 +181,14 @@ export const useGlobal = () => {
     }
   }, [pagos])
 
-  const cargarDatosPorMes = useCallback(async () => {
+  const cargarDatosPorMes = useCallback(async (esAnual: boolean) => {
     setLoading(true)
     setError(null)
     try {
       const meses: DatosGlobalesPorMes[] = []
       const anoActual = new Date().getFullYear()
+      const mesActualNum = new Date().getMonth() + 1
+      const mesFinLoop = esAnual ? 12 : mesActualNum
 
       let gastosData: any[] = []
       try {
@@ -161,15 +210,18 @@ export const useGlobal = () => {
         //
       }
 
-      // Generar meses del año completo
-      for (let mes = 1; mes <= 12; mes++) {
+      console.log('📊 Calculando desglose por mes (anual:', esAnual, ', meses:', mesFinLoop, ')')
+      console.log('📊 Pagos disponibles:', pagos.length)
+
+      // Generar SOLO los meses necesarios
+      for (let mes = 1; mes <= mesFinLoop; mes++) {
         const nombreMes = new Date(anoActual, mes - 1).toLocaleString('es-ES', { month: 'long' })
 
         let cuotasTotal = 0
         let inscripcionTotal = 0
         let seguroTotal = 0
 
-        // Filtrar pagos por mes del concepto (NO por fecha_pago)
+        // Filtrar pagos por mes del concepto
         pagos.forEach(p => {
           const concepto = (p as any).conceptos_pago
 
@@ -177,6 +229,8 @@ export const useGlobal = () => {
             if (concepto.año === anoActual && concepto.mes === mes) {
               const nombre = concepto.nombre || ''
               const monto = p.monto_pagado || 0
+
+              console.log(`📌 Pago: ${nombre} (mes concepto: ${concepto.mes}), monto: ${monto}`)
 
               if (nombre.toLowerCase().includes('cuota')) {
                 cuotasTotal += monto
@@ -201,6 +255,8 @@ export const useGlobal = () => {
         })
         const kioscoTotal = cajaDelMes.reduce((sum, c) => sum + (c.monto || 0), 0)
 
+        console.log(`✅ Mes ${mes} (${nombreMes}): cuotas=${cuotasTotal}, inscrip=${inscripcionTotal}, seguro=${seguroTotal}`)
+
         meses.push({
           mes,
           mes_nombre: nombreMes,
@@ -214,7 +270,13 @@ export const useGlobal = () => {
         })
       }
 
-      setDatosPorMesAnual(meses)
+      if (esAnual) {
+        setDatosPorMesAnual(meses)
+      } else {
+        setDatosPorMesActual(meses)
+      }
+
+      console.log(`📊 Desglose guardado (esAnual=${esAnual}):`, meses.length, 'meses')
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Error cargando datos por mes'
       setError(msg)
@@ -245,7 +307,8 @@ export const useGlobal = () => {
     if (pagos.length > 0) {
       console.log('🔄 Actualizando datos globales con', pagos.length, 'pagos')
       cargarDatosGlobales()
-      cargarDatosPorMes()
+      cargarDatosPorMes(true)  // Siempre cargar anual
+      cargarDatosPorMes(false) // Y mes actual
     }
   }, [pagos, cargarDatosGlobales, cargarDatosPorMes])
 
