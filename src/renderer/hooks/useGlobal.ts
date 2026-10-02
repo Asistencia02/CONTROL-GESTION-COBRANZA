@@ -46,18 +46,18 @@ export const useGlobal = () => {
         .select('id, nombre')
 
       console.log('🔵 INSTITUCIONES:', instituciones)
-      console.log('📊 PAGOS INDIVIDUALES:', todosPagos.length)
-      console.log('📊 PAGOS MÚLTIPLES DETALLE:', pagosMultiplesDetalle.length)
+      console.log('📊 PAGOS INDIVIDUALES:', todosPagos?.length || 0)
+      console.log('📊 PAGOS MÚLTIPLES DETALLE:', pagosMultiplesDetalle?.length || 0)
 
       const datos: DatosGlobales[] = []
 
       for (const inst of instituciones || []) {
         try {
           // Pagos individuales
-          const pagosPorInst = todosPagos.filter(p => p.institucion_id === inst.id)
+          const pagosPorInst = (todosPagos || []).filter(p => p.institucion_id === inst.id)
           
           // Pagos múltiples para esta institución
-          const pagosMultiplesPorInst = pagosMultiplesDetalle.filter(pm => pm.institucion_id === inst.id)
+          const pagosMultiplesPorInst = (pagosMultiplesDetalle || []).filter(pm => pm.institucion_id === inst.id)
 
           console.log(`✅ PAGOS INDIVIDUALES inst ${inst.id}:`, pagosPorInst.length)
           console.log(`✅ PAGOS MÚLTIPLES inst ${inst.id}:`, pagosMultiplesPorInst.length)
@@ -182,7 +182,7 @@ export const useGlobal = () => {
       }
 
       // Combinar pagos individuales y múltiples
-      const allPagos = [...todosPagos, ...pagosMultiplesDetalle]
+      const allPagos = [...(todosPagos || []), ...(pagosMultiplesDetalle || [])]
 
       for (let mes = 1; mes <= mesFinLoop; mes++) {
         const nombreMes = new Date(anoActual, mes - 1).toLocaleString('es-ES', { month: 'long' })
@@ -224,13 +224,13 @@ export const useGlobal = () => {
           }
         })
 
-        const gastosDelMes = gastosData.filter(g => {
+        const gastosDelMes = (gastosData || []).filter(g => {
           const fechaGasto = new Date(g.fecha_gasto)
           return fechaGasto.getMonth() + 1 === mes && fechaGasto.getFullYear() === anoActual
         })
         const gastosTotal = gastosDelMes.reduce((sum, g) => sum + (g.monto || 0), 0)
 
-        const cajaDelMes = cajaData.filter(c => {
+        const cajaDelMes = (cajaData || []).filter(c => {
           const fechaCaja = new Date(c.fecha_transferencia)
           return fechaCaja.getMonth() + 1 === mes && fechaCaja.getFullYear() === anoActual
         })
@@ -278,7 +278,7 @@ export const useGlobal = () => {
         let hasMore = true
 
         while (hasMore) {
-          const { data } = await supabase
+          const { data, error } = await supabase
             .from('pagos')
             .select(`
               *,
@@ -287,7 +287,10 @@ export const useGlobal = () => {
             .order('fecha_pago', { ascending: false })
             .range(page * pageSize, (page + 1) * pageSize - 1)
 
-          if (!data || data.length === 0) {
+          if (error) {
+            console.error('Error cargando pagos:', error)
+            hasMore = false
+          } else if (!data || data.length === 0) {
             hasMore = false
           } else {
             allPagos = [...allPagos, ...data]
@@ -300,25 +303,41 @@ export const useGlobal = () => {
 
         console.log('✅ Pagos individuales cargados:', allPagos.length)
 
-        // Cargar pagos múltiples
+        // Cargar pagos múltiples - primero cargar pagos_multiples_detalle, luego pagos_multiples
         console.log('📥 Cargando pagos múltiples...')
         let allPagosMultiples: any[] = []
-        const { data: pagosMultiplesData } = await supabase
+        
+        const { data: pagosMultiplesData, error: errMultiples } = await supabase
           .from('pagos_multiples_detalle')
           .select(`
             *,
-            pagos_multiples(institucion_id, estado, fecha_pago as fecha_pago_multiple),
             conceptos_pago(nombre, mes, año)
           `)
-          .neq('pagos_multiples.estado', 'ANULADO')
 
-        if (pagosMultiplesData) {
-          allPagosMultiples = pagosMultiplesData.map(p => ({
-            ...p,
-            institucion_id: (p as any).pagos_multiples?.institucion_id,
-            fecha_pago_multiple: (p as any).pagos_multiples?.fecha_pago,
-            estado: (p as any).pagos_multiples?.estado,
-          }))
+        if (errMultiples) {
+          console.error('Error cargando pagos_multiples_detalle:', errMultiples)
+        } else if (pagosMultiplesData && pagosMultiplesData.length > 0) {
+          // Ahora obtener info de pagos_multiples para cada detalle
+          const detalleIds = new Set(pagosMultiplesData.map((p: any) => p.pagos_multiples_id))
+          
+          if (detalleIds.size > 0) {
+            const { data: pagosMultiplesInfo } = await supabase
+              .from('pagos_multiples')
+              .select('*')
+              .neq('estado', 'ANULADO')
+
+            const pagosMultiplesMap = new Map(pagosMultiplesInfo?.map((pm: any) => [pm.id, pm]) || [])
+
+            allPagosMultiples = pagosMultiplesData.map(p => {
+              const pm = pagosMultiplesMap.get((p as any).pagos_multiples_id)
+              return {
+                ...p,
+                institucion_id: pm?.institucion_id,
+                fecha_pago_multiple: pm?.fecha_pago,
+                estado: pm?.estado,
+              }
+            })
+          }
         }
 
         console.log('✅ Pagos múltiples cargados:', allPagosMultiples.length)
