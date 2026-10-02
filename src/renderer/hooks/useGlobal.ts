@@ -36,24 +36,55 @@ export const useGlobal = () => {
   const [datosPorMesActual, setDatosPorMesActual] = useState<DatosGlobalesPorMes[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [todosPagos, setTodosPagos] = useState<any[]>([])
 
-  const { pagos: pagosEnMemoria, cargarPagos } = usePagos()
+  const { cargarPagos } = usePagos()
 
-  // Cargar pagos de AMBAS instituciones al montar
+  // Cargar pagos de AMBAS instituciones y acumularlos
   useEffect(() => {
     const cargarTodosPagos = async () => {
       const { data: instituciones } = await supabase
         .from('instituciones')
         .select('id')
 
+      let allPagos: any[] = []
+
       // Cargar pagos de cada institución
       for (const inst of instituciones || []) {
-        await cargarPagos(inst.id)
+        // Cargar directamente sin usar usePagos (que sobrescribe)
+        let page = 0
+        const pageSize = 1000
+        let hasMore = true
+
+        while (hasMore) {
+          const { data } = await supabase
+            .from('pagos')
+            .select(`
+              *,
+              conceptos_pago(nombre, mes, año)
+            `)
+            .eq('institucion_id', inst.id)
+            .order('fecha_pago', { ascending: false })
+            .range(page * pageSize, (page + 1) * pageSize - 1)
+
+          if (!data || data.length === 0) {
+            hasMore = false
+          } else {
+            allPagos = [...allPagos, ...data]
+            if (data.length < pageSize) {
+              hasMore = false
+            }
+            page++
+          }
+        }
       }
+
+      console.log('✅ TODOS LOS PAGOS ACUMULADOS:', allPagos.length)
+      setTodosPagos(allPagos)
     }
 
     cargarTodosPagos()
-  }, [cargarPagos])
+  }, [])
 
   const cargarDatosGlobales = useCallback(async (esAnual: boolean) => {
     setLoading(true)
@@ -64,14 +95,14 @@ export const useGlobal = () => {
         .select('id, nombre')
 
       console.log('🔵 INSTITUCIONES:', instituciones)
-      console.log('📊 PAGOS EN MEMORIA:', pagosEnMemoria.length)
+      console.log('📊 PAGOS TOTALES:', todosPagos.length)
 
       const datos: DatosGlobales[] = []
 
       for (const inst of instituciones || []) {
         try {
-          // Filtrar pagos de esta institución desde memoria
-          const pagosPorInst = pagosEnMemoria.filter(p => p.institucion_id === inst.id)
+          // Filtrar pagos de esta institución
+          const pagosPorInst = todosPagos.filter(p => p.institucion_id === inst.id)
 
           console.log(`✅ PAGOS inst ${inst.id}:`, pagosPorInst.length, 'registros')
 
@@ -151,7 +182,7 @@ export const useGlobal = () => {
     } finally {
       setLoading(false)
     }
-  }, [pagosEnMemoria])
+  }, [todosPagos])
 
   const cargarDatosPorMes = useCallback(async (esAnual: boolean) => {
     setLoading(true)
@@ -184,28 +215,43 @@ export const useGlobal = () => {
 
       for (let mes = 1; mes <= mesFinLoop; mes++) {
         const nombreMes = new Date(anoActual, mes - 1).toLocaleString('es-ES', { month: 'long' })
-        const mesStr = mes.toString().padStart(2, '0')
 
         let cuotasTotal = 0
         let inscripcionTotal = 0
         let seguroTotal = 0
 
-        // Filtrar pagos por mes desde memoria
-        pagosEnMemoria.forEach(p => {
-          const fechaPago = new Date(p.fecha_pago)
-          const mesDelPago = (fechaPago.getMonth() + 1).toString().padStart(2, '0')
-          const anoDelPago = fechaPago.getFullYear()
+        // Filtrar pagos por MES DEL CONCEPTO (no por fecha del pago)
+        todosPagos.forEach(p => {
+          const concepto = (p as any).conceptos_pago
+          
+          // Si el concepto tiene mes/año definido, usar esos; sino usar fecha_pago
+          if (concepto?.mes && concepto?.año) {
+            if (concepto.año === anoActual && concepto.mes === mes) {
+              const nombre = concepto.nombre || ''
+              const monto = p.monto_pagado || 0
 
-          if (anoDelPago === anoActual && mesDelPago === mesStr) {
-            const concepto = (p as any).conceptos_pago?.nombre || ''
-            const monto = p.monto_pagado || 0
+              if (nombre.toLowerCase().includes('cuota')) {
+                cuotasTotal += monto
+              } else if (nombre.toLowerCase().includes('inscripción') || nombre.toLowerCase().includes('inscripcion')) {
+                inscripcionTotal += monto
+              } else if (nombre.toLowerCase().includes('seguro')) {
+                seguroTotal += monto
+              }
+            }
+          } else {
+            // Fallback: usar fecha_pago
+            const fechaPago = new Date(p.fecha_pago)
+            if (fechaPago.getMonth() + 1 === mes && fechaPago.getFullYear() === anoActual) {
+              const nombre = concepto?.nombre || ''
+              const monto = p.monto_pagado || 0
 
-            if (concepto.toLowerCase().includes('cuota')) {
-              cuotasTotal += monto
-            } else if (concepto.toLowerCase().includes('inscripción') || concepto.toLowerCase().includes('inscripcion')) {
-              inscripcionTotal += monto
-            } else if (concepto.toLowerCase().includes('seguro')) {
-              seguroTotal += monto
+              if (nombre.toLowerCase().includes('cuota')) {
+                cuotasTotal += monto
+              } else if (nombre.toLowerCase().includes('inscripción') || nombre.toLowerCase().includes('inscripcion')) {
+                inscripcionTotal += monto
+              } else if (nombre.toLowerCase().includes('seguro')) {
+                seguroTotal += monto
+              }
             }
           }
         })
@@ -247,7 +293,7 @@ export const useGlobal = () => {
     } finally {
       setLoading(false)
     }
-  }, [pagosEnMemoria])
+  }, [todosPagos])
 
   return {
     datosGlobales,
