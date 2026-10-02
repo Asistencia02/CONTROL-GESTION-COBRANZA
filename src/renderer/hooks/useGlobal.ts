@@ -51,11 +51,9 @@ export const useGlobal = () => {
       console.log('📊 PAGOS EN MEMORIA:', pagos.length)
 
       const datos: DatosGlobales[] = []
-      let balanceGlobalTotal = 0
 
       for (const inst of instituciones || []) {
         try {
-          // Filtrar pagos de esta institución desde memoria
           const pagosPorInst = pagos.filter(p => p.institucion_id === inst.id)
 
           console.log(`✅ PAGOS inst ${inst.id}:`, pagosPorInst.length)
@@ -77,8 +75,9 @@ export const useGlobal = () => {
             }
           })
 
-          // Cargar conceptos vencidos para calcular deudas
+          // CALCULAR DEUDAS: (estudiantes activos × monto concepto vencido) - pagos realizados
           let totalDeudas = 0
+          let totalRecaudable = 0
           try {
             const { data: conceptos } = await supabase
               .from('conceptos_pago')
@@ -86,37 +85,43 @@ export const useGlobal = () => {
               .eq('institucion_id', inst.id)
               .eq('activo', true)
 
+            const { data: estudiantes } = await supabase
+              .from('estudiantes')
+              .select('id')
+              .eq('institucion_id', inst.id)
+              .neq('estado', 'NO_VIENE_MAS')
+
+            const estudiantesActivos = estudiantes?.length || 0
+            const pagosSet = new Set(pagosPorInst.map(p => `${p.estudiante_id}-${p.concepto_id}`))
+
             const anoActual = new Date().getFullYear()
             const mesActual = new Date().getMonth() + 1
 
-            // Para cada concepto vencido, contar estudiantes y calcular deuda
             if (conceptos && conceptos.length > 0) {
-              const { data: estudiantes } = await supabase
-                .from('estudiantes')
-                .select('id')
-                .eq('institucion_id', inst.id)
-                .neq('estado', 'NO_VIENE_MAS')
-
-              const estudiantesActivos = estudiantes?.length || 0
-              const pagosSet = new Set(pagosPorInst.map(p => `${p.estudiante_id}-${p.concepto_id}`))
-
               conceptos.forEach(concepto => {
-                // Solo contar si tiene mes/año definido
                 if (concepto.mes && concepto.año) {
-                  if (
-                    concepto.año < anoActual ||
+                  // Concepto vencido si: año < actual O (año = actual Y mes <= actual)
+                  const esVencido = concepto.año < anoActual || 
                     (concepto.año === anoActual && concepto.mes <= mesActual)
-                  ) {
-                    // Deuda = estudiantes activos que no pagaron * monto concepto
-                    for (let estId = 1; estId <= estudiantesActivos; estId++) {
-                      if (!pagosSet.has(`${estId}-${concepto.id}`)) {
-                        totalDeudas += concepto.monto
+
+                  if (esVencido) {
+                    const montoConceptoTotal = concepto.monto * estudiantesActivos
+                    totalRecaudable += montoConceptoTotal
+
+                    // Deuda = monto total - pagos realizados
+                    let pagosDelConcepto = 0
+                    pagosPorInst.forEach(p => {
+                      if (p.concepto_id === concepto.id) {
+                        pagosDelConcepto += p.monto_pagado
                       }
-                    }
+                    })
+                    totalDeudas += (montoConceptoTotal - pagosDelConcepto)
                   }
                 }
               })
             }
+
+            console.log(`✅ Deudas inst ${inst.id}: ${totalDeudas}, Recaudable: ${totalRecaudable}`)
           } catch (e) {
             console.error(`Error calculando deudas inst ${inst.id}:`, e)
           }
@@ -149,8 +154,6 @@ export const useGlobal = () => {
           const subtotalOtros = cajaGrandeTotal
           const totalIngresos = subtotalCobranza + subtotalOtros
           const balance = totalIngresos - gastosTotal
-
-          balanceGlobalTotal += balance
 
           datos.push({
             institucion_id: inst.id,
@@ -210,8 +213,7 @@ export const useGlobal = () => {
         //
       }
 
-      console.log('📊 Calculando desglose por mes (anual:', esAnual, ', meses:', mesFinLoop, ')')
-      console.log('📊 Pagos disponibles:', pagos.length)
+      console.log('📊 Calculando desglose por mes (anual:', esAnual, ', meses hasta:', mesFinLoop, ')')
 
       // Generar SOLO los meses necesarios
       for (let mes = 1; mes <= mesFinLoop; mes++) {
@@ -229,8 +231,6 @@ export const useGlobal = () => {
             if (concepto.año === anoActual && concepto.mes === mes) {
               const nombre = concepto.nombre || ''
               const monto = p.monto_pagado || 0
-
-              console.log(`📌 Pago: ${nombre} (mes concepto: ${concepto.mes}), monto: ${monto}`)
 
               if (nombre.toLowerCase().includes('cuota')) {
                 cuotasTotal += monto
@@ -255,8 +255,6 @@ export const useGlobal = () => {
         })
         const kioscoTotal = cajaDelMes.reduce((sum, c) => sum + (c.monto || 0), 0)
 
-        console.log(`✅ Mes ${mes} (${nombreMes}): cuotas=${cuotasTotal}, inscrip=${inscripcionTotal}, seguro=${seguroTotal}`)
-
         meses.push({
           mes,
           mes_nombre: nombreMes,
@@ -271,12 +269,12 @@ export const useGlobal = () => {
       }
 
       if (esAnual) {
+        console.log('📊 Guardando desglose ANUAL:', meses.length, 'meses')
         setDatosPorMesAnual(meses)
       } else {
+        console.log('📊 Guardando desglose MES ACTUAL:', meses.length, 'meses')
         setDatosPorMesActual(meses)
       }
-
-      console.log(`📊 Desglose guardado (esAnual=${esAnual}):`, meses.length, 'meses')
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Error cargando datos por mes'
       setError(msg)
@@ -292,7 +290,6 @@ export const useGlobal = () => {
         .from('instituciones')
         .select('id')
 
-      // Acumular pagos de cada institución
       for (const inst of instituciones || []) {
         console.log(`📥 Acumulando pagos institución ${inst.id}...`)
         await acumularPagos(inst.id)
@@ -318,7 +315,7 @@ export const useGlobal = () => {
     datosPorMesActual,
     loading,
     error,
-    cargarDatosGlobales,
+    cargarDatosGlobales: (esAnual: boolean) => cargarDatosGlobales(),
     cargarDatosPorMes,
   }
 }
