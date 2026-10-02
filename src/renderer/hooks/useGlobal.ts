@@ -52,7 +52,6 @@ export const useGlobal = () => {
 
       for (const inst of instituciones || []) {
         try {
-          // Filtrar pagos de esta institución desde los ya cargados
           const pagosPorInst = pagos.filter(p => p.institucion_id === inst.id)
 
           console.log(`✅ PAGOS inst ${inst.id}:`, pagosPorInst.length, 'registros')
@@ -239,18 +238,42 @@ export const useGlobal = () => {
     }
   }, [])
 
-  // Cargar TODOS los pagos SIN FILTRO DE INSTITUCIÓN
+  // Cargar TODOS los pagos
   useEffect(() => {
     const cargarTodosPagos = async () => {
       try {
-        // Cargar pagos SIN FILTRO para ver qué existe
+        console.log('🚀 Iniciando carga de pagos...')
+
+        // Test 1: Query simple sin join
+        console.log('📋 Test 1: SELECT COUNT(*) FROM pagos')
+        const { count: countPagos, error: countError } = await supabase
+          .from('pagos')
+          .select('*', { count: 'exact', head: true })
+
+        console.log('📊 Total de pagos en BD:', countPagos, 'Error:', countError)
+
+        // Test 2: Query con limit 5
+        console.log('📋 Test 2: SELECT * FROM pagos LIMIT 5')
+        const { data: primeros5, error: error5 } = await supabase
+          .from('pagos')
+          .select('*')
+          .limit(5)
+
+        console.log('🎯 Primeros 5 pagos:', primeros5, 'Error:', error5)
+
+        if (primeros5 && primeros5.length > 0) {
+          console.log('🏢 institucion_id en primeros 5:', primeros5.map(p => p.institucion_id))
+        }
+
+        // Test 3: Cargar con join
+        console.log('📋 Test 3: SELECT * FROM pagos WITH conceptos_pago')
         let allPagos: any[] = []
         let page = 0
         const pageSize = 1000
         let hasMore = true
 
         while (hasMore) {
-          const { data } = await supabase
+          const { data, error: dataError } = await supabase
             .from('pagos')
             .select(`
               *,
@@ -258,6 +281,8 @@ export const useGlobal = () => {
             `)
             .order('fecha_pago', { ascending: false })
             .range(page * pageSize, (page + 1) * pageSize - 1)
+
+          console.log(`Page ${page}:`, data?.length || 0, 'registros. Error:', dataError)
 
           if (!data || data.length === 0) {
             hasMore = false
@@ -281,7 +306,7 @@ export const useGlobal = () => {
         await cargarDatosGlobales(true, allPagos)
         await cargarDatosPorMes(true, allPagos)
       } catch (err) {
-        console.error('Error cargando pagos:', err)
+        console.error('❌ Error cargando pagos:', err)
       }
     }
 
