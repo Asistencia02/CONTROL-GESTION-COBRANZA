@@ -14,6 +14,7 @@ interface UsePagosStore {
   error: string | null
   
   cargarPagos: (institucion_id: number, filtro?: { estudiante_id?: number; metodo?: TipoPago }) => Promise<void>
+  acumularPagos: (institucion_id: number, filtro?: { estudiante_id?: number; metodo?: TipoPago }) => Promise<void>
   registrarPago: (pago: Omit<Pago, 'id' | 'created_at' | 'updated_at'>) => Promise<Pago | null>
   obtenerPagoPorEstudiante: (estudiante_id: number, concepto_id: number) => PagoWithDetails | undefined
   resumenPorMetodo: (institucion_id: number, fecha_inicio: Date, fecha_fin: Date) => Promise<Record<TipoPago, number>>
@@ -145,6 +146,139 @@ export const usePagos = create<UsePagosStore>((set, get) => ({
       })
 
       set({ pagos: allPagos })
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Error al cargar pagos'
+      set({ error: message })
+      console.error('Error loading pagos:', err)
+    } finally {
+      set({ loading: false })
+    }
+  },
+
+  acumularPagos: async (institucion_id: number, filtro) => {
+    set({ loading: true, error: null })
+    try {
+      let allPagos: PagoWithDetails[] = []
+      let page = 0
+      const pageSize = 1000
+      let hasMore = true
+
+      // Cargar en lotes de 1000 (límite de Supabase)
+      while (hasMore) {
+        let query = supabase
+          .from('pagos')
+          .select(`
+            *,
+            estudiantes(nombre, apellido, dni),
+            conceptos_pago(nombre, tipo, monto, mes)
+          `)
+          .eq('institucion_id', institucion_id)
+
+        if (filtro?.estudiante_id) {
+          query = query.eq('estudiante_id', filtro.estudiante_id)
+        }
+        if (filtro?.metodo) {
+          query = query.eq('metodo_pago', filtro.metodo)
+        }
+
+        const { data, error } = await query
+          .order('fecha_pago', { ascending: false })
+          .range(page * pageSize, (page + 1) * pageSize - 1)
+
+        if (error) throw error
+        
+        if (!data || data.length === 0) {
+          hasMore = false
+        } else {
+          allPagos = [...allPagos, ...(data as PagoWithDetails[])]
+          if (data.length < pageSize) {
+            hasMore = false
+          }
+          page++
+        }
+      }
+
+      // También cargar pagos múltiples convertidos al formato de pagos
+      const { data: pagosMultiples, error: errorMultiples } = await supabase
+        .from('pagos_multiples')
+        .select(`
+          id,
+          estudiante_id,
+          numero_talonario,
+          monto_total,
+          metodo_pago,
+          tipo_tarjeta,
+          fecha_cobro,
+          estado,
+          pagos_multiples_detalle(
+            id,
+            concepto_id,
+            monto_pagado,
+            talonario,
+            metodo_pago,
+            conceptos_pago(nombre, tipo, monto, mes)
+          ),
+          estudiantes(nombre, apellido, dni)
+        `)
+        .eq('institucion_id', institucion_id)
+        .order('fecha_cobro', { ascending: false })
+
+      if (!errorMultiples && pagosMultiples && Array.isArray(pagosMultiples)) {
+        // Convertir pagos_multiples_detalle a formato pagos individual
+        const pagosDetalles: PagoWithDetails[] = []
+        pagosMultiples.forEach((pm: any) => {
+          if (pm.pagos_multiples_detalle && Array.isArray(pm.pagos_multiples_detalle) && pm.pagos_multiples_detalle.length > 0) {
+            pm.pagos_multiples_detalle.forEach((detalle: any) => {
+              const idUnico = `pm_${pm.id}_${detalle.id}`
+              
+              const talonarioFinal = (detalle.talonario && detalle.talonario.trim() !== '') 
+                ? detalle.talonario 
+                : pm.numero_talonario
+              
+              const metodoFinal = (detalle.metodo_pago && detalle.metodo_pago.trim() !== '')
+                ? detalle.metodo_pago
+                : pm.metodo_pago
+              
+              pagosDetalles.push({
+                id: idUnico,
+                institucion_id,
+                estudiante_id: pm.estudiante_id,
+                concepto_id: detalle.concepto_id,
+                monto_pagado: detalle.monto_pagado,
+                monto_original: detalle.monto_pagado,
+                metodo_pago: metodoFinal,
+                tipo_tarjeta: pm.tipo_tarjeta,
+                numero_talonario: talonarioFinal,
+                fecha_pago: pm.fecha_cobro,
+                estado: pm.estado,
+                estudiantes: pm.estudiantes,
+                conceptos_pago: detalle.conceptos_pago || undefined,
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+                pago_multiple_id: pm.id,
+                pago_detalle_id: detalle.id,
+              } as any)
+            })
+          }
+        })
+        allPagos = [...allPagos, ...pagosDetalles]
+      }
+
+      // Acumular con los pagos existentes
+      const pagosExistentes = get().pagos
+      const todosPagos = [...pagosExistentes, ...allPagos]
+      
+      // Remover duplicados por ID
+      const pagosUnicos = Array.from(new Map(todosPagos.map(p => [p.id, p])).values())
+      
+      // Ordenar todos los pagos por fecha DESC
+      pagosUnicos.sort((a, b) => {
+        const fechaA = new Date(a.fecha_pago).getTime()
+        const fechaB = new Date(b.fecha_pago).getTime()
+        return fechaB - fechaA
+      })
+
+      set({ pagos: pagosUnicos })
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Error al cargar pagos'
       set({ error: message })

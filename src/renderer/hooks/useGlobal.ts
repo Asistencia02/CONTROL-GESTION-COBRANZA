@@ -37,7 +37,7 @@ export const useGlobal = () => {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const { pagos, cargarPagos } = usePagos()
+  const { pagos, acumularPagos } = usePagos()
 
   const cargarDatosGlobales = useCallback(async () => {
     setLoading(true)
@@ -140,7 +140,6 @@ export const useGlobal = () => {
     try {
       const meses: DatosGlobalesPorMes[] = []
       const anoActual = new Date().getFullYear()
-      const mesActualNum = new Date().getMonth() + 1
 
       let gastosData: any[] = []
       try {
@@ -231,15 +230,15 @@ export const useGlobal = () => {
         .from('instituciones')
         .select('id')
 
-      // Cargar pagos de cada institución
+      // Acumular pagos de cada institución
       for (const inst of instituciones || []) {
-        console.log(`📥 Cargando pagos institución ${inst.id}...`)
-        await cargarPagos(inst.id)
+        console.log(`📥 Acumulando pagos institución ${inst.id}...`)
+        await acumularPagos(inst.id)
       }
     }
 
     cargarTodosPagos()
-  }, [cargarPagos])
+  }, [acumularPagos])
 
   // Cuando cambien los pagos, actualizar datos globales
   useEffect(() => {
