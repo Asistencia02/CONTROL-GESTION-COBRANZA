@@ -39,7 +39,24 @@ export const useGlobal = () => {
 
   const { pagos, acumularPagos } = usePagos()
 
-  const cargarDatosGlobales = useCallback(async () => {
+  // Cargar pagos de AMBAS instituciones al montar
+  useEffect(() => {
+    const cargarTodosPagos = async () => {
+      const { data: instituciones } = await supabase
+        .from('instituciones')
+        .select('id')
+
+      for (const inst of instituciones || []) {
+        console.log(`📥 Acumulando pagos institución ${inst.id}...`)
+        await acumularPagos(inst.id)
+      }
+    }
+
+    cargarTodosPagos()
+  }, [acumularPagos])
+
+  // Función para cargar datos globales - SIN dependencias de funciones
+  const _cargarDatosGlobales = async (pagosActuales: any[]) => {
     setLoading(true)
     setError(null)
     try {
@@ -48,13 +65,13 @@ export const useGlobal = () => {
         .select('id, nombre')
 
       console.log('🔵 INSTITUCIONES:', instituciones)
-      console.log('📊 PAGOS EN MEMORIA:', pagos.length)
+      console.log('📊 PAGOS EN MEMORIA:', pagosActuales.length)
 
       const datos: DatosGlobales[] = []
 
       for (const inst of instituciones || []) {
         try {
-          const pagosPorInst = pagos.filter(p => p.institucion_id === inst.id)
+          const pagosPorInst = pagosActuales.filter(p => p.institucion_id === inst.id)
 
           console.log(`✅ PAGOS inst ${inst.id}:`, pagosPorInst.length)
 
@@ -75,53 +92,46 @@ export const useGlobal = () => {
             }
           })
 
-          // CALCULAR DEUDAS: (estudiantes activos × monto concepto vencido) - pagos realizados
+          // CALCULAR DEUDAS como useReporteConceptos
           let totalDeudas = 0
-          let totalRecaudable = 0
           try {
             const { data: conceptos } = await supabase
               .from('conceptos_pago')
-              .select('*')
+              .select('id, nombre, tipo, monto, mes, año')
               .eq('institucion_id', inst.id)
               .eq('activo', true)
 
-            const { data: estudiantes } = await supabase
+            const today = new Date()
+            const mesActual = today.getMonth() + 1
+            const anoActual = today.getFullYear()
+
+            // Filtrar conceptos vencidos
+            const conceptosFiltrados = (conceptos || []).filter(c => {
+              if (!c.mes || !c.año) return true
+              if (c.año < anoActual) return true
+              if (c.año === anoActual && c.mes <= mesActual) return true
+              return false
+            })
+
+            const { data: estudiantesData } = await supabase
               .from('estudiantes')
               .select('id')
               .eq('institucion_id', inst.id)
               .neq('estado', 'NO_VIENE_MAS')
 
-            const estudiantesActivos = estudiantes?.length || 0
-            const pagosSet = new Set(pagosPorInst.map(p => `${p.estudiante_id}-${p.concepto_id}`))
+            const totalEstudiantes = estudiantesData?.length || 0
 
-            const anoActual = new Date().getFullYear()
-            const mesActual = new Date().getMonth() + 1
+            // Para cada concepto, calcular: (estudiantes * monto) - pagos
+            conceptosFiltrados.forEach(concepto => {
+              const pagosDelConcepto = pagosPorInst.filter(p => p.concepto_id === concepto.id)
+              const montoTotalRequerido = concepto.monto * totalEstudiantes
+              const montoTotalPagado = pagosDelConcepto.reduce((sum: number, p: any) => sum + (p.monto_pagado || 0), 0)
+              const montoAdeudado = montoTotalRequerido - montoTotalPagado
 
-            if (conceptos && conceptos.length > 0) {
-              conceptos.forEach(concepto => {
-                if (concepto.mes && concepto.año) {
-                  // Concepto vencido si: año < actual O (año = actual Y mes <= actual)
-                  const esVencido = concepto.año < anoActual || 
-                    (concepto.año === anoActual && concepto.mes <= mesActual)
+              totalDeudas += montoAdeudado
+            })
 
-                  if (esVencido) {
-                    const montoConceptoTotal = concepto.monto * estudiantesActivos
-                    totalRecaudable += montoConceptoTotal
-
-                    // Deuda = monto total - pagos realizados
-                    let pagosDelConcepto = 0
-                    pagosPorInst.forEach(p => {
-                      if (p.concepto_id === concepto.id) {
-                        pagosDelConcepto += p.monto_pagado
-                      }
-                    })
-                    totalDeudas += (montoConceptoTotal - pagosDelConcepto)
-                  }
-                }
-              })
-            }
-
-            console.log(`✅ Deudas inst ${inst.id}: ${totalDeudas}, Recaudable: ${totalRecaudable}`)
+            console.log(`✅ Deudas inst ${inst.id}: ${totalDeudas}`)
           } catch (e) {
             console.error(`Error calculando deudas inst ${inst.id}:`, e)
           }
@@ -182,9 +192,10 @@ export const useGlobal = () => {
     } finally {
       setLoading(false)
     }
-  }, [pagos])
+  }
 
-  const cargarDatosPorMes = useCallback(async (esAnual: boolean) => {
+  // Función para cargar datos por mes - SIN dependencias de funciones
+  const _cargarDatosPorMes = async (esAnual: boolean, pagosActuales: any[]) => {
     setLoading(true)
     setError(null)
     try {
@@ -215,7 +226,6 @@ export const useGlobal = () => {
 
       console.log('📊 Calculando desglose por mes (anual:', esAnual, ', meses hasta:', mesFinLoop, ')')
 
-      // Generar SOLO los meses necesarios
       for (let mes = 1; mes <= mesFinLoop; mes++) {
         const nombreMes = new Date(anoActual, mes - 1).toLocaleString('es-ES', { month: 'long' })
 
@@ -223,8 +233,7 @@ export const useGlobal = () => {
         let inscripcionTotal = 0
         let seguroTotal = 0
 
-        // Filtrar pagos por mes del concepto
-        pagos.forEach(p => {
+        pagosActuales.forEach(p => {
           const concepto = (p as any).conceptos_pago
 
           if (concepto?.mes && concepto?.año) {
@@ -281,33 +290,26 @@ export const useGlobal = () => {
     } finally {
       setLoading(false)
     }
-  }, [pagos])
+  }
 
-  // Cargar pagos de AMBAS instituciones al montar
-  useEffect(() => {
-    const cargarTodosPagos = async () => {
-      const { data: instituciones } = await supabase
-        .from('instituciones')
-        .select('id')
-
-      for (const inst of instituciones || []) {
-        console.log(`📥 Acumulando pagos institución ${inst.id}...`)
-        await acumularPagos(inst.id)
-      }
-    }
-
-    cargarTodosPagos()
-  }, [acumularPagos])
-
-  // Cuando cambien los pagos, actualizar datos globales
+  // Cuando cambien los pagos, actualizar datos globales (SOLO cuando pagos cambian)
   useEffect(() => {
     if (pagos.length > 0) {
       console.log('🔄 Actualizando datos globales con', pagos.length, 'pagos')
-      cargarDatosGlobales()
-      cargarDatosPorMes(true)  // Siempre cargar anual
-      cargarDatosPorMes(false) // Y mes actual
+      _cargarDatosGlobales(pagos)
+      _cargarDatosPorMes(true, pagos)
+      _cargarDatosPorMes(false, pagos)
     }
-  }, [pagos, cargarDatosGlobales, cargarDatosPorMes])
+  }, [pagos])
+
+  // Wrapper para las funciones retornadas (para uso manual si es necesario)
+  const cargarDatosGlobales = useCallback(() => {
+    _cargarDatosGlobales(pagos)
+  }, [pagos])
+
+  const cargarDatosPorMes = useCallback((esAnual: boolean) => {
+    _cargarDatosPorMes(esAnual, pagos)
+  }, [pagos])
 
   return {
     datosGlobales,
@@ -315,7 +317,7 @@ export const useGlobal = () => {
     datosPorMesActual,
     loading,
     error,
-    cargarDatosGlobales: (esAnual: boolean) => cargarDatosGlobales(),
+    cargarDatosGlobales,
     cargarDatosPorMes,
   }
 }
