@@ -1,5 +1,4 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
-import { usePagos } from './usePagos'
 import { supabase } from '@renderer/lib/supabase'
 
 export interface DatosGlobales {
@@ -36,11 +35,7 @@ export const useGlobal = () => {
   const [datosPorMesActual, setDatosPorMesActual] = useState<DatosGlobalesPorMes[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const pagosMultiplesRef = useRef<any[]>([])
   const cargadoRef = useRef(false)
-
-  // Usar usePagos para obtener pagos individuales
-  const { pagos, cargarPagos } = usePagos()
 
   const cargarDatosGlobales = useCallback(async (esAnual: boolean, todosPagos: any[], pagosMultiplesDetalle: any[]) => {
     setLoading(true)
@@ -267,26 +262,47 @@ export const useGlobal = () => {
     }
   }, [])
 
-  // Cargar pagos de AMBAS instituciones UNA SOLA VEZ
+  // Cargar TODOS los pagos (individuales + múltiples) de AMBAS instituciones UNA SOLA VEZ
   useEffect(() => {
-    if (cargadoRef.current) return // Ya se ejecutó
+    if (cargadoRef.current) return
 
     const cargarTodos = async () => {
       try {
-        const { data: instituciones } = await supabase
-          .from('instituciones')
-          .select('id')
+        console.log('🚀 Iniciando carga de datos globales...')
 
-        console.log('🔵 Instituciones encontradas:', instituciones?.length)
+        // Cargar pagos individuales de TODAS las instituciones (sin filtro)
+        console.log('📥 Cargando TODOS los pagos individuales...')
+        let allPagos: any[] = []
+        let page = 0
+        const pageSize = 1000
+        let hasMore = true
 
-        // Cargar pagos individuales de cada institución
-        for (const inst of instituciones || []) {
-          console.log(`📥 Cargando pagos institución ${inst.id}...`)
-          await cargarPagos(inst.id)
+        while (hasMore) {
+          const { data } = await supabase
+            .from('pagos')
+            .select(`
+              *,
+              conceptos_pago(nombre, mes, año)
+            `)
+            .order('fecha_pago', { ascending: false })
+            .range(page * pageSize, (page + 1) * pageSize - 1)
+
+          if (!data || data.length === 0) {
+            hasMore = false
+          } else {
+            allPagos = [...allPagos, ...data]
+            if (data.length < pageSize) {
+              hasMore = false
+            }
+            page++
+          }
         }
 
-        // Cargar pagos múltiples de TODAS las instituciones
+        console.log('✅ Pagos individuales cargados:', allPagos.length)
+
+        // Cargar pagos múltiples
         console.log('📥 Cargando pagos múltiples...')
+        let allPagosMultiples: any[] = []
         const { data: pagosMultiplesData } = await supabase
           .from('pagos_multiples_detalle')
           .select(`
@@ -297,7 +313,7 @@ export const useGlobal = () => {
           .neq('pagos_multiples.estado', 'ANULADO')
 
         if (pagosMultiplesData) {
-          pagosMultiplesRef.current = pagosMultiplesData.map(p => ({
+          allPagosMultiples = pagosMultiplesData.map(p => ({
             ...p,
             institucion_id: (p as any).pagos_multiples?.institucion_id,
             fecha_pago_multiple: (p as any).pagos_multiples?.fecha_pago,
@@ -305,24 +321,20 @@ export const useGlobal = () => {
           }))
         }
 
-        console.log('✅ Pagos múltiples cargados:', pagosMultiplesRef.current.length)
+        console.log('✅ Pagos múltiples cargados:', allPagosMultiples.length)
+
+        // Actualizar datos globales
+        await cargarDatosGlobales(true, allPagos, allPagosMultiples)
+        await cargarDatosPorMes(true, allPagos, allPagosMultiples)
+
         cargadoRef.current = true
       } catch (err) {
-        console.error('Error en useEffect:', err)
+        console.error('❌ Error en useEffect:', err)
       }
     }
 
     cargarTodos()
-  }, [cargarPagos])
-
-  // Cuando cambien los pagos, actualizar datos globales (SOLO después de cargar inicial)
-  useEffect(() => {
-    if (cargadoRef.current && pagos.length > 0) {
-      console.log('🔄 Actualizando datos globales con', pagos.length, 'pagos')
-      cargarDatosGlobales(true, pagos, pagosMultiplesRef.current)
-      cargarDatosPorMes(true, pagos, pagosMultiplesRef.current)
-    }
-  }, [pagos, cargarDatosGlobales, cargarDatosPorMes])
+  }, [cargarDatosGlobales, cargarDatosPorMes])
 
   return {
     datosGlobales,
@@ -330,7 +342,7 @@ export const useGlobal = () => {
     datosPorMesActual,
     loading,
     error,
-    cargarDatosGlobales: (esAnual: boolean) => cargarDatosGlobales(esAnual, pagos, pagosMultiplesRef.current),
-    cargarDatosPorMes: (esAnual: boolean) => cargarDatosPorMes(esAnual, pagos, pagosMultiplesRef.current),
+    cargarDatosGlobales,
+    cargarDatosPorMes,
   }
 }
