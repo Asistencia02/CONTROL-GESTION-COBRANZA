@@ -86,6 +86,14 @@ export const useGlobal = () => {
     cargarTodosPagos()
   }, [])
 
+  // Cuando cargan los pagos, cargar datos globales
+  useEffect(() => {
+    if (todosPagos.length > 0) {
+      cargarDatosGlobales(true)
+      cargarDatosPorMes(true)
+    }
+  }, [todosPagos, cargarDatosGlobales, cargarDatosPorMes])
+
   const cargarDatosGlobales = useCallback(async (esAnual: boolean) => {
     setLoading(true)
     setError(null)
