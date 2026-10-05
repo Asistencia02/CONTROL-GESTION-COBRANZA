@@ -246,7 +246,13 @@ export const GlobalModerno: React.FC = () => {
       const mesActualNum = new Date().getMonth() + 1
       const mesFinLoop = vistaActiva === 'anual' ? 12 : mesActualNum
 
-      // ✅ Cargar pagos DE AMBAS INSTITUCIONES con conceptos
+      // ✅ Cargar TODOS los conceptos de AMBAS INSTITUCIONES
+      const { data: todosConceptos } = await supabase
+        .from('conceptos_pago')
+        .select('id, institucion_id, nombre, mes, año')
+        .eq('activo', true)
+
+      // ✅ Cargar TODOS los pagos de AMBAS INSTITUCIONES con concepto data
       let todosPagos: any[] = []
       const { data: instituciones } = await supabase
         .from('instituciones')
@@ -262,13 +268,7 @@ export const GlobalModerno: React.FC = () => {
           
           const { data: pagosBloques } = await supabase
             .from('pagos')
-            .select(`
-              concepto_id,
-              estudiante_id,
-              monto_pagado,
-              estado,
-              conceptos_pago(nombre, mes, año)
-            `)
+            .select('concepto_id, monto_pagado, estado')
             .eq('institucion_id', inst.id)
             .range(desde, hasta)
 
@@ -283,6 +283,30 @@ export const GlobalModerno: React.FC = () => {
             pagina++
           }
         }
+      }
+
+      // ✅ Cargar pagos múltiples
+      const { data: pagosMultiplesData } = await supabase
+        .from('pagos_multiples')
+        .select(`
+          estado,
+          pagos_multiples_detalle(
+            concepto_id,
+            monto_pagado
+          )
+        `)
+
+      if (pagosMultiplesData) {
+        pagosMultiplesData.forEach((pm: any) => {
+          if (pm.estado !== 'ANULADO' && pm.pagos_multiples_detalle && Array.isArray(pm.pagos_multiples_detalle)) {
+            pm.pagos_multiples_detalle.forEach((detalle: any) => {
+              todosPagos.push({
+                concepto_id: detalle.concepto_id,
+                monto_pagado: detalle.monto_pagado
+              })
+            })
+          }
+        })
       }
 
       // ✅ Cargar gastos y caja (de AMBAS instituciones)
@@ -306,15 +330,20 @@ export const GlobalModerno: React.FC = () => {
         let inscripcionTotal = 0
         let seguroTotal = 0
 
-        // ✅ Sumar pagos de conceptos vencidos EN EL MES
-        todosPagos.forEach(p => {
-          const concepto = (p as any).conceptos_pago
+        // ✅ Para CADA pago, buscar su concepto y verificar si es del mes
+        todosPagos.forEach(pago => {
+          const concepto = todosConceptos?.find(c => c.id === pago.concepto_id)
+          
+          if (concepto) {
+            const nombre = concepto.nombre || ''
+            const monto = pago.monto_pagado || 0
+            
+            // ✅ CRITERIO: Si concepto tiene mes/año, agrupar por ese mes
+            // Si NO tiene mes/año, agrupar en mes 1 (enero)
+            let mesDeferencia = concepto.mes || 1
+            let anioDeferencia = concepto.año || anoActual
 
-          if (concepto?.mes && concepto?.año) {
-            if (concepto.año === anoActual && concepto.mes === mes) {
-              const nombre = concepto.nombre || ''
-              const monto = p.monto_pagado || 0
-
+            if (anioDeferencia === anoActual && mesDeferencia === mes) {
               if (nombre.toLowerCase().includes('cuota')) {
                 cuotasTotal += monto
               } else if (nombre.toLowerCase().includes('inscripción') || nombre.toLowerCase().includes('inscripcion')) {
