@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from 'react'
 import { useInstitucion } from '@renderer/hooks/useInstitucion'
-import { useReporteConceptos } from '@renderer/hooks/useReporteConceptos'
 import { supabase } from '@renderer/lib/supabase'
 import { formatoMoneda } from '@renderer/lib/helpers'
-import { TrendingUp, RefreshCw, AlertCircle } from 'lucide-react'
+import { TrendingUp, RefreshCw } from 'lucide-react'
 
 type VistaGlobal = 'anual' | 'mes-actual'
 
@@ -30,17 +29,14 @@ export interface DatosGlobalesPorMes {
   inscripcion: number
   seguro: number
   subtotal_cobranza: number
-  deudas: number
-  gastos: number
   kiosco: number
-  insumo: number
+  gastos: number
   subtotal_otros: number
   total_mes: number
 }
 
 export const GlobalModerno: React.FC = () => {
   const { institucionActiva } = useInstitucion()
-  const { reporteConceptos: reporteConceptosISIP } = useReporteConceptos()
   
   const [vistaActiva, setVistaActiva] = useState<VistaGlobal>('anual')
   const [datosGlobales, setDatosGlobales] = useState<DatosGlobales[]>([])
@@ -62,25 +58,22 @@ export const GlobalModerno: React.FC = () => {
 
       for (const inst of instituciones || []) {
         try {
-          // Cargar conceptos CON mes/año definidos (vencidos)
+          // ✅ Cargar conceptos: incluir VENCIDOS y SIN FECHA
           const { data: conceptos } = await supabase
             .from('conceptos_pago')
             .select('id, nombre, tipo, monto, mes, año')
             .eq('institucion_id', inst.id)
             .eq('activo', true)
 
-          // ✅ FILTRO CORRECTO: Solo conceptos vencidos
+          // Concepto vencido: tiene mes/año Y ya pasó la fecha
           const conceptosFiltrados = (conceptos || []).filter(c => {
-            if (!c.mes || !c.año) return false
+            if (!c.mes || !c.año) return true // SIN FECHA = incluir
             if (c.año < anoActual) return true
             if (c.año === anoActual && c.mes <= mesActual) return true
             return false
           })
 
-          // ✅ Separar conceptos sin fecha (no se incluyen en deudas)
-          const conceptosSinFecha = (conceptos || []).filter(c => !c.mes || !c.año)
-
-          // Cargar pagos individuales
+          // Cargar TODOS los pagos
           let todosPagos: any[] = []
           let pagina = 0
           let tieneRangoMas = true
@@ -91,7 +84,7 @@ export const GlobalModerno: React.FC = () => {
             
             const { data: pagosBloques } = await supabase
               .from('pagos')
-              .select('concepto_id, estudiante_id, monto_pagado, estado, conceptos_pago(nombre)')
+              .select('concepto_id, monto_pagado, estado')
               .eq('institucion_id', inst.id)
               .range(desde, hasta)
 
@@ -111,8 +104,6 @@ export const GlobalModerno: React.FC = () => {
           const { data: pagosMultiplesData } = await supabase
             .from('pagos_multiples')
             .select(`
-              id,
-              institucion_id,
               estado,
               pagos_multiples_detalle(
                 concepto_id,
@@ -127,9 +118,7 @@ export const GlobalModerno: React.FC = () => {
                 pm.pagos_multiples_detalle.forEach((detalle: any) => {
                   todosPagos.push({
                     concepto_id: detalle.concepto_id,
-                    estudiante_id: pm.estudiante_id,
-                    monto_pagado: detalle.monto_pagado,
-                    conceptos_pago: { nombre: '' }
+                    monto_pagado: detalle.monto_pagado
                   })
                 })
               }
@@ -145,67 +134,42 @@ export const GlobalModerno: React.FC = () => {
 
           const totalEstudiantes = estudiantesData?.length || 0
 
-          // ✅ Calcular recaudos por tipo de concepto
-          let cuotasTotal = 0
-          let inscripcionTotal = 0
-          let seguroTotal = 0
+          // ✅ CÁLCULO: Para cada concepto vencido, calcular recaudado y deuda
+          let cuotasRecaudadas = 0
+          let inscripcionRecaudada = 0
+          let seguroRecaudado = 0
+          let totalRecaudable = 0
+          let totalRecaudado = 0
 
-          // Recaudos de conceptos VENCIDOS
-          conceptosFiltrados.forEach(concepto => {
-            const pagosDelConcepto = todosPagos.filter((p: any) => p.concepto_id === concepto.id)
-            pagosDelConcepto.forEach(p => {
-              const nombreConcepto = concepto.nombre.toLowerCase()
-              if (nombreConcepto.includes('cuota')) {
-                cuotasTotal += p.monto_pagado || 0
-              } else if (nombreConcepto.includes('inscripción') || nombreConcepto.includes('inscripcion')) {
-                inscripcionTotal += p.monto_pagado || 0
-              } else if (nombreConcepto.includes('seguro')) {
-                seguroTotal += p.monto_pagado || 0
-              }
-            })
-          })
-
-          // Recaudos de conceptos SIN FECHA (flexible)
-          conceptosSinFecha.forEach(concepto => {
-            const pagosDelConcepto = todosPagos.filter((p: any) => p.concepto_id === concepto.id)
-            pagosDelConcepto.forEach(p => {
-              const nombreConcepto = concepto.nombre.toLowerCase()
-              if (nombreConcepto.includes('cuota')) {
-                cuotasTotal += p.monto_pagado || 0
-              } else if (nombreConcepto.includes('inscripción') || nombreConcepto.includes('inscripcion')) {
-                inscripcionTotal += p.monto_pagado || 0
-              } else if (nombreConcepto.includes('seguro')) {
-                seguroTotal += p.monto_pagado || 0
-              }
-            })
-          })
-
-          const subtotalCobranza = cuotasTotal + inscripcionTotal + seguroTotal
-
-          // ✅ CÁLCULO CORRECTO DE DEUDAS ACTUALES
-          // Solo contar la deuda del MES ACTUAL de conceptos vencidos
-          // Ignorar deudas de meses anteriores (ya se cobraron o se perdonaron)
-          const mesActualNum = new Date().getMonth() + 1
-          let totalDeudas = 0
           const conceptosUnicos = new Map<number, any>()
-          
-          conceptosFiltrados.forEach(concepto => {
-            // Solo contar deuda del mes actual
-            if (concepto.mes === mesActualNum && concepto.año === anoActual) {
-              if (!conceptosUnicos.has(concepto.id)) {
-                conceptosUnicos.set(concepto.id, concepto)
-              }
+          conceptosFiltrados.forEach(c => {
+            if (!conceptosUnicos.has(c.id)) {
+              conceptosUnicos.set(c.id, c)
             }
           })
-          
-          conceptosUnicos.forEach((concepto) => {
+
+          conceptosUnicos.forEach(concepto => {
             const pagosDelConcepto = todosPagos.filter((p: any) => p.concepto_id === concepto.id)
-            const montoTotalRequerido = concepto.monto * totalEstudiantes
-            const montoTotalPagado = pagosDelConcepto.reduce((sum: number, p: any) => sum + (p.monto_pagado || 0), 0)
-            const deudaDelConcepto = Math.max(0, montoTotalRequerido - montoTotalPagado)
-            totalDeudas += deudaDelConcepto
+            const montoRequerido = concepto.monto * totalEstudiantes
+            const montoPagado = pagosDelConcepto.reduce((sum: number, p: any) => sum + (p.monto_pagado || 0), 0)
+
+            totalRecaudable += montoRequerido
+            totalRecaudado += montoPagado
+
+            const nombreConcepto = concepto.nombre.toLowerCase()
+            if (nombreConcepto.includes('cuota')) {
+              cuotasRecaudadas += montoPagado
+            } else if (nombreConcepto.includes('inscripción') || nombreConcepto.includes('inscripcion')) {
+              inscripcionRecaudada += montoPagado
+            } else if (nombreConcepto.includes('seguro')) {
+              seguroRecaudado += montoPagado
+            }
           })
 
+          const subtotalCobranza = cuotasRecaudadas + inscripcionRecaudada + seguroRecaudado
+          const totalDeudas = Math.max(0, totalRecaudable - totalRecaudado)
+
+          // Cargar gastos
           let gastosTotal = 0
           const { data: gastosData } = await supabase
             .from('gastos')
@@ -214,6 +178,7 @@ export const GlobalModerno: React.FC = () => {
 
           gastosTotal = (gastosData || []).reduce((sum, g) => sum + (g.monto || 0), 0)
 
+          // Cargar caja grande (kiosco)
           let cajaGrandeTotal = 0
           const { data: cajaData } = await supabase
             .from('caja_grande')
@@ -226,14 +191,14 @@ export const GlobalModerno: React.FC = () => {
           const totalIngresos = subtotalCobranza + subtotalOtros
           const balance = totalIngresos - gastosTotal
 
-          console.log(`✅ ${inst.nombre}: Recaudado=${subtotalCobranza}, Deudas=${totalDeudas}`)
+          console.log(`✅ ${inst.nombre}: Recaudable=$${totalRecaudable}, Recaudado=$${subtotalCobranza}, Deudas=$${totalDeudas}, Gastos=$${gastosTotal}`)
 
           datos.push({
             institucion_id: inst.id,
             institucion_nombre: inst.nombre,
-            cuotas_recaudadas: cuotasTotal,
-            inscripcion_recaudada: inscripcionTotal,
-            seguro_recaudado: seguroTotal,
+            cuotas_recaudadas: cuotasRecaudadas,
+            inscripcion_recaudada: inscripcionRecaudada,
+            seguro_recaudado: seguroRecaudado,
             subtotal_cobranza: subtotalCobranza,
             total_deudas: totalDeudas,
             total_gastos: gastosTotal,
@@ -262,13 +227,13 @@ export const GlobalModerno: React.FC = () => {
       const mesActualNum = new Date().getMonth() + 1
       const mesFinLoop = vistaActiva === 'anual' ? 12 : mesActualNum
 
-      // ✅ Cargar TODOS los conceptos de AMBAS INSTITUCIONES
+      // Cargar conceptos con mes/año ESPECÍFICO
       const { data: todosConceptos } = await supabase
         .from('conceptos_pago')
-        .select('id, institucion_id, nombre, mes, año')
+        .select('id, nombre, mes, año')
         .eq('activo', true)
 
-      // ✅ Cargar TODOS los pagos de AMBAS INSTITUCIONES
+      // Cargar pagos
       let todosPagos: any[] = []
       const { data: instituciones } = await supabase
         .from('instituciones')
@@ -301,7 +266,7 @@ export const GlobalModerno: React.FC = () => {
         }
       }
 
-      // ✅ Cargar pagos múltiples
+      // Cargar pagos múltiples
       const { data: pagosMultiplesData } = await supabase
         .from('pagos_multiples')
         .select(`
@@ -325,7 +290,7 @@ export const GlobalModerno: React.FC = () => {
         })
       }
 
-      // ✅ Cargar gastos y caja (de AMBAS instituciones)
+      // Cargar gastos y caja
       let gastosData: any[] = []
       const { data: gastos } = await supabase
         .from('gastos')
@@ -338,7 +303,7 @@ export const GlobalModerno: React.FC = () => {
         .select('monto, fecha_transferencia')
       cajaData = caja || []
 
-      // ✅ Procesar por mes
+      // Procesar por mes
       for (let mes = 1; mes <= mesFinLoop; mes++) {
         const nombreMes = new Date(anoActual, mes - 1).toLocaleString('es-ES', { month: 'long' })
 
@@ -346,41 +311,34 @@ export const GlobalModerno: React.FC = () => {
         let inscripcionTotal = 0
         let seguroTotal = 0
 
-        // ✅ Para CADA pago, buscar su concepto y verificar si es del mes
+        // Sumar pagos de conceptos que tienen ese mes/año específico
         todosPagos.forEach(pago => {
           const concepto = todosConceptos?.find(c => c.id === pago.concepto_id)
           
-          if (concepto) {
+          if (concepto && concepto.mes === mes && concepto.año === anoActual) {
             const nombre = concepto.nombre || ''
             const monto = pago.monto_pagado || 0
-            
-            // ✅ CRITERIO: Si concepto tiene mes/año, agrupar por ese mes
-            // Si NO tiene mes/año, agrupar en mes 1 (enero) - SOLO UNA VEZ
-            let mesDeferencia = concepto.mes || 1
-            let anioDeferencia = concepto.año || anoActual
 
-            if (anioDeferencia === anoActual && mesDeferencia === mes) {
-              if (nombre.toLowerCase().includes('cuota')) {
-                cuotasTotal += monto
-              } else if (nombre.toLowerCase().includes('inscripción') || nombre.toLowerCase().includes('inscripcion')) {
-                inscripcionTotal += monto
-              } else if (nombre.toLowerCase().includes('seguro')) {
-                seguroTotal += monto
-              }
+            if (nombre.toLowerCase().includes('cuota')) {
+              cuotasTotal += monto
+            } else if (nombre.toLowerCase().includes('inscripción') || nombre.toLowerCase().includes('inscripcion')) {
+              inscripcionTotal += monto
+            } else if (nombre.toLowerCase().includes('seguro')) {
+              seguroTotal += monto
             }
           }
         })
 
         const subtotalCobranza = cuotasTotal + inscripcionTotal + seguroTotal
 
-        // ✅ Gastos del mes
+        // Gastos del mes
         const gastosDelMes = gastosData.filter(g => {
           const fechaGasto = new Date(g.fecha_gasto)
           return fechaGasto.getMonth() + 1 === mes && fechaGasto.getFullYear() === anoActual
         })
         const gastosTotal = gastosDelMes.reduce((sum, g) => sum + (g.monto || 0), 0)
 
-        // ✅ Caja (Kiosco) del mes
+        // Caja del mes
         const cajaDelMes = cajaData.filter(c => {
           const fechaCaja = new Date(c.fecha_transferencia)
           return fechaCaja.getMonth() + 1 === mes && fechaCaja.getFullYear() === anoActual
@@ -397,10 +355,8 @@ export const GlobalModerno: React.FC = () => {
           inscripcion: inscripcionTotal,
           seguro: seguroTotal,
           subtotal_cobranza: subtotalCobranza,
-          deudas: 0,
-          gastos: gastosTotal,
           kiosco: kioscoTotal,
-          insumo: 0,
+          gastos: gastosTotal,
           subtotal_otros: subtotalOtros,
           total_mes: totalMes,
         })
@@ -442,7 +398,6 @@ export const GlobalModerno: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-2 sm:p-4 md:p-8">
-      {/* HEADER */}
       <div className="mb-8">
         <div className="flex items-center justify-between mb-8">
           <div className="flex items-center gap-4">
@@ -469,7 +424,6 @@ export const GlobalModerno: React.FC = () => {
         </div>
       </div>
 
-      {/* TABS */}
       <div className="mb-8">
         <div className="flex gap-2 p-1 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-xl">
           <button
@@ -495,10 +449,10 @@ export const GlobalModerno: React.FC = () => {
         </div>
       </div>
 
-      {/* TABLA PRINCIPAL - POR INSTITUCIÓN */}
+      {/* TABLA RESUMEN POR INSTITUCIÓN */}
       <div className="mb-8 overflow-x-auto">
         <div className="p-6 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-xl">
-          <h2 className="text-xl font-bold text-white mb-6">Resumen por Institución</h2>
+          <h2 className="text-xl font-bold text-white mb-6">📊 Resumen de Ingresos y Egresos</h2>
 
           <table className="w-full text-sm">
             <thead className="bg-slate-900/50">
@@ -512,9 +466,14 @@ export const GlobalModerno: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-700/50">
-              {/* Cuotas */}
+              {/* INGRESOS POR COBRANZA */}
+              <tr className="bg-slate-700/30">
+                <td className="px-4 py-3 font-bold text-white">💰 INGRESOS POR COBRANZA</td>
+                <td colSpan={datosGlobales.length}></td>
+              </tr>
+
               <tr className="hover:bg-slate-700/30 transition">
-                <td className="px-4 py-3 font-semibold text-slate-300">Cuotas Recaudadas</td>
+                <td className="px-4 py-3 font-semibold text-slate-300">Cuotas</td>
                 {datosGlobales.map(inst => (
                   <td key={inst.institucion_id} className="px-4 py-3 text-right text-orange-400 font-semibold">
                     {formatoMoneda(inst.cuotas_recaudadas)}
@@ -522,9 +481,8 @@ export const GlobalModerno: React.FC = () => {
                 ))}
               </tr>
 
-              {/* Inscripción */}
               <tr className="hover:bg-slate-700/30 transition">
-                <td className="px-4 py-3 font-semibold text-slate-300">Inscripción Recaudada</td>
+                <td className="px-4 py-3 font-semibold text-slate-300">Inscripción</td>
                 {datosGlobales.map(inst => (
                   <td key={inst.institucion_id} className="px-4 py-3 text-right text-blue-400 font-semibold">
                     {formatoMoneda(inst.inscripcion_recaudada)}
@@ -532,9 +490,8 @@ export const GlobalModerno: React.FC = () => {
                 ))}
               </tr>
 
-              {/* Seguro */}
               <tr className="hover:bg-slate-700/30 transition">
-                <td className="px-4 py-3 font-semibold text-slate-300">Seguro Recaudado</td>
+                <td className="px-4 py-3 font-semibold text-slate-300">Seguro</td>
                 {datosGlobales.map(inst => (
                   <td key={inst.institucion_id} className="px-4 py-3 text-right text-green-400 font-semibold">
                     {formatoMoneda(inst.seguro_recaudado)}
@@ -542,45 +499,33 @@ export const GlobalModerno: React.FC = () => {
                 ))}
               </tr>
 
-              {/* Subtotal Cobranza */}
-              <tr className="bg-slate-700/50 hover:bg-slate-700/70 transition border-y border-slate-600/50">
-                <td className="px-4 py-3 font-bold text-white">Subtotal Cobranza</td>
+              <tr className="bg-amber-600/20 border-y border-amber-600/50">
+                <td className="px-4 py-3 font-bold text-amber-300">Subtotal Cobranza</td>
                 {datosGlobales.map(inst => (
-                  <td key={inst.institucion_id} className="px-4 py-3 text-right text-amber-400 font-black text-lg">
+                  <td key={inst.institucion_id} className="px-4 py-3 text-right text-amber-300 font-black text-lg">
                     {formatoMoneda(inst.subtotal_cobranza)}
                   </td>
                 ))}
               </tr>
 
-              {/* Deudas Pendientes */}
-              <tr className="hover:bg-slate-700/30 transition">
-                <td className="px-4 py-3 font-semibold text-slate-300">Total Deudas Pendientes</td>
+              {/* DEUDAS */}
+              <tr className="bg-red-600/20 border-y border-red-600/50">
+                <td className="px-4 py-3 font-bold text-red-300">⚠️ Deuda Pendiente (Conceptos vencidos)</td>
                 {datosGlobales.map(inst => (
-                  <td key={inst.institucion_id} className="px-4 py-3 text-right text-red-400 font-semibold">
+                  <td key={inst.institucion_id} className="px-4 py-3 text-right text-red-300 font-black text-lg">
                     {formatoMoneda(inst.total_deudas)}
                   </td>
                 ))}
               </tr>
 
-              {/* Gastos */}
-              <tr className="hover:bg-slate-700/30 transition">
-                <td className="px-4 py-3 font-semibold text-slate-300">Total Gastos</td>
-                {datosGlobales.map(inst => (
-                  <td key={inst.institucion_id} className="px-4 py-3 text-right text-rose-400 font-semibold">
-                    {formatoMoneda(inst.total_gastos)}
-                  </td>
-                ))}
+              {/* OTROS INGRESOS */}
+              <tr className="bg-slate-700/30">
+                <td className="px-4 py-3 font-bold text-white">💳 OTROS INGRESOS</td>
+                <td colSpan={datosGlobales.length}></td>
               </tr>
 
-              {/* Otros Ingresos */}
-              <tr className="bg-slate-700/30 hover:bg-slate-700/50 transition border-y border-slate-600/50">
-                <td className="px-4 py-3 font-bold text-slate-200">Otros Ingresos:</td>
-                <td></td>
-              </tr>
-
-              {/* Caja Grande Kiosco */}
               <tr className="hover:bg-slate-700/30 transition">
-                <td className="px-4 py-3 font-semibold text-slate-300 pl-8">├─ Caja Grande (Kiosco)</td>
+                <td className="px-4 py-3 font-semibold text-slate-300">Caja Grande (Kiosco)</td>
                 {datosGlobales.map(inst => (
                   <td key={inst.institucion_id} className="px-4 py-3 text-right text-cyan-400 font-semibold">
                     {formatoMoneda(inst.caja_grande_kiosco)}
@@ -588,19 +533,8 @@ export const GlobalModerno: React.FC = () => {
                 ))}
               </tr>
 
-              {/* Ventas Insumo */}
-              <tr className="hover:bg-slate-700/30 transition">
-                <td className="px-4 py-3 font-semibold text-slate-300 pl-8">└─ Ventas Insumo</td>
-                {datosGlobales.map(inst => (
-                  <td key={inst.institucion_id} className="px-4 py-3 text-right text-cyan-400 font-semibold">
-                    {formatoMoneda(inst.ventas_insumo)}
-                  </td>
-                ))}
-              </tr>
-
-              {/* Subtotal Otros Ingresos */}
-              <tr className="bg-slate-700/50 hover:bg-slate-700/70 transition border-y border-slate-600/50">
-                <td className="px-4 py-3 font-bold text-white">Subtotal Otros Ingresos</td>
+              <tr className="bg-cyan-600/20 border-y border-cyan-600/50">
+                <td className="px-4 py-3 font-bold text-cyan-300">Subtotal Otros Ingresos</td>
                 {datosGlobales.map(inst => (
                   <td key={inst.institucion_id} className="px-4 py-3 text-right text-cyan-300 font-black text-lg">
                     {formatoMoneda(inst.subtotal_otros_ingresos)}
@@ -608,9 +542,9 @@ export const GlobalModerno: React.FC = () => {
                 ))}
               </tr>
 
-              {/* Total Ingresos */}
-              <tr className="bg-gradient-to-r from-purple-600/30 to-pink-600/30 hover:from-purple-600/40 hover:to-pink-600/40 transition border-y border-purple-500/50">
-                <td className="px-4 py-3 font-bold text-white">TOTAL INGRESOS</td>
+              {/* TOTAL INGRESOS */}
+              <tr className="bg-purple-600/30 border-y border-purple-600/50">
+                <td className="px-4 py-3 font-bold text-purple-300">✅ TOTAL INGRESOS</td>
                 {datosGlobales.map(inst => (
                   <td key={inst.institucion_id} className="px-4 py-3 text-right text-purple-300 font-black text-xl">
                     {formatoMoneda(inst.total_ingresos)}
@@ -618,9 +552,24 @@ export const GlobalModerno: React.FC = () => {
                 ))}
               </tr>
 
-              {/* Balance Final */}
-              <tr className="bg-gradient-to-r from-green-600/30 to-emerald-600/30 hover:from-green-600/40 hover:to-emerald-600/40 transition border-y border-green-500/50">
-                <td className="px-4 py-3 font-black text-white">💰 BALANCE FINAL</td>
+              {/* EGRESOS */}
+              <tr className="bg-slate-700/30">
+                <td className="px-4 py-3 font-bold text-white">📉 EGRESOS</td>
+                <td colSpan={datosGlobales.length}></td>
+              </tr>
+
+              <tr className="hover:bg-slate-700/30 transition">
+                <td className="px-4 py-3 font-semibold text-slate-300">Gastos</td>
+                {datosGlobales.map(inst => (
+                  <td key={inst.institucion_id} className="px-4 py-3 text-right text-rose-400 font-semibold">
+                    {formatoMoneda(inst.total_gastos)}
+                  </td>
+                ))}
+              </tr>
+
+              {/* BALANCE FINAL */}
+              <tr className="bg-gradient-to-r from-blue-600/40 to-cyan-600/40 border-y border-blue-500/50">
+                <td className="px-4 py-3 font-black text-white text-lg">🎯 BALANCE FINAL</td>
                 {datosGlobales.map(inst => (
                   <td
                     key={inst.institucion_id}
@@ -633,13 +582,13 @@ export const GlobalModerno: React.FC = () => {
                 ))}
               </tr>
 
-              {/* BALANCE GLOBAL (SUMA DE AMBAS) */}
-              <tr className="bg-gradient-to-r from-blue-600/40 to-cyan-600/40 border-y border-blue-500/50">
-                <td className="px-4 py-3 font-black text-white text-lg">🌍 BALANCE GLOBAL TOTAL</td>
+              {/* BALANCE GLOBAL */}
+              <tr className="bg-gradient-to-r from-green-600/40 to-emerald-600/40 border-t-2 border-green-500/50">
+                <td className="px-4 py-3 font-black text-white text-lg">🌍 BALANCE GLOBAL</td>
                 <td
                   colSpan={datosGlobales.length}
                   className={`px-4 py-3 text-right font-black text-2xl ${
-                    datosGlobales.reduce((sum, inst) => sum + inst.balance, 0) >= 0 ? 'text-cyan-300' : 'text-red-300'
+                    datosGlobales.reduce((sum, inst) => sum + inst.balance, 0) >= 0 ? 'text-green-300' : 'text-red-300'
                   }`}
                 >
                   {formatoMoneda(datosGlobales.reduce((sum, inst) => sum + inst.balance, 0))}
@@ -650,12 +599,12 @@ export const GlobalModerno: React.FC = () => {
         </div>
       </div>
 
-      {/* TABLA DETALLADA POR MES - CONSOLIDADA */}
+      {/* TABLA DESGLOSE POR MES */}
       {datosPorMes.length > 0 && (
-        <div className="overflow-x-auto mb-8">
+        <div className="overflow-x-auto">
           <div className="p-6 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-xl">
             <h2 className="text-xl font-bold text-white mb-6">
-              Desglose {vistaActiva === 'anual' ? 'Anual' : 'Mes Actual'} - Consolidado (Ambas Instituciones)
+              📈 Desglose {vistaActiva === 'anual' ? 'Anual' : 'Mes Actual'} (Consolidado)
             </h2>
 
             <table className="w-full text-sm">
@@ -663,12 +612,12 @@ export const GlobalModerno: React.FC = () => {
                 <tr>
                   <th className="px-4 py-3 text-left text-slate-300 font-bold">Mes</th>
                   <th className="px-4 py-3 text-right text-orange-300 font-bold">Cuotas</th>
-                  <th className="px-4 py-3 text-right text-blue-300 font-bold">Inscrip.</th>
+                  <th className="px-4 py-3 text-right text-blue-300 font-bold">Inscripción</th>
                   <th className="px-4 py-3 text-right text-green-300 font-bold">Seguro</th>
                   <th className="px-4 py-3 text-right text-amber-300 font-bold">Subtotal Cobranza</th>
                   <th className="px-4 py-3 text-right text-cyan-300 font-bold">Kiosco</th>
                   <th className="px-4 py-3 text-right text-rose-300 font-bold">Gastos</th>
-                  <th className="px-4 py-3 text-right text-purple-300 font-bold">Total Ingresos</th>
+                  <th className="px-4 py-3 text-right text-purple-300 font-bold">Balance Neto</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-700/50">
