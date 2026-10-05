@@ -183,14 +183,18 @@ export const GlobalModerno: React.FC = () => {
           const subtotalCobranza = cuotasTotal + inscripcionTotal + seguroTotal
 
           // ✅ CÁLCULO CORRECTO DE DEUDAS ACTUALES
-          // Solo contar la deuda NO PAGADA de conceptos vencidos
-          // Deuda = SUM(monto_concepto * estudiantes_activos - pagos_recibidos) para cada concepto
+          // Solo contar la deuda del MES ACTUAL de conceptos vencidos
+          // Ignorar deudas de meses anteriores (ya se cobraron o se perdonaron)
+          const mesActualNum = new Date().getMonth() + 1
           let totalDeudas = 0
           const conceptosUnicos = new Map<number, any>()
           
           conceptosFiltrados.forEach(concepto => {
-            if (!conceptosUnicos.has(concepto.id)) {
-              conceptosUnicos.set(concepto.id, concepto)
+            // Solo contar deuda del mes actual
+            if (concepto.mes === mesActualNum && concepto.año === anoActual) {
+              if (!conceptosUnicos.has(concepto.id)) {
+                conceptosUnicos.set(concepto.id, concepto)
+              }
             }
           })
           
