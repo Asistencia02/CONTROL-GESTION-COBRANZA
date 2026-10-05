@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react'
-import { useInstitucion } from '@renderer/hooks/useInstitucion'
 import { supabase } from '@renderer/lib/supabase'
 import { formatoMoneda } from '@renderer/lib/helpers'
 import { TrendingUp, RefreshCw } from 'lucide-react'
@@ -36,8 +35,6 @@ export interface DatosGlobalesPorMes {
 }
 
 export const GlobalModerno: React.FC = () => {
-  const { institucionActiva } = useInstitucion()
-  
   const [vistaActiva, setVistaActiva] = useState<VistaGlobal>('anual')
   const [datosGlobales, setDatosGlobales] = useState<DatosGlobales[]>([])
   const [datosPorMesAnual, setDatosPorMesAnual] = useState<DatosGlobalesPorMes[]>([])
@@ -58,23 +55,31 @@ export const GlobalModerno: React.FC = () => {
 
       for (const inst of instituciones || []) {
         try {
-          // ✅ Cargar conceptos: incluir VENCIDOS y SIN FECHA
+          // ✅ Cargar conceptos vencidos (con mes/año y que ya pasaron)
           const { data: conceptos } = await supabase
             .from('conceptos_pago')
             .select('id, nombre, tipo, monto, mes, año')
             .eq('institucion_id', inst.id)
             .eq('activo', true)
 
-          // Concepto vencido: tiene mes/año Y ya pasó la fecha
           const conceptosFiltrados = (conceptos || []).filter(c => {
-            if (!c.mes || !c.año) return true // SIN FECHA = incluir
+            if (!c.mes || !c.año) return false // NO incluir sin fecha
             if (c.año < anoActual) return true
             if (c.año === anoActual && c.mes <= mesActual) return true
             return false
           })
 
-          // Cargar TODOS los pagos
-          let todosPagos: any[] = []
+          // ✅ Cargar estudiantes activos
+          const { data: estudiantesData } = await supabase
+            .from('estudiantes')
+            .select('id')
+            .eq('institucion_id', inst.id)
+            .neq('estado', 'NO_VIENE_MAS')
+
+          const totalEstudiantes = estudiantesData?.length || 0
+
+          // ✅ Cargar TODOS los pagos (individuales + múltiples)
+          let pagosIndividuales: any[] = []
           let pagina = 0
           let tieneRangoMas = true
 
@@ -84,7 +89,7 @@ export const GlobalModerno: React.FC = () => {
             
             const { data: pagosBloques } = await supabase
               .from('pagos')
-              .select('concepto_id, monto_pagado, estado')
+              .select('concepto_id, estudiante_id, monto_pagado, estado')
               .eq('institucion_id', inst.id)
               .range(desde, hasta)
 
@@ -92,7 +97,7 @@ export const GlobalModerno: React.FC = () => {
               tieneRangoMas = false
             } else {
               const pagosValidos = pagosBloques.filter((p: any) => p.estado !== 'ANULADO')
-              todosPagos = [...todosPagos, ...pagosValidos]
+              pagosIndividuales = [...pagosIndividuales, ...pagosValidos]
               if (pagosBloques.length < 1000) {
                 tieneRangoMas = false
               }
@@ -100,7 +105,8 @@ export const GlobalModerno: React.FC = () => {
             }
           }
 
-          // Cargar pagos múltiples
+          // ✅ Cargar pagos múltiples
+          let pagosMultiples: any[] = []
           const { data: pagosMultiplesData } = await supabase
             .from('pagos_multiples')
             .select(`
@@ -116,7 +122,7 @@ export const GlobalModerno: React.FC = () => {
             pagosMultiplesData.forEach((pm: any) => {
               if (pm.estado !== 'ANULADO' && pm.pagos_multiples_detalle && Array.isArray(pm.pagos_multiples_detalle)) {
                 pm.pagos_multiples_detalle.forEach((detalle: any) => {
-                  todosPagos.push({
+                  pagosMultiples.push({
                     concepto_id: detalle.concepto_id,
                     monto_pagado: detalle.monto_pagado
                   })
@@ -125,49 +131,56 @@ export const GlobalModerno: React.FC = () => {
             })
           }
 
-          // Obtener estudiantes activos
-          const { data: estudiantesData } = await supabase
-            .from('estudiantes')
-            .select('id')
-            .eq('institucion_id', inst.id)
-            .neq('estado', 'NO_VIENE_MAS')
+          const todosPagos = [...pagosIndividuales, ...pagosMultiples]
 
-          const totalEstudiantes = estudiantesData?.length || 0
-
-          // ✅ CÁLCULO: Para cada concepto vencido, calcular recaudado y deuda
+          // ✅ CALCULAR INGRESOS: Suma de TODOS los pagos (como ReportesModerno)
           let cuotasRecaudadas = 0
           let inscripcionRecaudada = 0
           let seguroRecaudado = 0
-          let totalRecaudable = 0
-          let totalRecaudado = 0
 
-          const conceptosUnicos = new Map<number, any>()
-          conceptosFiltrados.forEach(c => {
-            if (!conceptosUnicos.has(c.id)) {
-              conceptosUnicos.set(c.id, c)
-            }
-          })
-
-          conceptosUnicos.forEach(concepto => {
-            const pagosDelConcepto = todosPagos.filter((p: any) => p.concepto_id === concepto.id)
-            const montoRequerido = concepto.monto * totalEstudiantes
-            const montoPagado = pagosDelConcepto.reduce((sum: number, p: any) => sum + (p.monto_pagado || 0), 0)
-
-            totalRecaudable += montoRequerido
-            totalRecaudado += montoPagado
-
-            const nombreConcepto = concepto.nombre.toLowerCase()
-            if (nombreConcepto.includes('cuota')) {
-              cuotasRecaudadas += montoPagado
-            } else if (nombreConcepto.includes('inscripción') || nombreConcepto.includes('inscripcion')) {
-              inscripcionRecaudada += montoPagado
-            } else if (nombreConcepto.includes('seguro')) {
-              seguroRecaudado += montoPagado
+          todosPagos.forEach(pago => {
+            const concepto = conceptos?.find(c => c.id === pago.concepto_id)
+            if (concepto) {
+              const nombreConcepto = concepto.nombre.toLowerCase()
+              if (nombreConcepto.includes('cuota')) {
+                cuotasRecaudadas += pago.monto_pagado || 0
+              } else if (nombreConcepto.includes('inscripción') || nombreConcepto.includes('inscripcion')) {
+                inscripcionRecaudada += pago.monto_pagado || 0
+              } else if (nombreConcepto.includes('seguro')) {
+                seguroRecaudado += pago.monto_pagado || 0
+              }
             }
           })
 
           const subtotalCobranza = cuotasRecaudadas + inscripcionRecaudada + seguroRecaudado
-          const totalDeudas = Math.max(0, totalRecaudable - totalRecaudado)
+
+          // ✅ CALCULAR DEUDAS: Por estudiante, concepto por concepto (como ReportesModerno)
+          // Deuda = Monto - Pagos recibidos, SUM para todos los que NO pagaron
+          const pagosMap = new Map<string, boolean>()
+          todosPagos.forEach(pago => {
+            const concepto = conceptos?.find(c => c.id === pago.concepto_id)
+            if (concepto && pago.monto_pagado > 0) {
+              pagosMap.set(`estudiante-concepto-${pago.concepto_id}`, true)
+            }
+          })
+
+          let totalDeudas = 0
+          estudiantesData?.forEach(est => {
+            conceptosFiltrados.forEach(concepto => {
+              const tieneParcialoTotal = pagosMap.has(`estudiante-concepto-${concepto.id}`)
+              if (!tieneParcialoTotal) {
+                // Estudiante no pagó este concepto: suma el monto completo
+                totalDeudas += concepto.monto
+              } else {
+                // Estudiante pagó algo: calcular cuánto falta
+                const pagosTotales = todosPagos
+                  .filter(p => p.concepto_id === concepto.id)
+                  .reduce((sum, p) => sum + (p.monto_pagado || 0), 0)
+                const deudante = Math.max(0, concepto.monto - pagosTotales)
+                totalDeudas += deudante
+              }
+            })
+          })
 
           // Cargar gastos
           let gastosTotal = 0
@@ -178,7 +191,7 @@ export const GlobalModerno: React.FC = () => {
 
           gastosTotal = (gastosData || []).reduce((sum, g) => sum + (g.monto || 0), 0)
 
-          // Cargar caja grande (kiosco)
+          // Cargar caja grande
           let cajaGrandeTotal = 0
           const { data: cajaData } = await supabase
             .from('caja_grande')
@@ -191,7 +204,7 @@ export const GlobalModerno: React.FC = () => {
           const totalIngresos = subtotalCobranza + subtotalOtros
           const balance = totalIngresos - gastosTotal
 
-          console.log(`✅ ${inst.nombre}: Recaudable=$${totalRecaudable}, Recaudado=$${subtotalCobranza}, Deudas=$${totalDeudas}, Gastos=$${gastosTotal}`)
+          console.log(`✅ ${inst.nombre}: Ingresos=$${subtotalCobranza}, Deudas=$${totalDeudas}, Gastos=$${gastosTotal}`)
 
           datos.push({
             institucion_id: inst.id,
@@ -227,7 +240,7 @@ export const GlobalModerno: React.FC = () => {
       const mesActualNum = new Date().getMonth() + 1
       const mesFinLoop = vistaActiva === 'anual' ? 12 : mesActualNum
 
-      // Cargar conceptos con mes/año ESPECÍFICO
+      // Cargar conceptos con mes/año específico
       const { data: todosConceptos } = await supabase
         .from('conceptos_pago')
         .select('id, nombre, mes, año')
@@ -449,7 +462,7 @@ export const GlobalModerno: React.FC = () => {
         </div>
       </div>
 
-      {/* TABLA RESUMEN POR INSTITUCIÓN */}
+      {/* TABLA RESUMEN */}
       <div className="mb-8 overflow-x-auto">
         <div className="p-6 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-xl">
           <h2 className="text-xl font-bold text-white mb-6">📊 Resumen de Ingresos y Egresos</h2>
@@ -466,7 +479,6 @@ export const GlobalModerno: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-700/50">
-              {/* INGRESOS POR COBRANZA */}
               <tr className="bg-slate-700/30">
                 <td className="px-4 py-3 font-bold text-white">💰 INGRESOS POR COBRANZA</td>
                 <td colSpan={datosGlobales.length}></td>
@@ -508,9 +520,8 @@ export const GlobalModerno: React.FC = () => {
                 ))}
               </tr>
 
-              {/* DEUDAS */}
               <tr className="bg-red-600/20 border-y border-red-600/50">
-                <td className="px-4 py-3 font-bold text-red-300">⚠️ Deuda Pendiente (Conceptos vencidos)</td>
+                <td className="px-4 py-3 font-bold text-red-300">⚠️ Deuda Pendiente</td>
                 {datosGlobales.map(inst => (
                   <td key={inst.institucion_id} className="px-4 py-3 text-right text-red-300 font-black text-lg">
                     {formatoMoneda(inst.total_deudas)}
@@ -518,7 +529,6 @@ export const GlobalModerno: React.FC = () => {
                 ))}
               </tr>
 
-              {/* OTROS INGRESOS */}
               <tr className="bg-slate-700/30">
                 <td className="px-4 py-3 font-bold text-white">💳 OTROS INGRESOS</td>
                 <td colSpan={datosGlobales.length}></td>
@@ -542,7 +552,6 @@ export const GlobalModerno: React.FC = () => {
                 ))}
               </tr>
 
-              {/* TOTAL INGRESOS */}
               <tr className="bg-purple-600/30 border-y border-purple-600/50">
                 <td className="px-4 py-3 font-bold text-purple-300">✅ TOTAL INGRESOS</td>
                 {datosGlobales.map(inst => (
@@ -552,7 +561,6 @@ export const GlobalModerno: React.FC = () => {
                 ))}
               </tr>
 
-              {/* EGRESOS */}
               <tr className="bg-slate-700/30">
                 <td className="px-4 py-3 font-bold text-white">📉 EGRESOS</td>
                 <td colSpan={datosGlobales.length}></td>
@@ -567,7 +575,6 @@ export const GlobalModerno: React.FC = () => {
                 ))}
               </tr>
 
-              {/* BALANCE FINAL */}
               <tr className="bg-gradient-to-r from-blue-600/40 to-cyan-600/40 border-y border-blue-500/50">
                 <td className="px-4 py-3 font-black text-white text-lg">🎯 BALANCE FINAL</td>
                 {datosGlobales.map(inst => (
@@ -582,7 +589,6 @@ export const GlobalModerno: React.FC = () => {
                 ))}
               </tr>
 
-              {/* BALANCE GLOBAL */}
               <tr className="bg-gradient-to-r from-green-600/40 to-emerald-600/40 border-t-2 border-green-500/50">
                 <td className="px-4 py-3 font-black text-white text-lg">🌍 BALANCE GLOBAL</td>
                 <td
@@ -633,7 +639,6 @@ export const GlobalModerno: React.FC = () => {
                     <td className="px-4 py-3 text-right text-purple-400 font-bold">{formatoMoneda(mes.total_mes)}</td>
                   </tr>
                 ))}
-                {/* Fila de totales */}
                 <tr className="bg-gradient-to-r from-slate-700/50 to-slate-700/70 border-t-2 border-slate-600">
                   <td className="px-4 py-3 font-bold text-white text-lg">TOTAL</td>
                   <td className="px-4 py-3 text-right text-orange-300 font-black text-lg">{formatoMoneda(totalPorConcepto('cuotas'))}</td>
