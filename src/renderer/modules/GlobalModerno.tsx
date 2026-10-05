@@ -125,11 +125,12 @@ export const GlobalModerno: React.FC = () => {
           const pagosIndividualesTotal = pagosIndividuales.reduce((sum, p) => sum + p.monto_pagado, 0)
           const totalPagosRecibidos = pagosIndividualesTotal + pagosMultiplesTotal
 
-          // ✅ RECAUDOS POR TIPO (de TODOS los pagos)
+          // ✅ RECAUDOS POR TIPO (de TODOS los pagos: individuales + múltiples)
           let cuotasRecaudadas = 0
           let inscripcionRecaudada = 0
           let seguroRecaudado = 0
 
+          // Contar pagos individuales
           pagosIndividuales.forEach(pago => {
             const concepto = conceptos?.find(c => c.id === pago.concepto_id)
             if (concepto) {
@@ -143,6 +144,33 @@ export const GlobalModerno: React.FC = () => {
               }
             }
           })
+
+          // ✅ Cargar pagos múltiples CON CONCEPTOS para clasificarlos
+          const { data: pagosMultiplesDetalle } = await supabase
+            .from('pagos_multiples_detalle')
+            .select(`
+              monto_pagado,
+              concepto_id,
+              pagos_multiples!inner(estado)
+            `)
+            .eq('pagos_multiples.institucion_id', inst.id)
+            .neq('pagos_multiples.estado', 'ANULADO')
+
+          if (pagosMultiplesDetalle) {
+            pagosMultiplesDetalle.forEach(pago => {
+              const concepto = conceptos?.find(c => c.id === pago.concepto_id)
+              if (concepto) {
+                const nombreConcepto = concepto.nombre.toLowerCase()
+                if (nombreConcepto.includes('cuota')) {
+                  cuotasRecaudadas += pago.monto_pagado || 0
+                } else if (nombreConcepto.includes('inscripción') || nombreConcepto.includes('inscripcion')) {
+                  inscripcionRecaudada += pago.monto_pagado || 0
+                } else if (nombreConcepto.includes('seguro')) {
+                  seguroRecaudado += pago.monto_pagado || 0
+                }
+              }
+            })
+          }
 
           const subtotalCobranza = cuotasRecaudadas + inscripcionRecaudada + seguroRecaudado
 
