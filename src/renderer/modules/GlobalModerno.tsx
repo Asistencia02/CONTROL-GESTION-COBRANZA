@@ -280,8 +280,13 @@ export const GlobalModerno: React.FC = () => {
         // Sumar pagos del mes
         todosLosPagos.forEach(pago => {
           const concepto = todosConceptos?.find(c => c.id === pago.concepto_id)
-          if (concepto?.mes === mes && concepto?.año === anoActual) {
-            const nombre = concepto.nombre.toLowerCase()
+          if (!concepto) return
+          
+          const nombre = concepto.nombre.toLowerCase()
+          const esDelMes = concepto.mes === mes && concepto.año === anoActual
+          const esSinMesAño = !concepto.mes && !concepto.año // Inscripción/Seguro sin vencimiento
+          
+          if (esDelMes || (esSinMesAño && mes === 1)) { // Los conceptos sin mes/año se cuentan en enero
             if (nombre.includes('cuota')) cuotasTotal += pago.monto_pagado || 0
             else if (nombre.includes('inscripción') || nombre.includes('inscripcion')) inscripcionTotal += pago.monto_pagado || 0
             else if (nombre.includes('seguro')) seguroTotal += pago.monto_pagado || 0
