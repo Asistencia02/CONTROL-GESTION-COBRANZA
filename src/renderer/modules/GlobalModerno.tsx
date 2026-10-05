@@ -180,14 +180,27 @@ export const GlobalModerno: React.FC = () => {
             })
           })
 
-          // ✅ Calcular DEUDAS: solo de conceptos VENCIDOS
-          let totalDeudas = 0
+          const subtotalCobranza = cuotasTotal + inscripcionTotal + seguroTotal
+
+          // ✅ CÁLCULO CORRECTO DE DEUDAS
+          // Deuda = (Total recaudable de conceptos vencidos) - (Total recaudado)
+          // Donde recaudable = SUM(monto_concepto * estudiantes_activos) para CADA concepto ÚNICO vencido
+          let totalRecaudable = 0
+          const conceptosUnicos = new Map<number, any>()
+          
           conceptosFiltrados.forEach(concepto => {
-            const pagosDelConcepto = todosPagos.filter((p: any) => p.concepto_id === concepto.id)
-            const montoTotalRequerido = concepto.monto * totalEstudiantes
-            const montoTotalPagado = pagosDelConcepto.reduce((sum: number, p: any) => sum + (p.monto_pagado || 0), 0)
-            totalDeudas += Math.max(0, montoTotalRequerido - montoTotalPagado)
+            if (!conceptosUnicos.has(concepto.id)) {
+              conceptosUnicos.set(concepto.id, concepto)
+            }
           })
+          
+          conceptosUnicos.forEach((concepto) => {
+            const montoTotalRequerido = concepto.monto * totalEstudiantes
+            totalRecaudable += montoTotalRequerido
+          })
+          
+          // Deuda = Recaudable - Recaudado
+          const totalDeudas = Math.max(0, totalRecaudable - subtotalCobranza)
 
           let gastosTotal = 0
           const { data: gastosData } = await supabase
@@ -205,12 +218,11 @@ export const GlobalModerno: React.FC = () => {
 
           cajaGrandeTotal = (cajaData || []).reduce((sum, c) => sum + (c.monto || 0), 0)
 
-          const subtotalCobranza = cuotasTotal + inscripcionTotal + seguroTotal
           const subtotalOtros = cajaGrandeTotal
           const totalIngresos = subtotalCobranza + subtotalOtros
           const balance = totalIngresos - gastosTotal
 
-          console.log(`✅ ${inst.nombre}: Cuotas=${cuotasTotal}, Inscripción=${inscripcionTotal}, Seguro=${seguroTotal}, Deudas=${totalDeudas}`)
+          console.log(`✅ ${inst.nombre}: Recaudable=${totalRecaudable}, Recaudado=${subtotalCobranza}, Deudas=${totalDeudas}`)
 
           datos.push({
             institucion_id: inst.id,
@@ -252,7 +264,7 @@ export const GlobalModerno: React.FC = () => {
         .select('id, institucion_id, nombre, mes, año')
         .eq('activo', true)
 
-      // ✅ Cargar TODOS los pagos de AMBAS INSTITUCIONES con concepto data
+      // ✅ Cargar TODOS los pagos de AMBAS INSTITUCIONES
       let todosPagos: any[] = []
       const { data: instituciones } = await supabase
         .from('instituciones')
@@ -339,7 +351,7 @@ export const GlobalModerno: React.FC = () => {
             const monto = pago.monto_pagado || 0
             
             // ✅ CRITERIO: Si concepto tiene mes/año, agrupar por ese mes
-            // Si NO tiene mes/año, agrupar en mes 1 (enero)
+            // Si NO tiene mes/año, agrupar en mes 1 (enero) - SOLO UNA VEZ
             let mesDeferencia = concepto.mes || 1
             let anioDeferencia = concepto.año || anoActual
 
