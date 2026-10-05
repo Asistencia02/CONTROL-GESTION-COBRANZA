@@ -16,10 +16,11 @@ import { KioscoConfiguracionModerno } from '@renderer/modules/KioscoConfiguracio
 import { GestionEstudiantesModerno } from '@renderer/modules/GestionEstudiantesModerno'
 import { Sincronizacion } from '@renderer/modules/Sincronizacion'
 import { GlobalModerno } from '@renderer/modules/GlobalModerno'
+import { DebugDeuda } from '@renderer/modules/DebugDeuda'
 import { supabase } from '@renderer/lib/supabase'
 import '@renderer/lib/verificarVariables'
 
-type ModuleId = 'dashboard' | 'cobranzas' | 'deudas' | 'ventas' | 'ventakiosco' | 'gastos' | 'reportes' | 'cierre' | 'configuracion' | 'kioscoconfig' | 'sincronizacion' | 'estudiantes' | 'global' | 'admin'
+type ModuleId = 'dashboard' | 'cobranzas' | 'deudas' | 'ventas' | 'ventakiosco' | 'gastos' | 'reportes' | 'cierre' | 'configuracion' | 'kioscoconfig' | 'sincronizacion' | 'estudiantes' | 'global' | 'debug' | 'admin'
 
 const checkConnection = async (): Promise<boolean> => {
   try {
@@ -87,6 +88,7 @@ export const App: React.FC = () => {
         case 'estudiantes': return <GestionEstudiantesModerno />
         case 'reportes': return <ReportesFinancierosModerno />
         case 'global': return <GlobalModerno />
+        case 'debug': return <DebugDeuda />
         case 'cierre': return <CierreModerno />
         case 'kioscoconfig': return <KioscoConfiguracionModerno />
         case 'sincronizacion': return <Sincronizacion />
@@ -116,6 +118,7 @@ export const App: React.FC = () => {
       case 'estudiantes': return <GestionEstudiantesModerno />
       case 'reportes': return <ReportesFinancierosModerno />
       case 'global': return <GlobalModerno />
+      case 'debug': return <DebugDeuda />
       case 'kioscoconfig': return <KioscoConfiguracionModerno />
       case 'sincronizacion': return <Sincronizacion />
       case 'configuracion': return <ConfiguracionModerno />

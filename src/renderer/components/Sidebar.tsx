@@ -106,8 +106,8 @@ const NAV_ITEMS: NavItem[] = [
     color: 'from-orange-500 to-amber-500',
   },
   {
-    id: 'testing',
-    label: '🧪 Testing (Deuda)',
+    id: 'debug',
+    label: '🐛 Debug Deuda',
     icon: <TestTube size={20} />,
     color: 'from-purple-600 to-pink-600',
   },
