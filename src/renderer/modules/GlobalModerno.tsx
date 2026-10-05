@@ -222,7 +222,7 @@ export const GlobalModerno: React.FC = () => {
           const totalIngresos = subtotalCobranza + subtotalOtros
           const balance = totalIngresos - gastosTotal
 
-          console.log(`✅ ${inst.nombre}: Recaudable=${totalRecaudable}, Recaudado=${subtotalCobranza}, Deudas=${totalDeudas}`)
+          console.log(`✅ ${inst.nombre}: Recaudado=${subtotalCobranza}, Deudas=${totalDeudas}`)
 
           datos.push({
             institucion_id: inst.id,
