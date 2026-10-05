@@ -67,8 +67,9 @@ export const GlobalModerno: React.FC = () => {
           const mesActual = today.getMonth() + 1
           const anoActual = today.getFullYear()
 
+          // SOLO incluir conceptos CON mes/año vencidos (como ReportesModerno)
           const conceptosFiltrados = (conceptos || []).filter(c => {
-            if (!c.mes || !c.año) return true
+            if (!c.mes || !c.año) return false  // ← NO incluir sin fecha
             if (c.año < anoActual) return true
             if (c.año === anoActual && c.mes <= mesActual) return true
             return false
@@ -152,7 +153,22 @@ export const GlobalModerno: React.FC = () => {
 
             totalDeudas += montoAdeudado
 
-            // Sumar recaudos
+            // Sumar recaudos SOLO de conceptos vencidos
+            pagosDelConcepto.forEach(p => {
+              if (concepto.nombre.toLowerCase().includes('cuota')) {
+                cuotasTotal += p.monto_pagado
+              } else if (concepto.nombre.toLowerCase().includes('inscripción') || concepto.nombre.toLowerCase().includes('inscripcion')) {
+                inscripcionTotal += p.monto_pagado
+              } else if (concepto.nombre.toLowerCase().includes('seguro')) {
+                seguroTotal += p.monto_pagado
+              }
+            })
+          })
+
+          // TAMBIÉN sumar recaudos de conceptos SIN mes/año (inscripción/seguro flexible)
+          const conceptosSinFecha = (conceptos || []).filter(c => !c.mes || !c.año)
+          conceptosSinFecha.forEach(concepto => {
+            const pagosDelConcepto = todosPagos.filter((p: any) => p.concepto_id === concepto.id)
             pagosDelConcepto.forEach(p => {
               if (concepto.nombre.toLowerCase().includes('cuota')) {
                 cuotasTotal += p.monto_pagado
