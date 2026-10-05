@@ -7,7 +7,6 @@ import { Pagination } from '@renderer/components/Pagination'
 import { supabase } from '@renderer/lib/supabase'
 import { z } from 'zod'
 import jsPDF from 'jspdf'
-import autoTable from 'jspdf-autotable'
 
 interface Estudiante {
   id: number
@@ -300,18 +299,19 @@ export const GestionEstudiantesModerno: React.FC = () => {
               const doc = new jsPDF()
               const pageHeight = doc.internal.pageSize.getHeight()
               const pageWidth = doc.internal.pageSize.getWidth()
-              let yPosition = 10
+              const margin = 10
+              let yPosition = margin + 5
               
               // Título
-              doc.setFont('Arial', 'bold')
+              doc.setFont('Helvetica', 'bold')
               doc.setFontSize(16)
               doc.text('Lista de Estudiantes', pageWidth / 2, yPosition, { align: 'center' })
               yPosition += 8
               
               // Institución
               doc.setFontSize(11)
-              doc.setFont('Arial', 'normal')
-              doc.text(`Institución: ${institucionActiva.nombre}`, 10, yPosition)
+              doc.setFont('Helvetica', 'normal')
+              doc.text(`Institución: ${institucionActiva.nombre}`, margin, yPosition)
               yPosition += 6
               
               // Filtros aplicados
@@ -324,55 +324,83 @@ export const GestionEstudiantesModerno: React.FC = () => {
               
               if (filtrosAplicados.length > 0) {
                 doc.setFontSize(9)
-                doc.text(`Filtros: ${filtrosAplicados.join(', ')}`, 10, yPosition)
+                doc.text(`Filtros: ${filtrosAplicados.join(', ')}`, margin, yPosition)
                 yPosition += 5
               }
               
               // Fecha
               doc.setFontSize(9)
-              doc.text(`Fecha: ${new Date().toLocaleDateString('es-AR')}`, 10, yPosition)
+              doc.text(`Fecha: ${new Date().toLocaleDateString('es-AR')}`, margin, yPosition)
               yPosition += 8
               
-              // Tabla
-              const tableData = estudiantesFiltrados.map(est => [
-                `${est.apellido}, ${est.nombre}`,
-                est.dni,
-                (est.carreras as any)?.nombre || 'Sin carrera',
-                getEstadoLabel(est.estado),
-                `${mesesNombre[est.mes_ingreso]} ${est.ano_ingreso}`
-              ])
+              // Encabezados de tabla
+              const colWidths = [50, 25, 40, 25, 30]
+              const headers = ['Nombre Completo', 'DNI', 'Carrera', 'Estado', 'Ingreso']
+              const rowHeight = 6
               
-              autoTable(doc, {
-                head: [['Nombre Completo', 'DNI', 'Carrera', 'Estado', 'Ingreso']],
-                body: tableData,
-                startY: yPosition,
-                margin: { top: 10, right: 10, bottom: 10, left: 10 },
-                styles: {
-                  font: 'Arial',
-                  fontSize: 9,
-                  cellPadding: 3
-                },
-                headStyles: {
-                  fillColor: [59, 130, 246],
-                  textColor: 255,
-                  fontStyle: 'bold'
-                },
-                alternateRowStyles: {
-                  fillColor: [242, 242, 242]
-                },
-                columnStyles: {
-                  0: { cellWidth: 50 },
-                  1: { cellWidth: 25 },
-                  2: { cellWidth: 40 },
-                  3: { cellWidth: 25 },
-                  4: { cellWidth: 30 }
+              // Dibujar encabezados
+              doc.setFillColor(59, 130, 246)
+              doc.setTextColor(255, 255, 255)
+              doc.setFont('Helvetica', 'bold')
+              doc.setFontSize(9)
+              
+              let xPos = margin
+              headers.forEach((header, i) => {
+                doc.rect(xPos, yPosition, colWidths[i], rowHeight, 'F')
+                doc.text(header, xPos + 2, yPosition + 4, { maxWidth: colWidths[i] - 2 })
+                xPos += colWidths[i]
+              })
+              yPosition += rowHeight
+              
+              // Dibujar filas
+              doc.setTextColor(0, 0, 0)
+              doc.setFont('Helvetica', 'normal')
+              doc.setFontSize(8)
+              
+              let fillColor = false
+              estudiantesFiltrados.forEach((est, idx) => {
+                if (yPosition + rowHeight > pageHeight - 15) {
+                  doc.addPage()
+                  yPosition = margin
                 }
+                
+                if (fillColor) {
+                  doc.setFillColor(242, 242, 242)
+                  xPos = margin
+                  headers.forEach((_, i) => {
+                    doc.rect(xPos, yPosition, colWidths[i], rowHeight, 'F')
+                    xPos += colWidths[i]
+                  })
+                }
+                
+                const rowData = [
+                  `${est.apellido}, ${est.nombre}`,
+                  est.dni,
+                  (est.carreras as any)?.nombre || 'Sin carrera',
+                  getEstadoLabel(est.estado),
+                  `${mesesNombre[est.mes_ingreso]} ${est.ano_ingreso}`
+                ]
+                
+                xPos = margin
+                rowData.forEach((data, i) => {
+                  doc.text(data.toString().substring(0, 20), xPos + 2, yPosition + 4)
+                  xPos += colWidths[i]
+                })
+                
+                doc.setDrawColor(200, 200, 200)
+                xPos = margin
+                headers.forEach((_, i) => {
+                  doc.rect(xPos, yPosition, colWidths[i], rowHeight)
+                  xPos += colWidths[i]
+                })
+                
+                yPosition += rowHeight
+                fillColor = !fillColor
               })
               
               // Pie de página
-              const finalY = (doc as any).lastAutoTable.finalY + 10
               doc.setFontSize(9)
-              doc.text(`Total de estudiantes: ${estudiantesFiltrados.length}`, 10, Math.min(finalY, pageHeight - 15))
+              doc.text(`Total de estudiantes: ${estudiantesFiltrados.length}`, margin, yPosition + 5)
               
               // Descargar
               doc.save(`Estudiantes_${new Date().toISOString().split('T')[0]}.pdf`)
