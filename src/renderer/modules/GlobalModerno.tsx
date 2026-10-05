@@ -182,10 +182,10 @@ export const GlobalModerno: React.FC = () => {
 
           const subtotalCobranza = cuotasTotal + inscripcionTotal + seguroTotal
 
-          // ✅ CÁLCULO CORRECTO DE DEUDAS
-          // Deuda = (Total recaudable de conceptos vencidos) - (Total recaudado)
-          // Donde recaudable = SUM(monto_concepto * estudiantes_activos) para CADA concepto ÚNICO vencido
-          let totalRecaudable = 0
+          // ✅ CÁLCULO CORRECTO DE DEUDAS ACTUALES
+          // Solo contar la deuda NO PAGADA de conceptos vencidos
+          // Deuda = SUM(monto_concepto * estudiantes_activos - pagos_recibidos) para cada concepto
+          let totalDeudas = 0
           const conceptosUnicos = new Map<number, any>()
           
           conceptosFiltrados.forEach(concepto => {
@@ -195,12 +195,12 @@ export const GlobalModerno: React.FC = () => {
           })
           
           conceptosUnicos.forEach((concepto) => {
+            const pagosDelConcepto = todosPagos.filter((p: any) => p.concepto_id === concepto.id)
             const montoTotalRequerido = concepto.monto * totalEstudiantes
-            totalRecaudable += montoTotalRequerido
+            const montoTotalPagado = pagosDelConcepto.reduce((sum: number, p: any) => sum + (p.monto_pagado || 0), 0)
+            const deudaDelConcepto = Math.max(0, montoTotalRequerido - montoTotalPagado)
+            totalDeudas += deudaDelConcepto
           })
-          
-          // Deuda = Recaudable - Recaudado
-          const totalDeudas = Math.max(0, totalRecaudable - subtotalCobranza)
 
           let gastosTotal = 0
           const { data: gastosData } = await supabase
@@ -384,7 +384,7 @@ export const GlobalModerno: React.FC = () => {
         const kioscoTotal = cajaDelMes.reduce((sum, c) => sum + (c.monto || 0), 0)
 
         const subtotalOtros = kioscoTotal
-        const totalMes = subtotalCobranza + subtotalOtros
+        const totalMes = subtotalCobranza + subtotalOtros - gastosTotal
 
         meses.push({
           mes,
