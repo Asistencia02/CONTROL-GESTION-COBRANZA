@@ -1,7 +1,4 @@
 import React, { useState, useEffect } from 'react'
-import { useEstudiantes } from '@renderer/hooks/useEstudiantes'
-import { usePagos } from '@renderer/hooks/usePagos'
-import { useReporteConceptos } from '@renderer/hooks/useReporteConceptos'
 import { supabase } from '@renderer/lib/supabase'
 import { formatoMoneda } from '@renderer/lib/helpers'
 import { TrendingUp, RefreshCw } from 'lucide-react'
@@ -34,6 +31,145 @@ export interface DatosGlobalesPorMes {
   total_mes: number
 }
 
+// ✅ Función idéntica a la que usa ReportesModerno
+const cargarDatosInstitucion = async (institucionId: number): Promise<{
+  cuotas: number
+  inscripcion: number
+  seguro: number
+  total_recaudado: number
+  total_deudas: number
+  total_gastos: number
+  caja_grande: number
+}> => {
+  const today = new Date()
+  const mesActual = today.getMonth() + 1
+  const anoActual = today.getFullYear()
+
+  // ✅ 1. Cargar conceptos vencidos
+  const { data: conceptos } = await supabase
+    .from('conceptos_pago')
+    .select('*')
+    .eq('institucion_id', institucionId)
+    .eq('activo', true)
+
+  // ✅ 2. Cargar estudiantes activos
+  const { data: estudiantes } = await supabase
+    .from('estudiantes')
+    .select('id, estado')
+    .eq('institucion_id', institucionId)
+
+  const estudiantesActivos = (estudiantes || []).filter(e => e.estado !== 'NO_VIENE_MAS')
+
+  // ✅ 3. Cargar PAGOS INDIVIDUALES
+  const { data: pagosData } = await supabase
+    .from('pagos')
+    .select('*')
+    .eq('institucion_id', institucionId)
+    .neq('estado', 'ANULADO')
+
+  const pagosIndividuales = pagosData || []
+
+  // ✅ 4. Cargar PAGOS MÚLTIPLES (incluyendo detalles)
+  const { data: pagosMultiples } = await supabase
+    .from('pagos_multiples')
+    .select(`
+      *,
+      pagos_multiples_detalle(*)
+    `)
+    .eq('institucion_id', institucionId)
+    .neq('estado', 'ANULADO')
+
+  // Expandir pagos múltiples a formato de pagos individuales
+  const pagosMultiplesExpandidos: any[] = []
+  pagosMultiples?.forEach(pm => {
+    if (pm.pagos_multiples_detalle && Array.isArray(pm.pagos_multiples_detalle)) {
+      pm.pagos_multiples_detalle.forEach((detalle: any) => {
+        pagosMultiplesExpandidos.push({
+          concepto_id: detalle.concepto_id,
+          monto_pagado: detalle.monto_pagado,
+          estudiante_id: pm.estudiante_id,
+        })
+      })
+    }
+  })
+
+  // ✅ TOTAL PAGOS = individuales + múltiples
+  const todosPagos = [...pagosIndividuales, ...pagosMultiplesExpandidos]
+  const totalPagosRecibidos = todosPagos.reduce((sum, p) => sum + (p.monto_pagado || 0), 0)
+
+  // ✅ 5. CLASIFICAR RECAUDOS POR TIPO
+  let cuotasRecaudadas = 0
+  let inscripcionRecaudada = 0
+  let seguroRecaudado = 0
+
+  todosPagos.forEach(pago => {
+    const concepto = conceptos?.find(c => c.id === pago.concepto_id)
+    if (concepto) {
+      const nombre = concepto.nombre.toLowerCase()
+      if (nombre.includes('cuota')) {
+        cuotasRecaudadas += pago.monto_pagado || 0
+      } else if (nombre.includes('inscripción') || nombre.includes('inscripcion')) {
+        inscripcionRecaudada += pago.monto_pagado || 0
+      } else if (nombre.includes('seguro')) {
+        seguroRecaudado += pago.monto_pagado || 0
+      }
+    }
+  })
+
+  // ✅ 6. CALCULAR DEUDA: estudiantes SIN PAGO de conceptos vencidos
+  const pagosMap = new Map<string, boolean>()
+  todosPagos.filter(p => p.monto_pagado > 0).forEach(pago => {
+    pagosMap.set(`${pago.estudiante_id}-${pago.concepto_id}`, true)
+  })
+
+  let totalDeudaVencida = 0
+  estudiantesActivos.forEach(est => {
+    conceptos?.forEach(concepto => {
+      let debeIncluir = false
+      if (concepto.mes && concepto.año) {
+        if (concepto.año < anoActual) {
+          debeIncluir = true
+        } else if (concepto.año === anoActual && concepto.mes <= mesActual) {
+          debeIncluir = true
+        }
+      }
+
+      if (debeIncluir) {
+        const tienePago = pagosMap.has(`${est.id}-${concepto.id}`)
+        if (!tienePago) {
+          totalDeudaVencida += concepto.monto
+        }
+      }
+    })
+  })
+
+  // ✅ 7. GASTOS
+  const { data: gastosData } = await supabase
+    .from('gastos')
+    .select('monto')
+    .eq('institucion_id', institucionId)
+
+  const gastosTotal = (gastosData || []).reduce((sum, g) => sum + (g.monto || 0), 0)
+
+  // ✅ 8. CAJA GRANDE
+  const { data: cajaData } = await supabase
+    .from('caja_grande')
+    .select('monto')
+    .eq('institucion_id', institucionId)
+
+  const cajaTotal = (cajaData || []).reduce((sum, c) => sum + (c.monto || 0), 0)
+
+  return {
+    cuotas: cuotasRecaudadas,
+    inscripcion: inscripcionRecaudada,
+    seguro: seguroRecaudado,
+    total_recaudado: totalPagosRecibidos,
+    total_deudas: totalDeudaVencida,
+    total_gastos: gastosTotal,
+    caja_grande: cajaTotal,
+  }
+}
+
 export const GlobalModerno: React.FC = () => {
   const [vistaActiva, setVistaActiva] = useState<VistaGlobal>('anual')
   const [datosGlobales, setDatosGlobales] = useState<DatosGlobales[]>([])
@@ -51,163 +187,26 @@ export const GlobalModerno: React.FC = () => {
 
       for (const inst of instituciones || []) {
         try {
-          const today = new Date()
-          const mesActual = today.getMonth() + 1
-          const anoActual = today.getFullYear()
+          const datosInst = await cargarDatosInstitucion(inst.id)
 
-          // ✅ Cargar conceptos vencidos
-          const { data: conceptos } = await supabase
-            .from('conceptos_pago')
-            .select('id, nombre, tipo, monto, mes, año')
-            .eq('institucion_id', inst.id)
-            .eq('activo', true)
-
-          const conceptosFiltrados = (conceptos || []).filter(c => {
-            if (!c.mes || !c.año) return false
-            if (c.año < anoActual) return true
-            if (c.año === anoActual && c.mes <= mesActual) return true
-            return false
-          })
-
-          // ✅ Cargar estudiantes activos
-          const { data: estudiantesData } = await supabase
-            .from('estudiantes')
-            .select('id, estado')
-            .eq('institucion_id', inst.id)
-
-          const estudiantesActivos = (estudiantesData || []).filter(e => e.estado !== 'NO_VIENE_MAS')
-
-          // ✅ Cargar TODOS los pagos individuales
-          let pagosIndividuales: any[] = []
-          let pagina = 0
-          let tieneRangoMas = true
-
-          while (tieneRangoMas) {
-            const desde = pagina * 1000
-            const hasta = desde + 999
-            
-            const { data: pagosBloques } = await supabase
-              .from('pagos')
-              .select('concepto_id, monto_pagado, estado')
-              .eq('institucion_id', inst.id)
-              .neq('estado', 'ANULADO')
-              .range(desde, hasta)
-
-            if (!pagosBloques || pagosBloques.length === 0) {
-              tieneRangoMas = false
-            } else {
-              pagosIndividuales = [...pagosIndividuales, ...pagosBloques]
-              if (pagosBloques.length < 1000) {
-                tieneRangoMas = false
-              }
-              pagina++
-            }
-          }
-
-          // ✅ Cargar TODOS los pagos múltiples CON CONCEPTOS
-          const { data: pagosMultiDetalle } = await supabase
-            .from('pagos_multiples_detalle')
-            .select(`
-              monto_pagado,
-              concepto_id,
-              pagos_multiples!inner(institucion_id, estado)
-            `)
-            .eq('pagos_multiples.institucion_id', inst.id)
-            .neq('pagos_multiples.estado', 'ANULADO')
-
-          const pagosMultiples = pagosMultiDetalle || []
-
-          // ✅ TOTAL PAGOS RECIBIDOS (sumar TODOS)
-          const totalPagosIndividuales = pagosIndividuales.reduce((sum, p) => sum + (p.monto_pagado || 0), 0)
-          const totalPagosMultiples = pagosMultiples.reduce((sum, p) => sum + (p.monto_pagado || 0), 0)
-          const totalRecaudado = totalPagosIndividuales + totalPagosMultiples
-
-          // ✅ CLASIFICAR RECAUDOS POR TIPO
-          let cuotasRecaudadas = 0
-          let inscripcionRecaudada = 0
-          let seguroRecaudado = 0
-
-          // Pagos individuales
-          pagosIndividuales.forEach(pago => {
-            const concepto = conceptos?.find(c => c.id === pago.concepto_id)
-            if (concepto) {
-              const nombre = concepto.nombre.toLowerCase()
-              if (nombre.includes('cuota')) cuotasRecaudadas += pago.monto_pagado || 0
-              else if (nombre.includes('inscripción') || nombre.includes('inscripcion')) inscripcionRecaudada += pago.monto_pagado || 0
-              else if (nombre.includes('seguro')) seguroRecaudado += pago.monto_pagado || 0
-            }
-          })
-
-          // Pagos múltiples
-          pagosMultiples.forEach(pago => {
-            const concepto = conceptos?.find(c => c.id === pago.concepto_id)
-            if (concepto) {
-              const nombre = concepto.nombre.toLowerCase()
-              if (nombre.includes('cuota')) cuotasRecaudadas += pago.monto_pagado || 0
-              else if (nombre.includes('inscripción') || nombre.includes('inscripcion')) inscripcionRecaudada += pago.monto_pagado || 0
-              else if (nombre.includes('seguro')) seguroRecaudado += pago.monto_pagado || 0
-            }
-          })
-
-          // ✅ CALCULAR DEUDA: estudiantes SIN PAGO de conceptos vencidos
-          const pagosMap = new Map<string, number>()
-          
-          // Mapear pagos individuales por estudiante-concepto
-          pagosIndividuales.forEach(pago => {
-            const key = `${pago.concepto_id}`
-            const actual = pagosMap.get(key) || 0
-            pagosMap.set(key, actual + (pago.monto_pagado || 0))
-          })
-
-          // Mapear pagos múltiples por concepto
-          pagosMultiples.forEach(pago => {
-            const key = `${pago.concepto_id}`
-            const actual = pagosMap.get(key) || 0
-            pagosMap.set(key, actual + (pago.monto_pagado || 0))
-          })
-
-          let totalDeudas = 0
-          conceptosFiltrados.forEach(concepto => {
-            const montoRequerido = concepto.monto * estudiantesActivos.length
-            const montoPagado = pagosMap.get(`${concepto.id}`) || 0
-            const deuda = Math.max(0, montoRequerido - montoPagado)
-            totalDeudas += deuda
-          })
-
-          // ✅ GASTOS
-          const { data: gastosData } = await supabase
-            .from('gastos')
-            .select('monto')
-            .eq('institucion_id', inst.id)
-
-          const gastosTotal = (gastosData || []).reduce((sum, g) => sum + (g.monto || 0), 0)
-
-          // ✅ CAJA GRANDE
-          const { data: cajaData } = await supabase
-            .from('caja_grande')
-            .select('monto')
-            .eq('institucion_id', inst.id)
-
-          const cajaTotal = (cajaData || []).reduce((sum, c) => sum + (c.monto || 0), 0)
-
-          const totalIngresos = totalRecaudado + cajaTotal
-          const balance = totalIngresos - gastosTotal
-
-          console.log(`✅ ${inst.nombre}: Pagos=${totalRecaudado}, Deudas=${totalDeudas}`)
+          const totalIngresos = datosInst.total_recaudado + datosInst.caja_grande
+          const balance = totalIngresos - datosInst.total_gastos
 
           datos.push({
             institucion_id: inst.id,
             institucion_nombre: inst.nombre,
-            cuotas_recaudadas: cuotasRecaudadas,
-            inscripcion_recaudada: inscripcionRecaudada,
-            seguro_recaudado: seguroRecaudado,
-            total_recaudado: totalRecaudado,
-            total_deudas: totalDeudas,
-            total_gastos: gastosTotal,
-            caja_grande: cajaTotal,
+            cuotas_recaudadas: datosInst.cuotas,
+            inscripcion_recaudada: datosInst.inscripcion,
+            seguro_recaudado: datosInst.seguro,
+            total_recaudado: datosInst.total_recaudado,
+            total_deudas: datosInst.total_deudas,
+            total_gastos: datosInst.total_gastos,
+            caja_grande: datosInst.caja_grande,
             total_ingresos: totalIngresos,
             balance,
           })
+
+          console.log(`✅ ${inst.nombre}: Pagos=${datosInst.total_recaudado}, Deudas=${datosInst.total_deudas}`)
         } catch (err) {
           console.error(`Error institución ${inst.id}:`, err)
         }
@@ -231,48 +230,35 @@ export const GlobalModerno: React.FC = () => {
         .select('id, nombre, mes, año')
         .eq('activo', true)
 
-      // Cargar TODOS los pagos de ambas instituciones
-      let todosPagos: any[] = []
-      const { data: instituciones } = await supabase
-        .from('instituciones')
-        .select('id')
+      // Cargar TODOS los pagos individuales de ambas instituciones
+      const { data: todosPagos } = await supabase
+        .from('pagos')
+        .select('concepto_id, monto_pagado, estado')
+        .neq('estado', 'ANULADO')
 
-      for (const inst of instituciones || []) {
-        let pagina = 0
-        let tieneRangoMas = true
+      // Cargar TODOS los pagos múltiples
+      const { data: pagosMultiples } = await supabase
+        .from('pagos_multiples')
+        .select(`
+          *,
+          pagos_multiples_detalle(*)
+        `)
+        .neq('estado', 'ANULADO')
 
-        while (tieneRangoMas) {
-          const desde = pagina * 1000
-          const hasta = desde + 999
-          
-          const { data: pagosBloques } = await supabase
-            .from('pagos')
-            .select('concepto_id, monto_pagado, estado')
-            .eq('institucion_id', inst.id)
-            .neq('estado', 'ANULADO')
-            .range(desde, hasta)
-
-          if (!pagosBloques || pagosBloques.length === 0) {
-            tieneRangoMas = false
-          } else {
-            todosPagos = [...todosPagos, ...pagosBloques]
-            if (pagosBloques.length < 1000) {
-              tieneRangoMas = false
-            }
-            pagina++
-          }
+      // Expandir pagos múltiples
+      const pagosMultiplesExpandidos: any[] = []
+      pagosMultiples?.forEach(pm => {
+        if (pm.pagos_multiples_detalle && Array.isArray(pm.pagos_multiples_detalle)) {
+          pm.pagos_multiples_detalle.forEach((detalle: any) => {
+            pagosMultiplesExpandidos.push({
+              concepto_id: detalle.concepto_id,
+              monto_pagado: detalle.monto_pagado,
+            })
+          })
         }
-      }
+      })
 
-      // Cargar pagos múltiples
-      const { data: pagosMultiDetalle } = await supabase
-        .from('pagos_multiples_detalle')
-        .select('concepto_id, monto_pagado, pagos_multiples!inner(estado)')
-        .neq('pagos_multiples.estado', 'ANULADO')
-
-      if (pagosMultiDetalle) {
-        todosPagos = [...todosPagos, ...pagosMultiDetalle]
-      }
+      const todosLosPagos = [...(todosPagos || []), ...pagosMultiplesExpandidos]
 
       // Cargar gastos y caja
       const { data: gastosData } = await supabase
@@ -292,7 +278,7 @@ export const GlobalModerno: React.FC = () => {
         let seguroTotal = 0
 
         // Sumar pagos del mes
-        todosPagos.forEach(pago => {
+        todosLosPagos.forEach(pago => {
           const concepto = todosConceptos?.find(c => c.id === pago.concepto_id)
           if (concepto?.mes === mes && concepto?.año === anoActual) {
             const nombre = concepto.nombre.toLowerCase()
