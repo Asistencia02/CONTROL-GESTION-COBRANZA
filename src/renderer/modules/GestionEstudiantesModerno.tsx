@@ -2,10 +2,12 @@ import React, { useState, useEffect } from 'react'
 import { useInstitucion } from '@renderer/hooks/useInstitucion'
 import { useFormValidation } from '@renderer/hooks/useFormValidation'
 import { formatoMoneda } from '@renderer/lib/helpers'
-import { Users, Filter, Edit2, CheckCircle, AlertCircle, Zap, Ban, X, RefreshCw } from 'lucide-react'
+import { Users, Filter, Edit2, CheckCircle, AlertCircle, Zap, Ban, X, RefreshCw, Download } from 'lucide-react'
 import { Pagination } from '@renderer/components/Pagination'
 import { supabase } from '@renderer/lib/supabase'
 import { z } from 'zod'
+import jsPDF from 'jspdf'
+import autoTable from 'jspdf-autotable'
 
 interface Estudiante {
   id: number
@@ -288,10 +290,101 @@ export const GestionEstudiantesModerno: React.FC = () => {
 
       {/* TABLA DE ESTUDIANTES */}
       <div className="p-3 sm:p-4 md:p-6 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-lg sm:rounded-xl overflow-x-auto">
-        <h2 className="text-base sm:text-lg md:text-xl font-bold text-white mb-3 sm:mb-4 flex items-center gap-2">
-          <Users size={20} className="text-purple-400 sm:w-6 sm:h-6" />
-          Estudiantes ({estudiantesFiltrados.length})
-        </h2>
+        <div className="flex items-center justify-between mb-3 sm:mb-4">
+          <h2 className="text-base sm:text-lg md:text-xl font-bold text-white flex items-center gap-2">
+            <Users size={20} className="text-purple-400 sm:w-6 sm:h-6" />
+            Estudiantes ({estudiantesFiltrados.length})
+          </h2>
+          <button
+            onClick={() => {
+              const doc = new jsPDF()
+              const pageHeight = doc.internal.pageSize.getHeight()
+              const pageWidth = doc.internal.pageSize.getWidth()
+              let yPosition = 10
+              
+              // Título
+              doc.setFont('Arial', 'bold')
+              doc.setFontSize(16)
+              doc.text('Lista de Estudiantes', pageWidth / 2, yPosition, { align: 'center' })
+              yPosition += 8
+              
+              // Institución
+              doc.setFontSize(11)
+              doc.setFont('Arial', 'normal')
+              doc.text(`Institución: ${institucionActiva.nombre}`, 10, yPosition)
+              yPosition += 6
+              
+              // Filtros aplicados
+              let filtrosAplicados = []
+              if (searchText) filtrosAplicados.push(`Búsqueda: ${searchText}`)
+              if (filtroCarrera) {
+                const carrera = carreras.find(c => c.id === filtroCarrera)
+                if (carrera) filtrosAplicados.push(`Carrera: ${carrera.nombre}`)
+              }
+              
+              if (filtrosAplicados.length > 0) {
+                doc.setFontSize(9)
+                doc.text(`Filtros: ${filtrosAplicados.join(', ')}`, 10, yPosition)
+                yPosition += 5
+              }
+              
+              // Fecha
+              doc.setFontSize(9)
+              doc.text(`Fecha: ${new Date().toLocaleDateString('es-AR')}`, 10, yPosition)
+              yPosition += 8
+              
+              // Tabla
+              const tableData = estudiantesFiltrados.map(est => [
+                `${est.apellido}, ${est.nombre}`,
+                est.dni,
+                (est.carreras as any)?.nombre || 'Sin carrera',
+                getEstadoLabel(est.estado),
+                `${mesesNombre[est.mes_ingreso]} ${est.ano_ingreso}`
+              ])
+              
+              autoTable(doc, {
+                head: [['Nombre Completo', 'DNI', 'Carrera', 'Estado', 'Ingreso']],
+                body: tableData,
+                startY: yPosition,
+                margin: { top: 10, right: 10, bottom: 10, left: 10 },
+                styles: {
+                  font: 'Arial',
+                  fontSize: 9,
+                  cellPadding: 3
+                },
+                headStyles: {
+                  fillColor: [59, 130, 246],
+                  textColor: 255,
+                  fontStyle: 'bold'
+                },
+                alternateRowStyles: {
+                  fillColor: [242, 242, 242]
+                },
+                columnStyles: {
+                  0: { cellWidth: 50 },
+                  1: { cellWidth: 25 },
+                  2: { cellWidth: 40 },
+                  3: { cellWidth: 25 },
+                  4: { cellWidth: 30 }
+                }
+              })
+              
+              // Pie de página
+              const finalY = (doc as any).lastAutoTable.finalY + 10
+              doc.setFontSize(9)
+              doc.text(`Total de estudiantes: ${estudiantesFiltrados.length}`, 10, Math.min(finalY, pageHeight - 15))
+              
+              // Descargar
+              doc.save(`Estudiantes_${new Date().toISOString().split('T')[0]}.pdf`)
+            }}
+            disabled={estudiantesFiltrados.length === 0}
+            className="px-3 py-2 sm:px-4 sm:py-2 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white rounded-lg text-xs sm:text-sm font-bold flex items-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Descargar lista en PDF"
+          >
+            <Download size={16} className="sm:w-5 sm:h-5" />
+            <span className="hidden sm:inline">PDF</span>
+          </button>
+        </div>
 
         {estudiantesFiltrados.length === 0 ? (
           <div className="text-center py-8 sm:py-12">
