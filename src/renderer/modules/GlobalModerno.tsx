@@ -116,31 +116,31 @@ const cargarDatosInstitucion = async (institucionId: number): Promise<{
     }
   })
 
-  // ✅ 6. CALCULAR DEUDA: estudiantes SIN PAGO de conceptos vencidos
-  const pagosMap = new Map<string, boolean>()
-  todosPagos.filter(p => p.monto_pagado > 0).forEach(pago => {
-    pagosMap.set(`${pago.estudiante_id}-${pago.concepto_id}`, true)
+  // ✅ 6. CALCULAR DEUDA: (Monto total requerido) - (Pagos recibidos)
+  let totalDeudaVencida = 0
+  
+  const conceptosUnicos = new Map<number, any>()
+  conceptos?.forEach(c => {
+    let debeIncluir = false
+    if (c.mes && c.año) {
+      if (c.año < anoActual) {
+        debeIncluir = true
+      } else if (c.año === anoActual && c.mes <= mesActual) {
+        debeIncluir = true
+      }
+    }
+    if (debeIncluir && !conceptosUnicos.has(c.id)) {
+      conceptosUnicos.set(c.id, c)
+    }
   })
 
-  let totalDeudaVencida = 0
-  estudiantesActivos.forEach(est => {
-    conceptos?.forEach(concepto => {
-      let debeIncluir = false
-      if (concepto.mes && concepto.año) {
-        if (concepto.año < anoActual) {
-          debeIncluir = true
-        } else if (concepto.año === anoActual && concepto.mes <= mesActual) {
-          debeIncluir = true
-        }
-      }
-
-      if (debeIncluir) {
-        const tienePago = pagosMap.has(`${est.id}-${concepto.id}`)
-        if (!tienePago) {
-          totalDeudaVencida += concepto.monto
-        }
-      }
-    })
+  conceptosUnicos.forEach(concepto => {
+    const montoTotalRequerido = concepto.monto * estudiantesActivos.length
+    const pagosDelConcepto = todosPagos
+      .filter(p => p.concepto_id === concepto.id)
+      .reduce((sum, p) => sum + (p.monto_pagado || 0), 0)
+    const deuda = Math.max(0, montoTotalRequerido - pagosDelConcepto)
+    totalDeudaVencida += deuda
   })
 
   // ✅ 7. GASTOS
