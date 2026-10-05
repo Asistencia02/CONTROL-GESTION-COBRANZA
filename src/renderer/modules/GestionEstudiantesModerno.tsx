@@ -42,6 +42,8 @@ export const GestionEstudiantesModerno: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
   const [editandoId, setEditandoId] = useState<number | null>(null)
+  const [nuevoNombre, setNuevoNombre] = useState('')
+  const [nuevoApellido, setNuevoApellido] = useState('')
   const [nuevoEstado, setNuevoEstado] = useState<EstadoEstudiante>('ACTIVO')
   const [nuevoMesIngreso, setNuevoMesIngreso] = useState(3)
   const [nuevoAnoIngreso, setNuevoAnoIngreso] = useState(new Date().getFullYear())
@@ -108,6 +110,8 @@ export const GestionEstudiantesModerno: React.FC = () => {
       const { error } = await supabase
         .from('estudiantes')
         .update({ 
+          nombre: nuevoNombre,
+          apellido: nuevoApellido,
           estado: nuevoEstado,
           mes_ingreso: nuevoMesIngreso,
           ano_ingreso: nuevoAnoIngreso
@@ -120,7 +124,7 @@ export const GestionEstudiantesModerno: React.FC = () => {
       setEstudiantes(prev =>
         prev.map(est =>
           est.id === estudianteId 
-            ? { ...est, estado: nuevoEstado, mes_ingreso: nuevoMesIngreso, ano_ingreso: nuevoAnoIngreso } 
+            ? { ...est, nombre: nuevoNombre, apellido: nuevoApellido, estado: nuevoEstado, mes_ingreso: nuevoMesIngreso, ano_ingreso: nuevoAnoIngreso } 
             : est
         )
       )
@@ -337,6 +341,28 @@ export const GestionEstudiantesModerno: React.FC = () => {
                       {editandoId === estudiante.id ? (
                         <div className="space-y-2 min-w-max p-3 bg-slate-900/80 border border-slate-700 rounded-lg">
                           <div>
+                            <label className="text-xs text-slate-400 block mb-1">Nombre</label>
+                            <input
+                              type="text"
+                              value={nuevoNombre}
+                              onChange={(e) => setNuevoNombre(e.target.value)}
+                              className="w-full px-2 py-1.5 bg-slate-700 border border-slate-600 rounded text-white text-xs"
+                              placeholder="Nombre"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="text-xs text-slate-400 block mb-1">Apellido</label>
+                            <input
+                              type="text"
+                              value={nuevoApellido}
+                              onChange={(e) => setNuevoApellido(e.target.value)}
+                              className="w-full px-2 py-1.5 bg-slate-700 border border-slate-600 rounded text-white text-xs"
+                              placeholder="Apellido"
+                            />
+                          </div>
+
+                          <div>
                             <label className="text-xs text-slate-400 block mb-1">Estado</label>
                             <select
                               value={nuevoEstado}
@@ -397,6 +423,8 @@ export const GestionEstudiantesModerno: React.FC = () => {
                         <button
                           onClick={() => {
                             setEditandoId(estudiante.id)
+                            setNuevoNombre(estudiante.nombre)
+                            setNuevoApellido(estudiante.apellido)
                             setNuevoEstado(estudiante.estado)
                             setNuevoMesIngreso(estudiante.mes_ingreso)
                             setNuevoAnoIngreso(estudiante.ano_ingreso)
