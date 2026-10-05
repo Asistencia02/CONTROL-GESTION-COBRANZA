@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react'
+import { useEstudiantes } from '@renderer/hooks/useEstudiantes'
+import { usePagos } from '@renderer/hooks/usePagos'
+import { useReporteConceptos } from '@renderer/hooks/useReporteConceptos'
+import { useResumenPagos } from '@renderer/hooks/useResumenPagos'
 import { supabase } from '@renderer/lib/supabase'
 import { formatoMoneda } from '@renderer/lib/helpers'
 import { TrendingUp, RefreshCw } from 'lucide-react'
-
-type VistaGlobal = 'anual' | 'mes-actual'
 
 export interface DatosGlobales {
   institucion_id: number
@@ -35,10 +37,12 @@ export interface DatosGlobalesPorMes {
 }
 
 export const GlobalModerno: React.FC = () => {
-  const [vistaActiva, setVistaActiva] = useState<VistaGlobal>('anual')
+  const { estudiantes: estudiantesIsip, cargarEstudiantes: cargarEstudiantesIsip } = useEstudiantes()
+  const { pagos: pagosIsip, cargarPagos: cargarPagosIsip } = usePagos()
+  const { reporteConceptos: reporteConceptosIsip, cargarReporteConceptos: cargarRCIsip } = useReporteConceptos()
+  
   const [datosGlobales, setDatosGlobales] = useState<DatosGlobales[]>([])
-  const [datosPorMesAnual, setDatosPorMesAnual] = useState<DatosGlobalesPorMes[]>([])
-  const [datosPorMesActual, setDatosPorMesActual] = useState<DatosGlobalesPorMes[]>([])
+  const [datosPorMes, setDatosPorMes] = useState<DatosGlobalesPorMes[]>([])
   const [loading, setLoading] = useState(false)
 
   const cargarDatosGlobales = async () => {
@@ -49,36 +53,29 @@ export const GlobalModerno: React.FC = () => {
         .select('id, nombre')
 
       const datos: DatosGlobales[] = []
-      const today = new Date()
-      const mesActual = today.getMonth() + 1
-      const anoActual = today.getFullYear()
 
       for (const inst of instituciones || []) {
         try {
-          // ✅ Cargar conceptos vencidos (con mes/año y que ya pasaron)
+          // ✅ Usar EXACTAMENTE la misma lógica que ReportesModerno
           const { data: conceptos } = await supabase
             .from('conceptos_pago')
-            .select('id, nombre, tipo, monto, mes, año')
+            .select('*')
             .eq('institucion_id', inst.id)
             .eq('activo', true)
 
-          const conceptosFiltrados = (conceptos || []).filter(c => {
-            if (!c.mes || !c.año) return false // NO incluir sin fecha
-            if (c.año < anoActual) return true
-            if (c.año === anoActual && c.mes <= mesActual) return true
-            return false
-          })
+          const today = new Date()
+          const mesActual = today.getMonth() + 1
+          const anoActual = today.getFullYear()
 
-          // ✅ Cargar estudiantes activos
+          // Obtener estudiantes activos
           const { data: estudiantesData } = await supabase
             .from('estudiantes')
-            .select('id')
+            .select('id, estado')
             .eq('institucion_id', inst.id)
-            .neq('estado', 'NO_VIENE_MAS')
 
-          const totalEstudiantes = estudiantesData?.length || 0
+          const estudiantesActivos = (estudiantesData || []).filter(e => e.estado !== 'NO_VIENE_MAS').length
 
-          // ✅ Cargar TODOS los pagos (individuales + múltiples)
+          // ✅ PAGOS INDIVIDUALES
           let pagosIndividuales: any[] = []
           let pagina = 0
           let tieneRangoMas = true
@@ -105,40 +102,35 @@ export const GlobalModerno: React.FC = () => {
             }
           }
 
-          // ✅ Cargar pagos múltiples
-          let pagosMultiples: any[] = []
-          const { data: pagosMultiplesData } = await supabase
-            .from('pagos_multiples')
-            .select(`
-              estado,
-              pagos_multiples_detalle(
-                concepto_id,
-                monto_pagado
-              )
-            `)
-            .eq('institucion_id', inst.id)
-
-          if (pagosMultiplesData) {
-            pagosMultiplesData.forEach((pm: any) => {
-              if (pm.estado !== 'ANULADO' && pm.pagos_multiples_detalle && Array.isArray(pm.pagos_multiples_detalle)) {
-                pm.pagos_multiples_detalle.forEach((detalle: any) => {
-                  pagosMultiples.push({
-                    concepto_id: detalle.concepto_id,
-                    monto_pagado: detalle.monto_pagado
-                  })
-                })
-              }
-            })
+          // ✅ PAGOS MÚLTIPLES
+          let pagosMultiplesTotal = 0
+          try {
+            const { data: pagosMultiples } = await supabase
+              .from('pagos_multiples_detalle')
+              .select(`
+                monto_pagado,
+                pagos_multiples!inner(institucion_id, estado)
+              `)
+              .eq('pagos_multiples.institucion_id', inst.id)
+              .neq('pagos_multiples.estado', 'ANULADO')
+            
+            if (pagosMultiples) {
+              pagosMultiplesTotal = pagosMultiples.reduce((sum: number, p: any) => sum + (p.monto_pagado || 0), 0)
+            }
+          } catch (e) {
+            // Silent fail
           }
 
-          const todosPagos = [...pagosIndividuales, ...pagosMultiples]
+          // ✅ TOTAL PAGOS RECIBIDOS = Individual + Múltiples
+          const pagosIndividualesTotal = pagosIndividuales.reduce((sum, p) => sum + p.monto_pagado, 0)
+          const totalPagosRecibidos = pagosIndividualesTotal + pagosMultiplesTotal
 
-          // ✅ CALCULAR INGRESOS: Suma de TODOS los pagos (como ReportesModerno)
+          // ✅ RECAUDOS POR TIPO (de TODOS los pagos)
           let cuotasRecaudadas = 0
           let inscripcionRecaudada = 0
           let seguroRecaudado = 0
 
-          todosPagos.forEach(pago => {
+          pagosIndividuales.forEach(pago => {
             const concepto = conceptos?.find(c => c.id === pago.concepto_id)
             if (concepto) {
               const nombreConcepto = concepto.nombre.toLowerCase()
@@ -154,35 +146,36 @@ export const GlobalModerno: React.FC = () => {
 
           const subtotalCobranza = cuotasRecaudadas + inscripcionRecaudada + seguroRecaudado
 
-          // ✅ CALCULAR DEUDAS: Por estudiante, concepto por concepto (como ReportesModerno)
-          // Deuda = Monto - Pagos recibidos, SUM para todos los que NO pagaron
+          // ✅ DEUDAS VENCIDAS: SUM de estudiantes que NO pagaron conceptos vencidos
           const pagosMap = new Map<string, boolean>()
-          todosPagos.forEach(pago => {
-            const concepto = conceptos?.find(c => c.id === pago.concepto_id)
-            if (concepto && pago.monto_pagado > 0) {
-              pagosMap.set(`estudiante-concepto-${pago.concepto_id}`, true)
-            }
+          pagosIndividuales.filter(p => p.monto_pagado > 0).forEach(pago => {
+            pagosMap.set(`${pago.estudiante_id}-${pago.concepto_id}`, true)
           })
 
-          let totalDeudas = 0
+          let totalDeudaVencida = 0
           estudiantesData?.forEach(est => {
-            conceptosFiltrados.forEach(concepto => {
-              const tieneParcialoTotal = pagosMap.has(`estudiante-concepto-${concepto.id}`)
-              if (!tieneParcialoTotal) {
-                // Estudiante no pagó este concepto: suma el monto completo
-                totalDeudas += concepto.monto
-              } else {
-                // Estudiante pagó algo: calcular cuánto falta
-                const pagosTotales = todosPagos
-                  .filter(p => p.concepto_id === concepto.id)
-                  .reduce((sum, p) => sum + (p.monto_pagado || 0), 0)
-                const deudante = Math.max(0, concepto.monto - pagosTotales)
-                totalDeudas += deudante
+            if (est.estado === 'NO_VIENE_MAS') return
+
+            conceptos?.forEach(concepto => {
+              let debeIncluir = false
+              if (concepto.mes && concepto.año) {
+                if (concepto.año < anoActual) {
+                  debeIncluir = true
+                } else if (concepto.año === anoActual && concepto.mes <= mesActual) {
+                  debeIncluir = true
+                }
+              }
+
+              if (debeIncluir) {
+                const tienePago = pagosMap.has(`${est.id}-${concepto.id}`)
+                if (!tienePago) {
+                  totalDeudaVencida += concepto.monto
+                }
               }
             })
           })
 
-          // Cargar gastos
+          // ✅ GASTOS
           let gastosTotal = 0
           const { data: gastosData } = await supabase
             .from('gastos')
@@ -191,7 +184,7 @@ export const GlobalModerno: React.FC = () => {
 
           gastosTotal = (gastosData || []).reduce((sum, g) => sum + (g.monto || 0), 0)
 
-          // Cargar caja grande
+          // ✅ CAJA GRANDE
           let cajaGrandeTotal = 0
           const { data: cajaData } = await supabase
             .from('caja_grande')
@@ -204,7 +197,7 @@ export const GlobalModerno: React.FC = () => {
           const totalIngresos = subtotalCobranza + subtotalOtros
           const balance = totalIngresos - gastosTotal
 
-          console.log(`✅ ${inst.nombre}: Ingresos=$${subtotalCobranza}, Deudas=$${totalDeudas}, Gastos=$${gastosTotal}`)
+          console.log(`✅ ${inst.nombre}: Pagos=$${totalPagosRecibidos}, Recaudado=$${subtotalCobranza}, Deudas=$${totalDeudaVencida}, Gastos=$${gastosTotal}`)
 
           datos.push({
             institucion_id: inst.id,
@@ -213,7 +206,7 @@ export const GlobalModerno: React.FC = () => {
             inscripcion_recaudada: inscripcionRecaudada,
             seguro_recaudado: seguroRecaudado,
             subtotal_cobranza: subtotalCobranza,
-            total_deudas: totalDeudas,
+            total_deudas: totalDeudaVencida,
             total_gastos: gastosTotal,
             caja_grande_kiosco: cajaGrandeTotal,
             ventas_insumo: 0,
@@ -237,8 +230,7 @@ export const GlobalModerno: React.FC = () => {
     try {
       const meses: DatosGlobalesPorMes[] = []
       const anoActual = new Date().getFullYear()
-      const mesActualNum = new Date().getMonth() + 1
-      const mesFinLoop = vistaActiva === 'anual' ? 12 : mesActualNum
+      const mesFinLoop = 12
 
       // Cargar conceptos con mes/año específico
       const { data: todosConceptos } = await supabase
@@ -246,7 +238,7 @@ export const GlobalModerno: React.FC = () => {
         .select('id, nombre, mes, año')
         .eq('activo', true)
 
-      // Cargar pagos
+      // Cargar pagos de AMBAS instituciones
       let todosPagos: any[] = []
       const { data: instituciones } = await supabase
         .from('instituciones')
@@ -375,11 +367,7 @@ export const GlobalModerno: React.FC = () => {
         })
       }
 
-      if (vistaActiva === 'anual') {
-        setDatosPorMesAnual(meses)
-      } else {
-        setDatosPorMesActual(meses)
-      }
+      setDatosPorMes(meses)
     } finally {
       setLoading(false)
     }
@@ -388,9 +376,7 @@ export const GlobalModerno: React.FC = () => {
   useEffect(() => {
     cargarDatosGlobales()
     cargarDatosPorMes()
-  }, [vistaActiva])
-
-  const datosPorMes = vistaActiva === 'anual' ? datosPorMesAnual : datosPorMesActual
+  }, [])
 
   const totalPorConcepto = (concepto: keyof DatosGlobalesPorMes) => {
     return datosPorMes.reduce((sum, mes) => sum + (mes[concepto] as number || 0), 0)
@@ -433,31 +419,6 @@ export const GlobalModerno: React.FC = () => {
             className="p-3 bg-slate-800/50 hover:bg-slate-700/50 border border-slate-700/50 rounded-xl text-slate-400 hover:text-purple-400 transition-all duration-300"
           >
             <RefreshCw size={24} className={loading ? 'animate-spin' : ''} />
-          </button>
-        </div>
-      </div>
-
-      <div className="mb-8">
-        <div className="flex gap-2 p-1 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-xl">
-          <button
-            onClick={() => setVistaActiva('anual')}
-            className={`px-6 py-3 rounded-lg font-bold transition-all duration-300 ${
-              vistaActiva === 'anual'
-                ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-lg shadow-purple-500/50'
-                : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            📅 Anual
-          </button>
-          <button
-            onClick={() => setVistaActiva('mes-actual')}
-            className={`px-6 py-3 rounded-lg font-bold transition-all duration-300 ${
-              vistaActiva === 'mes-actual'
-                ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-lg shadow-purple-500/50'
-                : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            📊 Mes Actual
           </button>
         </div>
       </div>
@@ -610,7 +571,7 @@ export const GlobalModerno: React.FC = () => {
         <div className="overflow-x-auto">
           <div className="p-6 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-xl">
             <h2 className="text-xl font-bold text-white mb-6">
-              📈 Desglose {vistaActiva === 'anual' ? 'Anual' : 'Mes Actual'} (Consolidado)
+              📈 Desglose Anual (Consolidado)
             </h2>
 
             <table className="w-full text-sm">
