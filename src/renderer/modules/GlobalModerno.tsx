@@ -31,7 +31,6 @@ export interface DatosGlobalesPorMes {
   total_mes: number
 }
 
-// ✅ Función idéntica a la que usa ReportesModerno
 const cargarDatosInstitucion = async (institucionId: number): Promise<{
   cuotas: number
   inscripcion: number
@@ -45,20 +44,22 @@ const cargarDatosInstitucion = async (institucionId: number): Promise<{
   const mesActual = today.getMonth() + 1
   const anoActual = today.getFullYear()
 
-  // ✅ 1. Cargar conceptos vencidos
-  const { data: conceptos } = await supabase
-    .from('conceptos_pago')
-    .select('*')
-    .eq('institucion_id', institucionId)
-    .eq('activo', true)
-
-  // ✅ 2. Cargar estudiantes activos
+  // ✅ 1. Cargar SOLO estudiantes ACTIVO o BECADO_50
   const { data: estudiantes } = await supabase
     .from('estudiantes')
     .select('id, estado')
     .eq('institucion_id', institucionId)
 
-  const estudiantesActivos = (estudiantes || []).filter(e => e.estado !== 'NO_VIENE_MAS')
+  const estudiantesValidos = (estudiantes || []).filter(
+    e => e.estado === 'ACTIVO' || e.estado === 'BECADO_50'
+  )
+
+  // ✅ 2. Cargar conceptos activos de la institución
+  const { data: conceptos } = await supabase
+    .from('conceptos_pago')
+    .select('*')
+    .eq('institucion_id', institucionId)
+    .eq('activo', true)
 
   // ✅ 3. Cargar PAGOS INDIVIDUALES
   const { data: pagosData } = await supabase
@@ -79,7 +80,6 @@ const cargarDatosInstitucion = async (institucionId: number): Promise<{
     .eq('institucion_id', institucionId)
     .neq('estado', 'ANULADO')
 
-  // Expandir pagos múltiples a formato de pagos individuales
   const pagosMultiplesExpandidos: any[] = []
   pagosMultiples?.forEach(pm => {
     if (pm.pagos_multiples_detalle && Array.isArray(pm.pagos_multiples_detalle)) {
@@ -93,7 +93,6 @@ const cargarDatosInstitucion = async (institucionId: number): Promise<{
     }
   })
 
-  // ✅ TOTAL PAGOS = individuales + múltiples
   const todosPagos = [...pagosIndividuales, ...pagosMultiplesExpandidos]
   const totalPagosRecibidos = todosPagos.reduce((sum, p) => sum + (p.monto_pagado || 0), 0)
 
@@ -116,31 +115,37 @@ const cargarDatosInstitucion = async (institucionId: number): Promise<{
     }
   })
 
-  // ✅ 6. CALCULAR DEUDA: (Monto total requerido) - (Pagos recibidos)
+  // ✅ 6. CALCULAR DEUDA: SOLO conceptos vencidos NO pagados de alumnos ACTIVO/BECADO_50
   let totalDeudaVencida = 0
-  
-  const conceptosUnicos = new Map<number, any>()
-  conceptos?.forEach(c => {
+
+  // Mapa de pagos: `${estudiante_id}-${concepto_id}` => true si fue pagado
+  const pagosMap = new Map<string, boolean>()
+  todosPagos.filter(p => p.monto_pagado > 0).forEach(pago => {
+    pagosMap.set(`${pago.estudiante_id}-${pago.concepto_id}`, true)
+  })
+
+  // Para cada concepto vencido
+  conceptos?.forEach(concepto => {
     let debeIncluir = false
-    if (c.mes && c.año) {
-      if (c.año < anoActual) {
+
+    // Solo incluir conceptos que TENGAN mes/año y hayan vencido
+    if (concepto.mes && concepto.año) {
+      if (concepto.año < anoActual) {
         debeIncluir = true
-      } else if (c.año === anoActual && c.mes <= mesActual) {
+      } else if (concepto.año === anoActual && concepto.mes <= mesActual) {
         debeIncluir = true
       }
     }
-    if (debeIncluir && !conceptosUnicos.has(c.id)) {
-      conceptosUnicos.set(c.id, c)
-    }
-  })
 
-  conceptosUnicos.forEach(concepto => {
-    const montoTotalRequerido = concepto.monto * estudiantesActivos.length
-    const pagosDelConcepto = todosPagos
-      .filter(p => p.concepto_id === concepto.id)
-      .reduce((sum, p) => sum + (p.monto_pagado || 0), 0)
-    const deuda = Math.max(0, montoTotalRequerido - pagosDelConcepto)
-    totalDeudaVencida += deuda
+    if (debeIncluir) {
+      // Sumar la deuda de cada estudiante válido que NO pagó
+      estudiantesValidos.forEach(est => {
+        const tienePago = pagosMap.has(`${est.id}-${concepto.id}`)
+        if (!tienePago) {
+          totalDeudaVencida += concepto.monto
+        }
+      })
+    }
   })
 
   // ✅ 7. GASTOS
@@ -171,7 +176,6 @@ const cargarDatosInstitucion = async (institucionId: number): Promise<{
 }
 
 export const GlobalModerno: React.FC = () => {
-  const [vistaActiva, setVistaActiva] = useState<VistaGlobal>('anual')
   const [datosGlobales, setDatosGlobales] = useState<DatosGlobales[]>([])
   const [datosPorMes, setDatosPorMes] = useState<DatosGlobalesPorMes[]>([])
   const [loading, setLoading] = useState(false)
@@ -224,19 +228,16 @@ export const GlobalModerno: React.FC = () => {
       const meses: DatosGlobalesPorMes[] = []
       const anoActual = new Date().getFullYear()
 
-      // Cargar conceptos
       const { data: todosConceptos } = await supabase
         .from('conceptos_pago')
         .select('id, nombre, mes, año')
         .eq('activo', true)
 
-      // Cargar TODOS los pagos individuales de ambas instituciones
       const { data: todosPagos } = await supabase
         .from('pagos')
         .select('concepto_id, monto_pagado, estado')
         .neq('estado', 'ANULADO')
 
-      // Cargar TODOS los pagos múltiples
       const { data: pagosMultiples } = await supabase
         .from('pagos_multiples')
         .select(`
@@ -245,7 +246,6 @@ export const GlobalModerno: React.FC = () => {
         `)
         .neq('estado', 'ANULADO')
 
-      // Expandir pagos múltiples
       const pagosMultiplesExpandidos: any[] = []
       pagosMultiples?.forEach(pm => {
         if (pm.pagos_multiples_detalle && Array.isArray(pm.pagos_multiples_detalle)) {
@@ -260,7 +260,6 @@ export const GlobalModerno: React.FC = () => {
 
       const todosLosPagos = [...(todosPagos || []), ...pagosMultiplesExpandidos]
 
-      // Cargar gastos y caja
       const { data: gastosData } = await supabase
         .from('gastos')
         .select('monto, fecha_gasto')
@@ -269,7 +268,6 @@ export const GlobalModerno: React.FC = () => {
         .from('caja_grande')
         .select('monto, fecha_transferencia')
 
-      // Procesar cada mes
       for (let mes = 1; mes <= 12; mes++) {
         const nombreMes = new Date(anoActual, mes - 1).toLocaleString('es-ES', { month: 'long' })
 
@@ -277,16 +275,15 @@ export const GlobalModerno: React.FC = () => {
         let inscripcionTotal = 0
         let seguroTotal = 0
 
-        // Sumar pagos del mes
         todosLosPagos.forEach(pago => {
           const concepto = todosConceptos?.find(c => c.id === pago.concepto_id)
           if (!concepto) return
-          
+
           const nombre = concepto.nombre.toLowerCase()
           const esDelMes = concepto.mes === mes && concepto.año === anoActual
-          const esSinMesAño = !concepto.mes && !concepto.año // Inscripción/Seguro sin vencimiento
+          const esSinMesAño = !concepto.mes && !concepto.año
           
-          if (esDelMes || (esSinMesAño && mes === 1)) { // Los conceptos sin mes/año se cuentan en enero
+          if (esDelMes || (esSinMesAño && mes === 1)) {
             if (nombre.includes('cuota')) cuotasTotal += pago.monto_pagado || 0
             else if (nombre.includes('inscripción') || nombre.includes('inscripcion')) inscripcionTotal += pago.monto_pagado || 0
             else if (nombre.includes('seguro')) seguroTotal += pago.monto_pagado || 0
@@ -295,14 +292,12 @@ export const GlobalModerno: React.FC = () => {
 
         const cobranzaTotal = cuotasTotal + inscripcionTotal + seguroTotal
 
-        // Gastos del mes
         const gastosDelMes = (gastosData || []).filter(g => {
           const fechaGasto = new Date(g.fecha_gasto)
           return fechaGasto.getMonth() + 1 === mes && fechaGasto.getFullYear() === anoActual
         })
         const gastosTotal = gastosDelMes.reduce((sum, g) => sum + (g.monto || 0), 0)
 
-        // Caja del mes
         const cajaDelMes = (cajaData || []).filter(c => {
           const fechaCaja = new Date(c.fecha_transferencia)
           return fechaCaja.getMonth() + 1 === mes && fechaCaja.getFullYear() === anoActual
