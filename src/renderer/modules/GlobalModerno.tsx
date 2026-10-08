@@ -44,20 +44,20 @@ const cargarDatosInstitucion = async (institucionId: number): Promise<{
   const mesActual = today.getMonth() + 1
   const anoActual = today.getFullYear()
 
-  // ✅ 1. Cargar SOLO estudiantes ACTIVO o BECADO_50
+  // ✅ 1. Cargar estudiantes ACTIVO o BECADO_50 CON SU CARRERA
   const { data: estudiantes } = await supabase
     .from('estudiantes')
-    .select('id, estado')
+    .select('id, estado, carrera_id')
     .eq('institucion_id', institucionId)
 
   const estudiantesValidos = (estudiantes || []).filter(
     e => e.estado === 'ACTIVO' || e.estado === 'BECADO_50'
   )
 
-  // ✅ 2. Cargar conceptos activos de la institución
+  // ✅ 2. Cargar conceptos activos DE LA INSTITUCIÓN CON CARRERA
   const { data: conceptos } = await supabase
     .from('conceptos_pago')
-    .select('*')
+    .select('id, nombre, mes, año, monto, carrera_id, tipo')
     .eq('institucion_id', institucionId)
     .eq('activo', true)
 
@@ -116,36 +116,58 @@ const cargarDatosInstitucion = async (institucionId: number): Promise<{
   })
 
   // ✅ 6. CALCULAR DEUDA: SOLO conceptos vencidos NO pagados de alumnos ACTIVO/BECADO_50
+  // ⭐ AHORA FILTRA POR CARRERA DEL ESTUDIANTE
   let totalDeudaVencida = 0
 
-  // Mapa de pagos: `${estudiante_id}-${concepto_id}` => true si fue pagado
-  const pagosMap = new Map<string, boolean>()
+  // Mapa de pagos: `${estudiante_id}-${concepto_id}` => monto_pagado
+  const pagosMap = new Map<string, number>()
   todosPagos.filter(p => p.monto_pagado > 0).forEach(pago => {
-    pagosMap.set(`${pago.estudiante_id}-${pago.concepto_id}`, true)
+    pagosMap.set(`${pago.estudiante_id}-${pago.concepto_id}`, pago.monto_pagado || 0)
   })
 
-  // Para cada concepto vencido
-  conceptos?.forEach(concepto => {
-    let debeIncluir = false
+  // Función helper para verificar si concepto aplica beca
+  const esConceptoBeca = (tipo: string): boolean => {
+    if (!tipo) return true
+    const tipoLower = tipo.toLowerCase()
+    return !tipoLower.includes('inscripcion') && !tipoLower.includes('seguro')
+  }
 
-    // Solo incluir conceptos que TENGAN mes/año y hayan vencido
-    if (concepto.mes && concepto.año) {
-      if (concepto.año < anoActual) {
-        debeIncluir = true
-      } else if (concepto.año === anoActual && concepto.mes <= mesActual) {
-        debeIncluir = true
-      }
-    }
+  // Para cada estudiante válido
+  estudiantesValidos.forEach(estudiante => {
+    // FILTRAR conceptos POR CARRERA del estudiante
+    const conceptosDelEstudiante = (conceptos || []).filter(c => c.carrera_id === estudiante.carrera_id)
 
-    if (debeIncluir) {
-      // Sumar la deuda de cada estudiante válido que NO pagó
-      estudiantesValidos.forEach(est => {
-        const tienePago = pagosMap.has(`${est.id}-${concepto.id}`)
-        if (!tienePago) {
-          totalDeudaVencida += concepto.monto
+    // Para cada concepto de su carrera
+    conceptosDelEstudiante.forEach(concepto => {
+      let debeIncluir = false
+
+      // Solo incluir conceptos que TENGAN mes/año y hayan vencido
+      if (concepto.mes && concepto.año) {
+        if (concepto.año < anoActual) {
+          debeIncluir = true
+        } else if (concepto.año === anoActual && concepto.mes <= mesActual) {
+          debeIncluir = true
         }
-      })
-    }
+      }
+
+      if (debeIncluir) {
+        // Verificar si fue pagado
+        const montoPago = pagosMap.get(`${estudiante.id}-${concepto.id}`) || 0
+        const montoOriginal = concepto.monto
+        const aplicaBeca = esConceptoBeca(concepto.tipo)
+
+        // Calcular monto a responsabilidad
+        let montoAResponsabilidad = montoOriginal
+        if (estudiante.estado === 'BECADO_50' && aplicaBeca) {
+          montoAResponsabilidad = montoOriginal * 0.5
+        }
+
+        const deudaDelConcepto = montoAResponsabilidad - montoPago
+        if (deudaDelConcepto > 0) {
+          totalDeudaVencida += deudaDelConcepto
+        }
+      }
+    })
   })
 
   // ✅ 7. GASTOS
