@@ -2,8 +2,10 @@ import React, { useState, useEffect } from 'react'
 import { useInstitucion } from '@renderer/hooks/useInstitucion'
 import { useFormValidation } from '@renderer/hooks/useFormValidation'
 import { formatoMoneda } from '@renderer/lib/helpers'
-import { Users, Filter, Edit2, CheckCircle, AlertCircle, Zap, Ban, X, RefreshCw, Download } from 'lucide-react'
+import { Users, Filter, Edit2, CheckCircle, AlertCircle, Zap, Ban, X, RefreshCw, Download, Calendar } from 'lucide-react'
 import { Pagination } from '@renderer/components/Pagination'
+import { TabDeudasPorMes } from '@renderer/components/TabDeudasPorMes'
+import { useDeudasPorMes } from '@renderer/hooks/useDeudasPorMes'
 import { supabase } from '@renderer/lib/supabase'
 import { z } from 'zod'
 import jsPDF from 'jspdf'
@@ -21,6 +23,7 @@ interface Estudiante {
 }
 
 type EstadoEstudiante = 'ACTIVO' | 'BECADO_50' | 'BECADO_100' | 'NO_VIENE_MAS'
+type TabGestion = 'listado' | 'deuda-mes'
 
 const validationSchema = z.object({
   nombre: z.string().min(2, 'Nombre muy corto').max(100, 'Nombre muy largo'),
@@ -50,6 +53,9 @@ export const GestionEstudiantesModerno: React.FC = () => {
   const [nuevoAnoIngreso, setNuevoAnoIngreso] = useState(new Date().getFullYear())
   const [guardando, setGuardando] = useState(false)
   const [successMessage, setSuccessMessage] = useState('')
+  const [tabActiva, setTabActiva] = useState<TabGestion>('listado')
+
+  const { deudasPorMes, loading: loadingDeudas, error: errorDeudas, cargarDeudasPorMes } = useDeudasPorMes(institucionActiva.id)
 
   const cargarDatos = async () => {
     try {
@@ -81,6 +87,7 @@ export const GestionEstudiantesModerno: React.FC = () => {
 
   useEffect(() => {
     cargarDatos()
+    cargarDeudasPorMes()
   }, [institucionActiva.id])
 
   const estudiantesFiltrados = estudiantes
@@ -190,7 +197,7 @@ export const GestionEstudiantesModerno: React.FC = () => {
   const mesesNombre = ['', 'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
   const anosDisponibles = [2024, 2025, 2026, 2027, 2028]
 
-  if (loading) {
+  if (loading && tabActiva === 'listado') {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-2 sm:p-4">
         <div className="text-center">
@@ -219,11 +226,14 @@ export const GestionEstudiantesModerno: React.FC = () => {
           </div>
         </div>
         <button
-          onClick={cargarDatos}
-          disabled={loading}
+          onClick={() => {
+            cargarDatos()
+            cargarDeudasPorMes()
+          }}
+          disabled={loading || loadingDeudas}
           className="p-2 sm:p-2.5 md:p-3 bg-slate-800/50 hover:bg-slate-700/50 border border-slate-700/50 rounded-lg sm:rounded-xl text-slate-400 hover:text-purple-400 transition-all flex-shrink-0"
         >
-          <RefreshCw size={20} className={`sm:w-6 sm:h-6 ${loading ? 'animate-spin' : ''}`} />
+          <RefreshCw size={20} className={`sm:w-6 sm:h-6 ${loading || loadingDeudas ? 'animate-spin' : ''}`} />
         </button>
       </div>
 
@@ -234,351 +244,391 @@ export const GestionEstudiantesModerno: React.FC = () => {
         </div>
       )}
 
-      {/* FILTROS RESPONSIVE */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3 md:gap-4 mb-4 sm:mb-5 md:mb-6">
-        <div>
-          <label className="block text-xs sm:text-sm font-bold text-slate-300 mb-1.5 sm:mb-2">🔍 Buscar</label>
-          <input
-            type="text"
-            value={searchText}
-            onChange={(e) => setSearchText(e.target.value)}
-            placeholder="Nombre o DNI..."
-            className="w-full px-3 sm:px-4 py-2 sm:py-3 bg-slate-700/50 border border-slate-600/50 rounded-lg text-xs sm:text-sm text-white placeholder-slate-400 focus:border-purple-500/50 focus:outline-none transition"
-          />
-        </div>
-
-        <div>
-          <label className="block text-xs sm:text-sm font-bold text-slate-300 mb-1.5 sm:mb-2">📚 Carrera</label>
-          <select
-            value={filtroCarrera || ''}
-            onChange={(e) => setFiltroCarrera(e.target.value ? parseInt(e.target.value) : null)}
-            className="w-full px-3 sm:px-4 py-2 sm:py-3 bg-slate-700/50 border border-slate-600/50 rounded-lg text-xs sm:text-sm text-white focus:border-purple-500/50 focus:outline-none transition"
-          >
-            <option value="">Todas ({estudiantes.length})</option>
-            {carreras.map(carr => {
-              const count = estudiantes.filter(e => e.carrera_id === carr.id).length
-              return (
-                <option key={carr.id} value={carr.id}>
-                  {carr.nombre} ({count})
-                </option>
-              )
-            })}
-          </select>
-        </div>
-      </div>
-
-      {/* RESUMEN ESTADOS */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 md:gap-4 mb-4 sm:mb-5 md:mb-6">
-        <div className="p-2 sm:p-3 md:p-4 bg-green-500/20 border border-green-500/50 rounded-lg text-center">
-          <p className="text-xs text-green-400 font-bold">ACTIVOS</p>
-          <p className="text-lg sm:text-xl md:text-2xl font-black text-green-300 mt-0.5 sm:mt-1">{estudiantes.filter(e => e.estado === 'ACTIVO').length}</p>
-        </div>
-        <div className="p-2 sm:p-3 md:p-4 bg-yellow-500/20 border border-yellow-500/50 rounded-lg text-center">
-          <p className="text-xs text-yellow-400 font-bold">BECADO 50%</p>
-          <p className="text-lg sm:text-xl md:text-2xl font-black text-yellow-300 mt-0.5 sm:mt-1">{estudiantes.filter(e => e.estado === 'BECADO_50').length}</p>
-        </div>
-        <div className="p-2 sm:p-3 md:p-4 bg-orange-500/20 border border-orange-500/50 rounded-lg text-center">
-          <p className="text-xs text-orange-400 font-bold">BECADO 100%</p>
-          <p className="text-lg sm:text-xl md:text-2xl font-black text-orange-300 mt-0.5 sm:mt-1">{estudiantes.filter(e => e.estado === 'BECADO_100').length}</p>
-        </div>
-        <div className="p-2 sm:p-3 md:p-4 bg-red-500/20 border border-red-500/50 rounded-lg text-center">
-          <p className="text-xs text-red-400 font-bold">NO VIENE</p>
-          <p className="text-lg sm:text-xl md:text-2xl font-black text-red-300 mt-0.5 sm:mt-1">{estudiantes.filter(e => e.estado === 'NO_VIENE_MAS').length}</p>
-        </div>
-      </div>
-
-      {/* TABLA DE ESTUDIANTES */}
-      <div className="p-3 sm:p-4 md:p-6 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-lg sm:rounded-xl overflow-x-auto">
-        <div className="flex items-center justify-between mb-3 sm:mb-4">
-          <h2 className="text-base sm:text-lg md:text-xl font-bold text-white flex items-center gap-2">
-            <Users size={20} className="text-purple-400 sm:w-6 sm:h-6" />
-            Estudiantes ({estudiantesFiltrados.length})
-          </h2>
+      {/* TABS */}
+      <div className="mb-4 sm:mb-5 md:mb-6">
+        <div className="flex gap-2 p-1 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-xl overflow-x-auto">
           <button
-            onClick={() => {
-              const doc = new jsPDF()
-              const pageHeight = doc.internal.pageSize.getHeight()
-              const pageWidth = doc.internal.pageSize.getWidth()
-              const margin = 10
-              let yPosition = margin + 5
-              
-              // Título
-              doc.setFont('Helvetica', 'bold')
-              doc.setFontSize(16)
-              doc.text('Lista de Estudiantes', pageWidth / 2, yPosition, { align: 'center' })
-              yPosition += 8
-              
-              // Institución
-              doc.setFontSize(11)
-              doc.setFont('Helvetica', 'normal')
-              doc.text(`Institución: ${institucionActiva.nombre}`, margin, yPosition)
-              yPosition += 6
-              
-              // Filtros aplicados
-              let filtrosAplicados = []
-              if (searchText) filtrosAplicados.push(`Búsqueda: ${searchText}`)
-              if (filtroCarrera) {
-                const carrera = carreras.find(c => c.id === filtroCarrera)
-                if (carrera) filtrosAplicados.push(`Carrera: ${carrera.nombre}`)
-              }
-              
-              if (filtrosAplicados.length > 0) {
-                doc.setFontSize(9)
-                doc.text(`Filtros: ${filtrosAplicados.join(', ')}`, margin, yPosition)
-                yPosition += 5
-              }
-              
-              // Fecha
-              doc.setFontSize(9)
-              doc.text(`Fecha: ${new Date().toLocaleDateString('es-AR')}`, margin, yPosition)
-              yPosition += 8
-              
-              // Encabezados de tabla
-              const colWidths = [50, 25, 40, 25, 30]
-              const headers = ['Nombre Completo', 'DNI', 'Carrera', 'Estado', 'Ingreso']
-              const rowHeight = 6
-              
-              // Dibujar encabezados
-              doc.setFillColor(59, 130, 246)
-              doc.setTextColor(255, 255, 255)
-              doc.setFont('Helvetica', 'bold')
-              doc.setFontSize(9)
-              
-              let xPos = margin
-              headers.forEach((header, i) => {
-                doc.rect(xPos, yPosition, colWidths[i], rowHeight, 'F')
-                doc.text(header, xPos + 2, yPosition + 4, { maxWidth: colWidths[i] - 2 })
-                xPos += colWidths[i]
-              })
-              yPosition += rowHeight
-              
-              // Dibujar filas
-              doc.setTextColor(0, 0, 0)
-              doc.setFont('Helvetica', 'normal')
-              doc.setFontSize(8)
-              
-              let fillColor = false
-              estudiantesFiltrados.forEach((est, idx) => {
-                if (yPosition + rowHeight > pageHeight - 15) {
-                  doc.addPage()
-                  yPosition = margin
-                }
-                
-                if (fillColor) {
-                  doc.setFillColor(242, 242, 242)
-                  xPos = margin
-                  headers.forEach((_, i) => {
-                    doc.rect(xPos, yPosition, colWidths[i], rowHeight, 'F')
-                    xPos += colWidths[i]
-                  })
-                }
-                
-                const rowData = [
-                  `${est.apellido}, ${est.nombre}`,
-                  est.dni,
-                  (est.carreras as any)?.nombre || 'Sin carrera',
-                  getEstadoLabel(est.estado),
-                  `${mesesNombre[est.mes_ingreso]} ${est.ano_ingreso}`
-                ]
-                
-                xPos = margin
-                rowData.forEach((data, i) => {
-                  doc.text(data.toString().substring(0, 20), xPos + 2, yPosition + 4)
-                  xPos += colWidths[i]
-                })
-                
-                doc.setDrawColor(200, 200, 200)
-                xPos = margin
-                headers.forEach((_, i) => {
-                  doc.rect(xPos, yPosition, colWidths[i], rowHeight)
-                  xPos += colWidths[i]
-                })
-                
-                yPosition += rowHeight
-                fillColor = !fillColor
-              })
-              
-              // Pie de página
-              doc.setFontSize(9)
-              doc.text(`Total de estudiantes: ${estudiantesFiltrados.length}`, margin, yPosition + 5)
-              
-              // Descargar
-              doc.save(`Estudiantes_${new Date().toISOString().split('T')[0]}.pdf`)
-            }}
-            disabled={estudiantesFiltrados.length === 0}
-            className="px-3 py-2 sm:px-4 sm:py-2 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white rounded-lg text-xs sm:text-sm font-bold flex items-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-            title="Descargar lista en PDF"
+            onClick={() => setTabActiva('listado')}
+            className={`px-4 sm:px-6 py-3 rounded-lg font-bold transition-all duration-300 flex items-center gap-2 whitespace-nowrap text-xs sm:text-sm ${
+              tabActiva === 'listado'
+                ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-lg shadow-purple-500/50'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
           >
-            <Download size={16} className="sm:w-5 sm:h-5" />
-            <span className="hidden sm:inline">PDF</span>
+            <Users size={18} />
+            Listado
+          </button>
+          <button
+            onClick={() => setTabActiva('deuda-mes')}
+            className={`px-4 sm:px-6 py-3 rounded-lg font-bold transition-all duration-300 flex items-center gap-2 whitespace-nowrap text-xs sm:text-sm ${
+              tabActiva === 'deuda-mes'
+                ? 'bg-gradient-to-r from-red-600 to-orange-600 text-white shadow-lg shadow-red-500/50'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Calendar size={18} />
+            Deuda por Mes
           </button>
         </div>
-
-        {estudiantesFiltrados.length === 0 ? (
-          <div className="text-center py-8 sm:py-12">
-            <AlertCircle size={28} className="text-slate-500 mx-auto mb-2 sm:mb-3 sm:w-8 sm:h-8" />
-            <p className="text-slate-400 font-semibold text-sm">Sin resultados</p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs sm:text-sm">
-              <thead className="bg-slate-900/50">
-                <tr>
-                  <th className="px-2 sm:px-4 py-2 sm:py-3 text-left text-slate-300 font-bold">Nombre</th>
-                  <th className="px-2 sm:px-4 py-2 sm:py-3 text-left text-slate-300 font-bold hidden sm:table-cell">DNI</th>
-                  <th className="px-2 sm:px-4 py-2 sm:py-3 text-left text-slate-300 font-bold hidden md:table-cell">Carrera</th>
-                  <th className="px-2 sm:px-4 py-2 sm:py-3 text-center text-slate-300 font-bold">Estado</th>
-                  <th className="px-2 sm:px-4 py-2 sm:py-3 text-center text-slate-300 font-bold hidden sm:table-cell">Ingreso</th>
-                  <th className="px-2 sm:px-4 py-2 sm:py-3 text-center text-slate-300 font-bold">Acción</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-700/50">
-                {estudiantesPaginados.map(estudiante => (
-                  <tr key={estudiante.id} className="hover:bg-slate-700/30 transition">
-                    <td className="px-2 sm:px-4 py-2 sm:py-4">
-                      <p className="font-bold text-white text-xs sm:text-sm truncate">
-                        {estudiante.apellido}, {estudiante.nombre}
-                      </p>
-                      <p className="text-slate-400 text-xs sm:hidden">{estudiante.dni}</p>
-                    </td>
-                    <td className="px-2 sm:px-4 py-2 sm:py-4 text-slate-400 font-mono text-xs hidden sm:table-cell truncate">{estudiante.dni}</td>
-                    <td className="px-2 sm:px-4 py-2 sm:py-4 text-slate-400 text-xs hidden md:table-cell truncate">
-                      {(estudiante.carreras as any)?.nombre || 'Sin carrera'}
-                    </td>
-                    <td className="px-2 sm:px-4 py-2 sm:py-4 text-center">
-                      <div className="flex items-center justify-center gap-1">
-                        {getEstadoIcon(estudiante.estado)}
-                        <span className={`px-2 py-0.5 sm:px-3 sm:py-1 rounded-lg text-xs font-bold border hidden sm:inline-block ${getEstadoColor(estudiante.estado)}`}>
-                          {getEstadoLabel(estudiante.estado).split(' ')[0]}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="px-2 sm:px-4 py-2 sm:py-4 text-center hidden sm:table-cell">
-                      <span className="px-2 py-0.5 sm:px-3 sm:py-1 bg-cyan-500/20 text-cyan-300 rounded-lg text-xs font-bold">
-                        {mesesNombre[estudiante.mes_ingreso].slice(0, 3)} {estudiante.ano_ingreso}
-                      </span>
-                    </td>
-                    <td className="px-2 sm:px-4 py-2 sm:py-4 text-center">
-                      {editandoId === estudiante.id ? (
-                        <div className="space-y-2 min-w-max p-3 bg-slate-900/80 border border-slate-700 rounded-lg">
-                          <div>
-                            <label className="text-xs text-slate-400 block mb-1">Nombre</label>
-                            <input
-                              type="text"
-                              value={nuevoNombre}
-                              onChange={(e) => setNuevoNombre(e.target.value)}
-                              className="w-full px-2 py-1.5 bg-slate-700 border border-slate-600 rounded text-white text-xs"
-                              placeholder="Nombre"
-                            />
-                          </div>
-
-                          <div>
-                            <label className="text-xs text-slate-400 block mb-1">Apellido</label>
-                            <input
-                              type="text"
-                              value={nuevoApellido}
-                              onChange={(e) => setNuevoApellido(e.target.value)}
-                              className="w-full px-2 py-1.5 bg-slate-700 border border-slate-600 rounded text-white text-xs"
-                              placeholder="Apellido"
-                            />
-                          </div>
-
-                          <div>
-                            <label className="text-xs text-slate-400 block mb-1">Estado</label>
-                            <select
-                              value={nuevoEstado}
-                              onChange={(e) => setNuevoEstado(e.target.value as EstadoEstudiante)}
-                              className="w-full px-2 py-1.5 bg-slate-700 border border-slate-600 rounded text-white text-xs"
-                            >
-                              {estadosDisponibles.map(est => (
-                                <option key={est} value={est}>
-                                  {getEstadoLabel(est as EstadoEstudiante)}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-
-                          <div>
-                            <label className="text-xs text-slate-400 block mb-1">Mes</label>
-                            <select
-                              value={nuevoMesIngreso}
-                              onChange={(e) => setNuevoMesIngreso(parseInt(e.target.value))}
-                              className="w-full px-2 py-1.5 bg-slate-700 border border-slate-600 rounded text-white text-xs"
-                            >
-                              {mesesNombre.map((mes, idx) => (
-                                idx > 0 && <option key={idx} value={idx}>{mes}</option>
-                              ))}
-                            </select>
-                          </div>
-
-                          <div>
-                            <label className="text-xs text-slate-400 block mb-1">Año</label>
-                            <select
-                              value={nuevoAnoIngreso}
-                              onChange={(e) => setNuevoAnoIngreso(parseInt(e.target.value))}
-                              className="w-full px-2 py-1.5 bg-slate-700 border border-slate-600 rounded text-white text-xs"
-                            >
-                              {anosDisponibles.map(ano => (
-                                <option key={ano} value={ano}>{ano}</option>
-                              ))}
-                            </select>
-                          </div>
-
-                          <div className="flex gap-1.5 justify-center pt-2">
-                            <button
-                              onClick={() => handleGuardarEstado(estudiante.id)}
-                              disabled={guardando}
-                              className="px-3 py-1.5 bg-green-600 hover:bg-green-700 disabled:bg-slate-600 text-white rounded text-xs font-bold transition"
-                            >
-                              Guardar
-                            </button>
-                            <button
-                              onClick={() => setEditandoId(null)}
-                              className="px-3 py-1.5 bg-slate-600 hover:bg-slate-700 text-white rounded text-xs font-bold transition"
-                            >
-                              <X size={12} />
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        <button
-                          onClick={() => {
-                            setEditandoId(estudiante.id)
-                            setNuevoNombre(estudiante.nombre)
-                            setNuevoApellido(estudiante.apellido)
-                            setNuevoEstado(estudiante.estado)
-                            setNuevoMesIngreso(estudiante.mes_ingreso)
-                            setNuevoAnoIngreso(estudiante.ano_ingreso)
-                          }}
-                          className="px-2.5 py-1.5 sm:px-4 sm:py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-bold flex items-center gap-1 mx-auto transition whitespace-nowrap"
-                        >
-                          <Edit2 size={14} />
-                          <span className="hidden sm:inline">Editar</span>
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        {estudiantesFiltrados.length > 0 && (
-          <div className="pt-4 border-t border-slate-700/50 mt-4">
-            <Pagination
-              total={estudiantesFiltrados.length}
-              pageSize={pageSize}
-              currentPage={currentPage}
-              onPageChange={setCurrentPage}
-              onPageSizeChange={(newSize) => {
-                setPageSize(newSize)
-                setCurrentPage(1)
-              }}
-            />
-          </div>
-        )}
       </div>
+
+      {/* TAB: LISTADO */}
+      {tabActiva === 'listado' && (
+        <>
+          {/* FILTROS RESPONSIVE */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3 md:gap-4 mb-4 sm:mb-5 md:mb-6">
+            <div>
+              <label className="block text-xs sm:text-sm font-bold text-slate-300 mb-1.5 sm:mb-2">🔍 Buscar</label>
+              <input
+                type="text"
+                value={searchText}
+                onChange={(e) => setSearchText(e.target.value)}
+                placeholder="Nombre o DNI..."
+                className="w-full px-3 sm:px-4 py-2 sm:py-3 bg-slate-700/50 border border-slate-600/50 rounded-lg text-xs sm:text-sm text-white placeholder-slate-400 focus:border-purple-500/50 focus:outline-none transition"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs sm:text-sm font-bold text-slate-300 mb-1.5 sm:mb-2">📚 Carrera</label>
+              <select
+                value={filtroCarrera || ''}
+                onChange={(e) => setFiltroCarrera(e.target.value ? parseInt(e.target.value) : null)}
+                className="w-full px-3 sm:px-4 py-2 sm:py-3 bg-slate-700/50 border border-slate-600/50 rounded-lg text-xs sm:text-sm text-white focus:border-purple-500/50 focus:outline-none transition"
+              >
+                <option value="">Todas ({estudiantes.length})</option>
+                {carreras.map(carr => {
+                  const count = estudiantes.filter(e => e.carrera_id === carr.id).length
+                  return (
+                    <option key={carr.id} value={carr.id}>
+                      {carr.nombre} ({count})
+                    </option>
+                  )
+                })}
+              </select>
+            </div>
+          </div>
+
+          {/* RESUMEN ESTADOS */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 md:gap-4 mb-4 sm:mb-5 md:mb-6">
+            <div className="p-2 sm:p-3 md:p-4 bg-green-500/20 border border-green-500/50 rounded-lg text-center">
+              <p className="text-xs text-green-400 font-bold">ACTIVOS</p>
+              <p className="text-lg sm:text-xl md:text-2xl font-black text-green-300 mt-0.5 sm:mt-1">{estudiantes.filter(e => e.estado === 'ACTIVO').length}</p>
+            </div>
+            <div className="p-2 sm:p-3 md:p-4 bg-yellow-500/20 border border-yellow-500/50 rounded-lg text-center">
+              <p className="text-xs text-yellow-400 font-bold">BECADO 50%</p>
+              <p className="text-lg sm:text-xl md:text-2xl font-black text-yellow-300 mt-0.5 sm:mt-1">{estudiantes.filter(e => e.estado === 'BECADO_50').length}</p>
+            </div>
+            <div className="p-2 sm:p-3 md:p-4 bg-orange-500/20 border border-orange-500/50 rounded-lg text-center">
+              <p className="text-xs text-orange-400 font-bold">BECADO 100%</p>
+              <p className="text-lg sm:text-xl md:text-2xl font-black text-orange-300 mt-0.5 sm:mt-1">{estudiantes.filter(e => e.estado === 'BECADO_100').length}</p>
+            </div>
+            <div className="p-2 sm:p-3 md:p-4 bg-red-500/20 border border-red-500/50 rounded-lg text-center">
+              <p className="text-xs text-red-400 font-bold">NO VIENE</p>
+              <p className="text-lg sm:text-xl md:text-2xl font-black text-red-300 mt-0.5 sm:mt-1">{estudiantes.filter(e => e.estado === 'NO_VIENE_MAS').length}</p>
+            </div>
+          </div>
+
+          {/* TABLA DE ESTUDIANTES */}
+          <div className="p-3 sm:p-4 md:p-6 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-lg sm:rounded-xl overflow-x-auto">
+            <div className="flex items-center justify-between mb-3 sm:mb-4">
+              <h2 className="text-base sm:text-lg md:text-xl font-bold text-white flex items-center gap-2">
+                <Users size={20} className="text-purple-400 sm:w-6 sm:h-6" />
+                Estudiantes ({estudiantesFiltrados.length})
+              </h2>
+              <button
+                onClick={() => {
+                  const doc = new jsPDF()
+                  const pageHeight = doc.internal.pageSize.getHeight()
+                  const pageWidth = doc.internal.pageSize.getWidth()
+                  const margin = 10
+                  let yPosition = margin + 5
+                  
+                  // Título
+                  doc.setFont('Helvetica', 'bold')
+                  doc.setFontSize(16)
+                  doc.text('Lista de Estudiantes', pageWidth / 2, yPosition, { align: 'center' })
+                  yPosition += 8
+                  
+                  // Institución
+                  doc.setFontSize(11)
+                  doc.setFont('Helvetica', 'normal')
+                  doc.text(`Institución: ${institucionActiva.nombre}`, margin, yPosition)
+                  yPosition += 6
+                  
+                  // Filtros aplicados
+                  let filtrosAplicados = []
+                  if (searchText) filtrosAplicados.push(`Búsqueda: ${searchText}`)
+                  if (filtroCarrera) {
+                    const carrera = carreras.find(c => c.id === filtroCarrera)
+                    if (carrera) filtrosAplicados.push(`Carrera: ${carrera.nombre}`)
+                  }
+                  
+                  if (filtrosAplicados.length > 0) {
+                    doc.setFontSize(9)
+                    doc.text(`Filtros: ${filtrosAplicados.join(', ')}`, margin, yPosition)
+                    yPosition += 5
+                  }
+                  
+                  // Fecha
+                  doc.setFontSize(9)
+                  doc.text(`Fecha: ${new Date().toLocaleDateString('es-AR')}`, margin, yPosition)
+                  yPosition += 8
+                  
+                  // Encabezados de tabla
+                  const colWidths = [50, 25, 40, 25, 30]
+                  const headers = ['Nombre Completo', 'DNI', 'Carrera', 'Estado', 'Ingreso']
+                  const rowHeight = 6
+                  
+                  // Dibujar encabezados
+                  doc.setFillColor(59, 130, 246)
+                  doc.setTextColor(255, 255, 255)
+                  doc.setFont('Helvetica', 'bold')
+                  doc.setFontSize(9)
+                  
+                  let xPos = margin
+                  headers.forEach((header, i) => {
+                    doc.rect(xPos, yPosition, colWidths[i], rowHeight, 'F')
+                    doc.text(header, xPos + 2, yPosition + 4, { maxWidth: colWidths[i] - 2 })
+                    xPos += colWidths[i]
+                  })
+                  yPosition += rowHeight
+                  
+                  // Dibujar filas
+                  doc.setTextColor(0, 0, 0)
+                  doc.setFont('Helvetica', 'normal')
+                  doc.setFontSize(8)
+                  
+                  let fillColor = false
+                  estudiantesFiltrados.forEach((est, idx) => {
+                    if (yPosition + rowHeight > pageHeight - 15) {
+                      doc.addPage()
+                      yPosition = margin
+                    }
+                    
+                    if (fillColor) {
+                      doc.setFillColor(242, 242, 242)
+                      xPos = margin
+                      headers.forEach((_, i) => {
+                        doc.rect(xPos, yPosition, colWidths[i], rowHeight, 'F')
+                        xPos += colWidths[i]
+                      })
+                    }
+                    
+                    const rowData = [
+                      `${est.apellido}, ${est.nombre}`,
+                      est.dni,
+                      (est.carreras as any)?.nombre || 'Sin carrera',
+                      getEstadoLabel(est.estado),
+                      `${mesesNombre[est.mes_ingreso]} ${est.ano_ingreso}`
+                    ]
+                    
+                    xPos = margin
+                    rowData.forEach((data, i) => {
+                      doc.text(data.toString().substring(0, 20), xPos + 2, yPosition + 4)
+                      xPos += colWidths[i]
+                    })
+                    
+                    doc.setDrawColor(200, 200, 200)
+                    xPos = margin
+                    headers.forEach((_, i) => {
+                      doc.rect(xPos, yPosition, colWidths[i], rowHeight)
+                      xPos += colWidths[i]
+                    })
+                    
+                    yPosition += rowHeight
+                    fillColor = !fillColor
+                  })
+                  
+                  // Pie de página
+                  doc.setFontSize(9)
+                  doc.text(`Total de estudiantes: ${estudiantesFiltrados.length}`, margin, yPosition + 5)
+                  
+                  // Descargar
+                  doc.save(`Estudiantes_${new Date().toISOString().split('T')[0]}.pdf`)
+                }}
+                disabled={estudiantesFiltrados.length === 0}
+                className="px-3 py-2 sm:px-4 sm:py-2 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white rounded-lg text-xs sm:text-sm font-bold flex items-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Descargar lista en PDF"
+              >
+                <Download size={16} className="sm:w-5 sm:h-5" />
+                <span className="hidden sm:inline">PDF</span>
+              </button>
+            </div>
+
+            {estudiantesFiltrados.length === 0 ? (
+              <div className="text-center py-8 sm:py-12">
+                <AlertCircle size={28} className="text-slate-500 mx-auto mb-2 sm:mb-3 sm:w-8 sm:h-8" />
+                <p className="text-slate-400 font-semibold text-sm">Sin resultados</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs sm:text-sm">
+                  <thead className="bg-slate-900/50">
+                    <tr>
+                      <th className="px-2 sm:px-4 py-2 sm:py-3 text-left text-slate-300 font-bold">Nombre</th>
+                      <th className="px-2 sm:px-4 py-2 sm:py-3 text-left text-slate-300 font-bold hidden sm:table-cell">DNI</th>
+                      <th className="px-2 sm:px-4 py-2 sm:py-3 text-left text-slate-300 font-bold hidden md:table-cell">Carrera</th>
+                      <th className="px-2 sm:px-4 py-2 sm:py-3 text-center text-slate-300 font-bold">Estado</th>
+                      <th className="px-2 sm:px-4 py-2 sm:py-3 text-center text-slate-300 font-bold hidden sm:table-cell">Ingreso</th>
+                      <th className="px-2 sm:px-4 py-2 sm:py-3 text-center text-slate-300 font-bold">Acción</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-700/50">
+                    {estudiantesPaginados.map(estudiante => (
+                      <tr key={estudiante.id} className="hover:bg-slate-700/30 transition">
+                        <td className="px-2 sm:px-4 py-2 sm:py-4">
+                          <p className="font-bold text-white text-xs sm:text-sm truncate">
+                            {estudiante.apellido}, {estudiante.nombre}
+                          </p>
+                          <p className="text-slate-400 text-xs sm:hidden">{estudiante.dni}</p>
+                        </td>
+                        <td className="px-2 sm:px-4 py-2 sm:py-4 text-slate-400 font-mono text-xs hidden sm:table-cell truncate">{estudiante.dni}</td>
+                        <td className="px-2 sm:px-4 py-2 sm:py-4 text-slate-400 text-xs hidden md:table-cell truncate">
+                          {(estudiante.carreras as any)?.nombre || 'Sin carrera'}
+                        </td>
+                        <td className="px-2 sm:px-4 py-2 sm:py-4 text-center">
+                          <div className="flex items-center justify-center gap-1">
+                            {getEstadoIcon(estudiante.estado)}
+                            <span className={`px-2 py-0.5 sm:px-3 sm:py-1 rounded-lg text-xs font-bold border hidden sm:inline-block ${getEstadoColor(estudiante.estado)}`}>
+                              {getEstadoLabel(estudiante.estado).split(' ')[0]}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-2 sm:px-4 py-2 sm:py-4 text-center hidden sm:table-cell">
+                          <span className="px-2 py-0.5 sm:px-3 sm:py-1 bg-cyan-500/20 text-cyan-300 rounded-lg text-xs font-bold">
+                            {mesesNombre[estudiante.mes_ingreso].slice(0, 3)} {estudiante.ano_ingreso}
+                          </span>
+                        </td>
+                        <td className="px-2 sm:px-4 py-2 sm:py-4 text-center">
+                          {editandoId === estudiante.id ? (
+                            <div className="space-y-2 min-w-max p-3 bg-slate-900/80 border border-slate-700 rounded-lg">
+                              <div>
+                                <label className="text-xs text-slate-400 block mb-1">Nombre</label>
+                                <input
+                                  type="text"
+                                  value={nuevoNombre}
+                                  onChange={(e) => setNuevoNombre(e.target.value)}
+                                  className="w-full px-2 py-1.5 bg-slate-700 border border-slate-600 rounded text-white text-xs"
+                                  placeholder="Nombre"
+                                />
+                              </div>
+
+                              <div>
+                                <label className="text-xs text-slate-400 block mb-1">Apellido</label>
+                                <input
+                                  type="text"
+                                  value={nuevoApellido}
+                                  onChange={(e) => setNuevoApellido(e.target.value)}
+                                  className="w-full px-2 py-1.5 bg-slate-700 border border-slate-600 rounded text-white text-xs"
+                                  placeholder="Apellido"
+                                />
+                              </div>
+
+                              <div>
+                                <label className="text-xs text-slate-400 block mb-1">Estado</label>
+                                <select
+                                  value={nuevoEstado}
+                                  onChange={(e) => setNuevoEstado(e.target.value as EstadoEstudiante)}
+                                  className="w-full px-2 py-1.5 bg-slate-700 border border-slate-600 rounded text-white text-xs"
+                                >
+                                  {estadosDisponibles.map(est => (
+                                    <option key={est} value={est}>
+                                      {getEstadoLabel(est as EstadoEstudiante)}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+
+                              <div>
+                                <label className="text-xs text-slate-400 block mb-1">Mes</label>
+                                <select
+                                  value={nuevoMesIngreso}
+                                  onChange={(e) => setNuevoMesIngreso(parseInt(e.target.value))}
+                                  className="w-full px-2 py-1.5 bg-slate-700 border border-slate-600 rounded text-white text-xs"
+                                >
+                                  {mesesNombre.map((mes, idx) => (
+                                    idx > 0 && <option key={idx} value={idx}>{mes}</option>
+                                  ))}
+                                </select>
+                              </div>
+
+                              <div>
+                                <label className="text-xs text-slate-400 block mb-1">Año</label>
+                                <select
+                                  value={nuevoAnoIngreso}
+                                  onChange={(e) => setNuevoAnoIngreso(parseInt(e.target.value))}
+                                  className="w-full px-2 py-1.5 bg-slate-700 border border-slate-600 rounded text-white text-xs"
+                                >
+                                  {anosDisponibles.map(ano => (
+                                    <option key={ano} value={ano}>{ano}</option>
+                                  ))}
+                                </select>
+                              </div>
+
+                              <div className="flex gap-1.5 justify-center pt-2">
+                                <button
+                                  onClick={() => handleGuardarEstado(estudiante.id)}
+                                  disabled={guardando}
+                                  className="px-3 py-1.5 bg-green-600 hover:bg-green-700 disabled:bg-slate-600 text-white rounded text-xs font-bold transition"
+                                >
+                                  Guardar
+                                </button>
+                                <button
+                                  onClick={() => setEditandoId(null)}
+                                  className="px-3 py-1.5 bg-slate-600 hover:bg-slate-700 text-white rounded text-xs font-bold transition"
+                                >
+                                  <X size={12} />
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => {
+                                setEditandoId(estudiante.id)
+                                setNuevoNombre(estudiante.nombre)
+                                setNuevoApellido(estudiante.apellido)
+                                setNuevoEstado(estudiante.estado)
+                                setNuevoMesIngreso(estudiante.mes_ingreso)
+                                setNuevoAnoIngreso(estudiante.ano_ingreso)
+                              }}
+                              className="px-2.5 py-1.5 sm:px-4 sm:py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-bold flex items-center gap-1 mx-auto transition whitespace-nowrap"
+                            >
+                              <Edit2 size={14} />
+                              <span className="hidden sm:inline">Editar</span>
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {estudiantesFiltrados.length > 0 && (
+              <div className="pt-4 border-t border-slate-700/50 mt-4">
+                <Pagination
+                  total={estudiantesFiltrados.length}
+                  pageSize={pageSize}
+                  currentPage={currentPage}
+                  onPageChange={setCurrentPage}
+                  onPageSizeChange={(newSize) => {
+                    setPageSize(newSize)
+                    setCurrentPage(1)
+                  }}
+                />
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
+      {/* TAB: DEUDA POR MES */}
+      {tabActiva === 'deuda-mes' && (
+        <div className="p-3 sm:p-4 md:p-6 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-lg sm:rounded-xl">
+          <TabDeudasPorMes deudasPorMes={deudasPorMes} loading={loadingDeudas} error={errorDeudas} />
+        </div>
+      )}
     </div>
   )
 }
