@@ -7,6 +7,7 @@ export interface AlumnoDeuda {
   apellido: string
   dni: string
   carrera: string
+  carrera_id: number
   estado: string
   concepto: string
   monto_original: number
@@ -175,6 +176,7 @@ export const useDeudasPorMes = (institucionId: number) => {
               apellido: estudiante.apellido,
               dni: estudiante.dni,
               carrera: carreraNombre,
+              carrera_id: estudiante.carrera_id,
               estado: estudiante.estado,
               concepto: concepto.nombre,
               monto_original: concepto.monto,

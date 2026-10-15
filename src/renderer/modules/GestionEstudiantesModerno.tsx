@@ -626,7 +626,7 @@ export const GestionEstudiantesModerno: React.FC = () => {
       {/* TAB: DEUDA POR MES */}
       {tabActiva === 'deuda-mes' && (
         <div className="p-3 sm:p-4 md:p-6 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-lg sm:rounded-xl">
-          <TabDeudasPorMes deudasPorMes={deudasPorMes} loading={loadingDeudas} error={errorDeudas} />
+          <TabDeudasPorMes deudasPorMes={deudasPorMes} carreras={carreras} loading={loadingDeudas} error={errorDeudas} />
         </div>
       )}
     </div>

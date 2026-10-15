@@ -1,16 +1,18 @@
 import React, { useState } from 'react'
 import { DeudasPorMes, AlumnoDeuda } from '@renderer/hooks/useDeudasPorMes'
 import { formatoMoneda } from '@renderer/lib/helpers'
-import { ChevronDown, AlertCircle, Users } from 'lucide-react'
+import { ChevronDown, AlertCircle, Users, Filter } from 'lucide-react'
 
 interface TabDeudasPorMesProps {
   deudasPorMes: DeudasPorMes[]
+  carreras: Array<{ id: number; nombre: string }>
   loading: boolean
   error: string | null
 }
 
-export const TabDeudasPorMes: React.FC<TabDeudasPorMesProps> = ({ deudasPorMes, loading, error }) => {
+export const TabDeudasPorMes: React.FC<TabDeudasPorMesProps> = ({ deudasPorMes, carreras, loading, error }) => {
   const [mesExpandido, setMesExpandido] = useState<number | null>(null)
+  const [filtroCarrera, setFiltroCarrera] = useState<number | null>(null)
 
   const getEstadoColor = (estado: string) => {
     switch (estado) {
@@ -38,6 +40,25 @@ export const TabDeudasPorMes: React.FC<TabDeudasPorMesProps> = ({ deudasPorMes, 
     }
   }
 
+  // Filtrar deudas por carrera
+  const deudasFiltradas = deudasPorMes.map(mes => {
+    const alumnosFiltrados = filtroCarrera 
+      ? mes.alumnos.filter(a => a.carrera_id === filtroCarrera)
+      : mes.alumnos
+
+    return {
+      ...mes,
+      alumnos: alumnosFiltrados,
+      total_alumnos: new Set(alumnosFiltrados.map(a => a.id)).size,
+      monto_total: alumnosFiltrados.reduce((sum, a) => sum + a.deuda, 0),
+    }
+  })
+
+  const totalGlobal = deudasFiltradas.reduce((sum, mes) => sum + mes.monto_total, 0)
+  const totalAlumnosUnicos = new Set(
+    deudasFiltradas.flatMap(mes => mes.alumnos.map(a => a.id))
+  ).size
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -63,13 +84,33 @@ export const TabDeudasPorMes: React.FC<TabDeudasPorMesProps> = ({ deudasPorMes, 
     )
   }
 
-  const totalGlobal = deudasPorMes.reduce((sum, mes) => sum + mes.monto_total, 0)
-  const totalAlumnosUnicos = new Set(
-    deudasPorMes.flatMap(mes => mes.alumnos.map(a => a.id))
-  ).size
-
   return (
     <div className="space-y-6">
+      {/* FILTRO POR CARRERA */}
+      <div className="p-4 md:p-6 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-xl">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="p-3 bg-blue-500/20 rounded-lg">
+            <Filter size={24} className="text-blue-400" />
+          </div>
+          <label className="text-sm md:text-base font-bold text-slate-300">Filtrar por Carrera</label>
+        </div>
+        <select
+          value={filtroCarrera || ''}
+          onChange={(e) => setFiltroCarrera(e.target.value ? parseInt(e.target.value) : null)}
+          className="w-full px-4 py-3 bg-slate-700/50 border border-slate-600/50 rounded-lg text-sm text-white focus:border-blue-500/50 focus:outline-none transition"
+        >
+          <option value="">Todas las carreras</option>
+          {carreras.map(carr => {
+            const countTotal = new Set(deudasPorMes.flatMap(m => m.alumnos.filter(a => a.carrera_id === carr.id).map(a => a.id))).size
+            return (
+              <option key={carr.id} value={carr.id}>
+                {carr.nombre} ({countTotal})
+              </option>
+            )
+          })}
+        </select>
+      </div>
+
       {/* RESUMEN GLOBAL */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="p-4 md:p-6 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-xl">
@@ -84,7 +125,7 @@ export const TabDeudasPorMes: React.FC<TabDeudasPorMesProps> = ({ deudasPorMes, 
 
       {/* ACORDEONES POR MES */}
       <div className="space-y-3">
-        {deudasPorMes.map(mesData => (
+        {deudasFiltradas.map(mesData => (
           <div key={mesData.mes} className="bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-xl overflow-hidden">
             {/* HEADER DEL MES */}
             <button
@@ -175,7 +216,7 @@ export const TabDeudasPorMes: React.FC<TabDeudasPorMesProps> = ({ deudasPorMes, 
       </div>
 
       {/* MENSAJE SI NO HAY DATOS */}
-      {deudasPorMes.length === 0 && (
+      {deudasFiltradas.length === 0 && (
         <div className="text-center py-12">
           <AlertCircle size={32} className="text-slate-500 mx-auto mb-3" />
           <p className="text-slate-400 font-semibold">No hay datos disponibles</p>
